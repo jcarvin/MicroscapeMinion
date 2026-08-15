@@ -216,13 +216,27 @@ function render(s) {
     progressBar.style.width   = `${pct}%`;
     goalCountDisp.textContent = `${gs.count ?? 0} / ${gs.goal.targetCount}`;
 
-    if (gs.eta == null) {
+    if (gs.chanceBased) {
+      goalEtaEl.hidden = false;
+      if (gs.eta?.totalMs > 0) {
+        if (!goalAnchor || gs.eta.totalMs !== goalAnchor.srcTotalMs) {
+          goalAnchor = { totalMs: gs.eta.totalMs, srcTotalMs: gs.eta.totalMs, bankTrips: 0, at: Date.now() };
+        }
+        updateEtaDisplays();
+      } else {
+        goalEtaEl.textContent = 'ETA calibrating…';
+        goalAnchor = null;
+      }
+    } else if (gs.eta == null) {
+      goalEtaEl.hidden = false;
       goalEtaEl.textContent = 'ETA calibrating…';
       goalAnchor = null;
     } else if (gs.eta === 0) {
+      goalEtaEl.hidden = false;
       goalEtaEl.textContent = 'Done!';
       goalAnchor = null;
     } else {
+      goalEtaEl.hidden = false;
       if (!goalAnchor || gs.eta.totalMs !== goalAnchor.srcTotalMs) {
         goalAnchor = { totalMs: gs.eta.totalMs, srcTotalMs: gs.eta.totalMs, bankTrips: gs.eta.bankTrips, at: Date.now() };
       }
@@ -230,6 +244,7 @@ function render(s) {
     }
   } else {
     goalStatus.hidden   = true;
+    goalEtaEl.hidden    = false;
     btnClearGoal.hidden = true;
     goalAnchor = null;
   }
@@ -271,7 +286,10 @@ function render(s) {
     const eta = xs.etas[selectedLevelOffset - 1];
     skillTargetEl.textContent = `→ Lv ${eta.targetLevel} (${formatNumber(eta.xpNeeded)} XP)`;
 
-    if (eta.etaMs > 0) {
+    if (eta.etaMs == null) {
+      skillAnchor = null;
+      skillEtaEl.textContent = 'ETA calibrating…';
+    } else if (eta.etaMs > 0) {
       if (!skillAnchor || eta.etaMs !== skillAnchor.srcEtaMs || eta.targetLevel !== skillAnchor.targetLevel) {
         skillAnchor = {
           etaMs: eta.etaMs,

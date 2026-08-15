@@ -68,6 +68,8 @@ let lastServerUpdateAt = 0;
 
 let tickLog = []; // newest-first, capped at 40 entries
 let cycleCalibrations = {}; // activityId -> { lastCompletionAt, samples }
+let xpRateSamples = {}; // "activityId:skill" -> { lastGainAt, samples: [{ xp, ms }] }
+let dropRateSamples = {}; // "activityId:itemId" -> { lastGainAt, samples: [{ items, ms }] }
 
 let goal = null; // { itemName, itemId, targetCount }
 let goalNotifiedAt = null;
@@ -131,10 +133,14 @@ function handleServerFrame(frame) {
 
   calibrateTick();
   const prevAct = mirroredState.me?.activity;
+  const prevExp = mirroredState.me?.exp;
+  const prevMe = mirroredState.me;
   const preSnap = snapshotEta();
 
   mirroredState = applyPatch(mirroredState, frame.args[0]);
   const newAct = mirroredState.me?.activity;
+  trackXpGain(prevAct, newAct, prevExp, mirroredState.me?.exp);
+  trackDropGain(prevAct, newAct, prevMe, mirroredState.me);
 
   if (newAct?.preparedActivity && !prevAct?.preparedActivity && (newAct.remaining ?? 0) > 0) {
     observedOverheadTicks = newAct.remaining;
@@ -303,12 +309,17 @@ function getActivityId(act) {
 
 function getActivitySkill(act) {
   if (!act || act.type === 'travel' || act.type === 'banking') return null;
-  return act.skill ?? act.preparedActivity?.skill ?? null;
+  return act.skill ?? act.combatSkill ?? act.preparedActivity?.skill ?? act.preparedActivity?.combatSkill ?? null;
 }
 
 function getActivityZone(act) {
   if (!act || act.type === 'travel' || act.type === 'banking') return null;
   return act.zone ?? act.preparedActivity?.zone ?? null;
+}
+
+function isCombatActivity(act) {
+  if (!act || act.type === 'travel' || act.type === 'banking') return false;
+  return !!(act.mob ?? act.preparedActivity?.mob);
 }
 
 // Computes round-trip bank time for a given zone using mapPos euclidean distance.
@@ -443,6 +454,112 @@ function resetCycleAnchorOnInterruption(prevAct, newAct) {
   if (cal) cal.lastCompletionAt = null;
 }
 
+function trackXpGain(prevAct, newAct, prevExp, newExp) {
+  if (!prevExp || !newExp) return;
+
+  const act = getActivitySkill(newAct) ? newAct : prevAct;
+  const actId = getActivityId(act);
+  const skill = getActivitySkill(act);
+  if (!isWorkActivityId(actId) || !skill) return;
+
+  const before = prevExp[skill];
+  const after = newExp[skill];
+  if (typeof before !== 'number' || typeof after !== 'number') return;
+
+  const xpGained = after - before;
+  if (xpGained <= 0) return;
+
+  const key = xpRateKey(actId, skill);
+  const now = Date.now();
+  const tracker = xpRateSamples[key] ?? { lastGainAt: null, samples: [] };
+  let sampleMs = tracker.lastGainAt ? now - tracker.lastGainAt : null;
+
+  if (!sampleMs || sampleMs < 250 || sampleMs > 10 * 60_000) {
+    sampleMs = activityLengthMs(act) ?? ACTIVITY_DEFS[actId]?.durationMs ?? null;
+  }
+
+  if (sampleMs && sampleMs > 0) {
+    tracker.samples.push({ xp: xpGained, ms: sampleMs });
+    if (tracker.samples.length > 8) tracker.samples.shift();
+  }
+  tracker.lastGainAt = now;
+  xpRateSamples[key] = tracker;
+}
+
+function activityLengthMs(act) {
+  const length = act?.length ?? act?.preparedActivity?.length;
+  return typeof length === 'number' && length > 0 ? length * observedTickMs : null;
+}
+
+function xpRateKey(actId, skill) {
+  return `${actId}:${skill}`;
+}
+
+function observedXpPerMs(actId, skill) {
+  const samples = xpRateSamples[xpRateKey(actId, skill)]?.samples ?? [];
+  const totals = samples.reduce((acc, sample) => {
+    acc.xp += sample.xp;
+    acc.ms += sample.ms;
+    return acc;
+  }, { xp: 0, ms: 0 });
+  return totals.xp > 0 && totals.ms > 0 ? totals.xp / totals.ms : null;
+}
+
+function trackDropGain(prevAct, newAct, prevMe, newMe) {
+  if (!prevMe || !newMe) return;
+
+  const act = getActivityId(newAct) ? newAct : prevAct;
+  const actId = getActivityId(act);
+  if (!isWorkActivityId(actId)) return;
+
+  const dropItems = ACTIVITY_DEFS[actId]?.dropItems;
+  if (!dropItems || Object.keys(dropItems).length === 0) return;
+
+  for (const itemId of Object.keys(dropItems)) {
+    const before = getMaterialCountForMe(prevMe, itemId);
+    const after = getMaterialCountForMe(newMe, itemId);
+    const gained = after - before;
+    if (gained <= 0) continue;
+
+    const key = dropRateKey(actId, itemId);
+    const now = Date.now();
+    const tracker = dropRateSamples[key] ?? { lastGainAt: null, samples: [] };
+    if (tracker.lastGainAt) {
+      const sampleMs = now - tracker.lastGainAt;
+      if (sampleMs >= 250 && sampleMs <= 30 * 60_000) {
+        tracker.samples.push({ items: gained, ms: sampleMs });
+        if (tracker.samples.length > 12) tracker.samples.shift();
+      }
+    }
+    tracker.lastGainAt = now;
+    dropRateSamples[key] = tracker;
+  }
+}
+
+function getMaterialCountForMe(me, itemId) {
+  const inv = me?.inventory?.[itemId] ?? 0;
+  const lb  = me?.lootBag?.[itemId]  ?? 0;
+  return inv + lb;
+}
+
+function dropRateKey(actId, itemId) {
+  return `${actId}:${itemId}`;
+}
+
+function observedDropItemsPerMs(actId, itemId) {
+  const samples = dropRateSamples[dropRateKey(actId, itemId)]?.samples ?? [];
+  const totals = samples.reduce((acc, sample) => {
+    acc.items += sample.items;
+    acc.ms += sample.ms;
+    return acc;
+  }, { items: 0, ms: 0 });
+  return totals.items > 0 && totals.ms > 0 ? totals.items / totals.ms : null;
+}
+
+function dropRateSampleCount(actId, itemId) {
+  return dropRateSamples[dropRateKey(actId, itemId)]?.samples.length ?? 0;
+}
+
 function isWorkActivityId(actId) {
   return !!actId && actId !== 'travel' && actId !== 'banking';
 }
@@ -512,7 +629,7 @@ function buildStatus() {
   if (goal) {
     const count = getGoalCount(goal.itemName, goal.itemId) ?? 0;
     const eta   = actId ? computeGoalEta(goal, count, actId) : null;
-    goalStatus  = { goal, count, eta };
+    goalStatus  = { goal, count, eta, chanceBased: eta?.chanceBased === true };
   }
 
   let runoutStatus = null;
@@ -552,14 +669,19 @@ function buildStatus() {
   }
 
   const skillLevelStatus = actId && actSkill
-    ? computeSkillLevelEtas(actId, actSkill)
+    ? computeSkillLevelEtas(actId, actSkill, act)
     : null;
 
   // Items the current activity produces — drives the goal dropdown
   const producibleItems = [];
   if (actId && ACTIVITY_DEFS[actId]) {
-    for (const [id, change] of Object.entries(ACTIVITY_DEFS[actId].inventoryChanges)) {
+    for (const [id, change] of Object.entries(ACTIVITY_DEFS[actId].inventoryChanges ?? {})) {
       if (change > 0) producibleItems.push({ id, count: getMaterialCount(id) });
+    }
+    for (const id of Object.keys(ACTIVITY_DEFS[actId].dropItems ?? {})) {
+      if (!producibleItems.some((item) => item.id === id)) {
+        producibleItems.push({ id, count: getMaterialCount(id), chanceBased: true });
+      }
     }
   }
 
@@ -585,6 +707,16 @@ function computeGoalEta(g, currentCount, actId) {
 
   const def = ACTIVITY_DEFS[actId];
   if (!def) return null;
+
+  const dropKey = findKey(def.dropItems, g.itemName, g.itemId);
+  if (dropKey) {
+    const observedRate = observedDropItemsPerMs(actId, dropKey);
+    return {
+      chanceBased: true,
+      totalMs: observedRate ? Math.ceil(remaining / observedRate) : null,
+      sampleCount: dropRateSampleCount(actId, dropKey),
+    };
+  }
 
   // Find the goal item in the activity's output (positive inventoryChanges)
   const goalKey = findKey(def.inventoryChanges, g.itemName, g.itemId);
@@ -642,10 +774,12 @@ function bankTripsBeforeGoalComplete(generatedItems) {
   return 1 + Math.floor((generatedItems - freeSlotsBeforeFirstTrip - 1) / BANK_TRIGGER_ITEM_COUNT);
 }
 
-function computeSkillLevelEtas(actId, skill) {
+function computeSkillLevelEtas(actId, skill, act) {
   const def = ACTIVITY_DEFS[actId];
   const xpPerCycle = def?.xpPerCycle ?? 0;
-  if (!def || xpPerCycle <= 0 || XP_TABLE.length < 3) return null;
+  const observedRate = observedXpPerMs(actId, skill);
+  const mayGainXp = xpPerCycle > 0 || observedRate || isCombatActivity(act);
+  if (!mayGainXp || XP_TABLE.length < 3) return null;
 
   const currentXp = mirroredState.me?.exp?.[skill];
   if (typeof currentXp !== 'number' || !isFinite(currentXp)) return null;
@@ -658,16 +792,21 @@ function computeSkillLevelEtas(actId, skill) {
     if (typeof targetXp !== 'number') break;
 
     const xpNeeded = Math.max(0, targetXp - currentXp);
-    const cyclesNeeded = Math.ceil(xpNeeded / xpPerCycle);
+    const cyclesNeeded = xpPerCycle > 0 ? Math.ceil(xpNeeded / xpPerCycle) : null;
+    const etaMs = xpPerCycle > 0
+      ? cyclesNeeded * def.durationMs
+      : observedRate
+        ? Math.ceil(xpNeeded / observedRate)
+        : null;
     etas.push({
       targetLevel,
       xpNeeded,
-      etaMs: cyclesNeeded * def.durationMs,
+      etaMs,
     });
   }
 
   if (etas.length === 0) return null;
-  return { skill, currentXp, currentLevel, xpPerCycle, etas };
+  return { skill, currentXp, currentLevel, xpPerCycle, observedXpPerMs: observedRate, etas };
 }
 
 // ── Runout info ───────────────────────────────────────────────────────────────
