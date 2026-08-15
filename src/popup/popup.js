@@ -254,7 +254,7 @@ function render(s) {
   if (rs) {
     runoutCard.hidden = false;
     const label = rs.itemId ? `${rs.itemId}: ` : '';
-    const cycles = rs.cyclesLeft != null ? `${rs.cyclesLeft} cycles left` : `${rs.totalMaterial} remaining`;
+    const cycles = rs.cyclesLeft != null ? `${rs.cyclesLeft}` : `${rs.totalMaterial} remaining`;
     runoutCycles.textContent = `${label}${cycles}`;
     if (rs.etaMs > 0) {
       if (!runoutAnchor || rs.etaMs !== runoutAnchor.srcEtaMs || rs.bankTrips !== runoutAnchor.bankTrips) {
