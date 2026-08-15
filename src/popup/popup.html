@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Microscape Minion</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <span class="dot" id="dot"></span>
+    <span class="brand">Microscape Minion</span>
+  </div>
+
+  <section class="card">
+    <div class="card-label">Status</div>
+    <div class="status-row">
+      <span class="status-badge" id="activity-badge">—</span>
+      <span class="tick-rate" id="tick-rate"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-label">Goal Tracker</div>
+    <div class="goal-form">
+      <div class="combobox" id="item-combobox">
+        <input id="goal-item" type="text" placeholder="Select item" autocomplete="off" spellcheck="false">
+        <ul class="combo-options" id="combo-options" hidden></ul>
+      </div>
+      <input id="goal-count" type="number" placeholder="Target"    min="1" step="1">
+      <button id="btn-set-goal">Set</button>
+    </div>
+    <div id="goal-status" class="goal-status" hidden>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+      <div class="progress-label">
+        <span id="goal-count-display">0 / 0</span>
+        <span id="goal-eta" class="eta-label"></span>
+      </div>
+    </div>
+    <button id="btn-clear-goal" class="clear-btn" hidden>Clear goal</button>
+  </section>
+
+  <section class="card" id="runout-card" hidden>
+    <div class="card-label">Material Runout</div>
+    <div class="runout-row">
+      <span id="runout-cycles"></span>
+      <span id="runout-eta" class="eta-label"></span>
+    </div>
+  </section>
+
+  <details class="debug-details">
+    <summary>Debug — raw <code>me</code> state</summary>
+    <pre id="debug-me"></pre>
+  </details>
+
+  <script src="popup.js"></script>
+</body>
+</html>

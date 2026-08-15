@@ -1,0 +1,254 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #1a1c22;
+  --surface:   #22252e;
+  --border:    #2e323d;
+  --text:      #d4d8e4;
+  --muted:     #6b7080;
+  --accent:    #5b8dee;
+  --green:     #4ade80;
+  --amber:     #f59e0b;
+  --red:       #f87171;
+  --radius:    6px;
+}
+
+body {
+  width: 280px;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 'Segoe UI', system-ui, sans-serif;
+  padding: 0 0 8px;
+}
+
+/* ── Header ─────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 12px 9px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.dot.connected   { background: var(--green); }
+.dot.idle        { background: var(--amber); }
+
+.brand {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  color: var(--text);
+}
+
+/* ── Cards ──────────────────────────────────────────── */
+
+.card {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+/* ── Status card ─────────────────────────────────────── */
+
+.status-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.status-badge {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.status-badge.idle   { color: var(--amber); }
+.status-badge.active { color: var(--green); }
+
+.tick-rate {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* ── Goal form ───────────────────────────────────────── */
+
+.goal-form {
+  display: grid;
+  grid-template-columns: 1fr 72px auto;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+input[type="text"],
+input[type="number"] {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  padding: 4px 7px;
+  outline: none;
+  min-width: 0;
+}
+input:focus { border-color: var(--accent); }
+
+button {
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  color: #fff;
+  cursor: pointer;
+  font: 600 12px/1 inherit;
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+button:hover { filter: brightness(1.1); }
+
+.clear-btn {
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  padding: 3px 0 0;
+  text-decoration: underline;
+}
+.clear-btn:hover { color: var(--text); }
+
+/* ── Goal item combobox ──────────────────────────────── */
+
+.combobox {
+  position: relative;
+  min-width: 0;
+}
+
+.combobox input {
+  width: 100%;
+  cursor: pointer;
+}
+
+.combo-options {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  list-style: none;
+  margin: 0;
+  padding: 3px 0;
+  z-index: 50;
+  max-height: 140px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,.4);
+}
+
+.combo-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 9px;
+  cursor: pointer;
+  font-size: 12px;
+  gap: 8px;
+}
+.combo-option:hover  { background: var(--accent); color: #fff; }
+.combo-option:hover .combo-count { color: rgba(255,255,255,.7); }
+.combo-option.is-selected { background: rgba(91,141,238,.2); }
+
+.combo-count {
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.combo-empty {
+  padding: 5px 9px;
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ── Goal progress ───────────────────────────────────── */
+
+.goal-status { margin-top: 4px; }
+
+.progress-bar-wrap {
+  height: 5px;
+  background: var(--border);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 99px;
+  width: 0%;
+  transition: width 0.4s;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.eta-label { color: var(--muted); }
+
+/* ── Runout card ─────────────────────────────────────── */
+
+.runout-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+/* ── Debug ───────────────────────────────────────────── */
+
+.debug-details {
+  padding: 0 12px;
+}
+
+.debug-details summary {
+  font-size: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 8px 0 4px;
+  list-style: none;
+  user-select: none;
+}
+.debug-details summary::before { content: '▶ '; }
+.debug-details[open] summary::before { content: '▼ '; }
+
+#debug-me {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font: 10px/1.5 'Cascadia Code', 'Fira Code', monospace;
+  margin-bottom: 4px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

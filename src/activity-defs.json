@@ -1,0 +1,1227 @@
+{
+  "cook-shrimp": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "rawShrimp": -1,
+      "cookedShrimp": 1
+    }
+  },
+  "cook-meat": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "rawMeat": -1,
+      "cookedMeat": 1
+    }
+  },
+  "cook-frog": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "rawFrog": -1,
+      "logs": -1,
+      "cookedFrog": 1
+    }
+  },
+  "cook-chicken": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "rawChicken": -1,
+      "cookedChicken": 1
+    }
+  },
+  "cook-sardine": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "rawSardine": -1,
+      "cookedSardine": 1
+    }
+  },
+  "cook-bread": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "dough": -1,
+      "bread": 1
+    }
+  },
+  "cook-redberry-pie": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "pieShell": -1,
+      "redberries": -1,
+      "redberryPie": 1
+    }
+  },
+  "cook-trout": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "rawTrout": -1,
+      "cookedTrout": 1
+    }
+  },
+  "cook-meat-pie": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "pieShell": -1,
+      "cookedMeat": -1,
+      "meatPie": 1
+    }
+  },
+  "cook-salmon": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "rawSalmon": -1,
+      "cookedSalmon": 1
+    }
+  },
+  "cook-apple-pie": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "pieShell": -1,
+      "cookingApple": -1,
+      "applePie": 1
+    }
+  },
+  "cook-lobster": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "rawLobster": -1,
+      "cookedLobster": 1
+    }
+  },
+  "cook-swordfish": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "rawSwordfish": -1,
+      "cookedSwordfish": 1
+    }
+  },
+  "cook-pyreshell": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "rawPyreshell": -1,
+      "ginger": -1,
+      "cookedPyreshell": 1
+    }
+  },
+  "cook-shark": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "rawShark": -1,
+      "cookedShark": 1
+    }
+  },
+  "cook-manta-ray": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "rawMantaRay": -1,
+      "cookedMantaRay": 1
+    }
+  },
+  "craft-pot-unfired": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "softClay": -1,
+      "unfiredPot": 1
+    }
+  },
+  "fire-pot": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "unfiredPot": -1,
+      "pot": 1
+    }
+  },
+  "craft-leather-gloves": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "leather": -1,
+      "thread": -1,
+      "leatherGloves": 1
+    }
+  },
+  "make-molten-glass": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "sand": -1,
+      "sodaAsh": -1,
+      "moltenGlass": 1
+    }
+  },
+  "craft-pie-dish-unfired": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "softClay": -1,
+      "unfiredPieDish": 1
+    }
+  },
+  "fire-pie-dish": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "unfiredPieDish": -1,
+      "pieDish": 1
+    }
+  },
+  "craft-leather-boots": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "leather": -1,
+      "thread": -1,
+      "leatherBoots": 1
+    }
+  },
+  "craft-unstrung-gold-amulet": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "goldBar": -1,
+      "unstrungGoldAmulet": 1
+    }
+  },
+  "spin-bow-string": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "flax": -1,
+      "bowString": 1
+    }
+  },
+  "craft-steel-shovel": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "steelShovelHead": -1,
+      "willowLogs": -1,
+      "steelShovel": 1
+    }
+  },
+  "craft-leather-armor": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "leather": -1,
+      "thread": -1,
+      "leatherArmor": 1
+    }
+  },
+  "craft-unstrung-holy-amulet": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "silverBar": -1,
+      "unstrungHolyAmulet": 1
+    }
+  },
+  "craft-unstrung-evil-amulet": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "silverBar": -1,
+      "unstrungEvilAmulet": 1
+    }
+  },
+  "cut-sapphire": {
+    "durationMs": 16000,
+    "inventoryChanges": {
+      "uncutSapphire": -1,
+      "cutSapphire": 1
+    }
+  },
+  "craft-feathered-cap": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "leather": -1,
+      "ballOfWool": -1,
+      "feather": -5,
+      "featheredCap": 1
+    }
+  },
+  "craft-unstrung-sapphire-amulet": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "goldBar": -1,
+      "cutSapphire": -1,
+      "unstrungSapphireAmulet": 1
+    }
+  },
+  "cut-emerald": {
+    "durationMs": 16000,
+    "inventoryChanges": {
+      "uncutEmerald": -1,
+      "cutEmerald": 1
+    }
+  },
+  "craft-unstrung-emerald-amulet": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "goldBar": -1,
+      "cutEmerald": -1,
+      "unstrungEmeraldAmulet": 1
+    }
+  },
+  "craft-vial": {
+    "durationMs": 14000,
+    "inventoryChanges": {
+      "moltenGlass": -1,
+      "vial": 1
+    }
+  },
+  "cut-ruby": {
+    "durationMs": 16000,
+    "inventoryChanges": {
+      "uncutRuby": -1,
+      "cutRuby": 1
+    }
+  },
+  "craft-golden-rod": {
+    "durationMs": 22000,
+    "inventoryChanges": {
+      "goldBar": -4,
+      "yewLogs": -1,
+      "ballOfWool": -1,
+      "goldenRod": 1
+    }
+  },
+  "cut-diamond": {
+    "durationMs": 16000,
+    "inventoryChanges": {
+      "uncutDiamond": -1,
+      "cutDiamond": 1
+    }
+  },
+  "craft-glass-orb": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "moltenGlass": -1,
+      "unpoweredOrb": 1
+    }
+  },
+  "craft-unstrung-ruby-amulet": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "goldBar": -1,
+      "cutRuby": -1,
+      "unstrungRubyAmulet": 1
+    }
+  },
+  "craft-air-battlestaff": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "battlestaff": -1,
+      "airOrb": -1,
+      "airBattlestaff": 1
+    }
+  },
+  "craft-fire-battlestaff": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "battlestaff": -1,
+      "fireOrb": -1,
+      "fireBattlestaff": 1
+    }
+  },
+  "craft-unstrung-diamond-amulet": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "goldBar": -1,
+      "cutDiamond": -1,
+      "unstrungDiamondAmulet": 1
+    }
+  },
+  "craft-unstrung-dragonstone-amulet": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "goldBar": -1,
+      "cutDragonstone": -1,
+      "unstrungDragonstoneAmulet": 1
+    }
+  },
+  "burn-logs": {
+    "durationMs": 20000,
+    "inventoryChanges": {
+      "logs": -1,
+      "ashes": 1
+    }
+  },
+  "burn-oak-logs": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "oakLogs": -1,
+      "ashes": 1
+    }
+  },
+  "burn-willow-logs": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "willowLogs": -1,
+      "ashes": 1
+    }
+  },
+  "burn-maple-logs": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "mapleLogs": -1,
+      "ashes": 1
+    }
+  },
+  "burn-yew-logs": {
+    "durationMs": 42000,
+    "inventoryChanges": {
+      "yewLogs": -1,
+      "ashes": 1
+    }
+  },
+  "burn-magic-logs": {
+    "durationMs": 52000,
+    "inventoryChanges": {
+      "magicLogs": -1,
+      "ashes": 1
+    }
+  },
+  "catch-shrimp": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "rawShrimp": 1
+    }
+  },
+  "catch-sardine": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "rawShrimp": -1,
+      "rawSardine": 1
+    }
+  },
+  "catch-trout": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "feather": -1,
+      "rawTrout": 1
+    }
+  },
+  "catch-salmon": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "feather": -1,
+      "rawSalmon": 1
+    }
+  },
+  "catch-lobster": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "rawLobster": 1
+    }
+  },
+  "catch-swordfish": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "rawSwordfish": 1
+    }
+  },
+  "catch-shark": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "rawShark": 1
+    }
+  },
+  "catch-manta-ray": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "rawMantaRay": 1
+    }
+  },
+  "fletch-shortbow": {
+    "durationMs": 20000,
+    "inventoryChanges": {
+      "logs": -1,
+      "shortbowU": 1
+    }
+  },
+  "fletch-oak-bow": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "oakLogs": -1,
+      "oakBowU": 1
+    }
+  },
+  "fletch-willow-bow": {
+    "durationMs": 38000,
+    "inventoryChanges": {
+      "willowLogs": -1,
+      "willowBowU": 1
+    }
+  },
+  "fletch-maple-bow": {
+    "durationMs": 42000,
+    "inventoryChanges": {
+      "mapleLogs": -1,
+      "mapleBowU": 1
+    }
+  },
+  "fletch-yew-bow": {
+    "durationMs": 46000,
+    "inventoryChanges": {
+      "yewLogs": -1,
+      "yewBowU": 1
+    }
+  },
+  "fletch-magic-bow": {
+    "durationMs": 52000,
+    "inventoryChanges": {
+      "magicLogs": -1,
+      "magicBowU": 1
+    }
+  },
+  "bones-to-bread": {
+    "durationMs": 42000,
+    "inventoryChanges": {
+      "bones": -3,
+      "bread": 1
+    }
+  },
+  "enchant-sapphire-amulet": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "sapphireAmulet": -1,
+      "airRune": -1,
+      "cosmicRune": -1,
+      "amuletOfMagic": 1
+    }
+  },
+  "enchant-emerald-amulet": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "emeraldAmulet": -1,
+      "airRune": -3,
+      "cosmicRune": -1,
+      "amuletOfProtection": 1
+    }
+  },
+  "telegrab-nature-runes": {
+    "durationMs": 72000,
+    "inventoryChanges": {
+      "airRune": -1,
+      "lawRune": -1,
+      "natureRune": 3
+    }
+  },
+  "telegrab-gold-bar": {
+    "durationMs": 52000,
+    "inventoryChanges": {
+      "airRune": -1,
+      "lawRune": -1,
+      "goldBar": 2
+    }
+  },
+  "practice-teleport": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "airRune": -5,
+      "lawRune": -1
+    }
+  },
+  "enchant-ruby-amulet": {
+    "durationMs": 36000,
+    "inventoryChanges": {
+      "rubyAmulet": -1,
+      "fireRune": -5,
+      "cosmicRune": -1,
+      "amuletOfStrength": 1
+    }
+  },
+  "enchant-diamond-amulet": {
+    "durationMs": 42000,
+    "inventoryChanges": {
+      "diamondAmulet": -1,
+      "airRune": -10,
+      "cosmicRune": -1,
+      "amuletOfPower": 1
+    }
+  },
+  "enchant-dragonstone-amulet": {
+    "durationMs": 42000,
+    "inventoryChanges": {
+      "dragonstoneAmulet": -1,
+      "airRune": -15,
+      "cosmicRune": -1,
+      "amuletOfProgress": 1
+    }
+  },
+  "charge-air-orb": {
+    "durationMs": 22000,
+    "inventoryChanges": {
+      "unpoweredOrb": -1,
+      "cosmicRune": -3,
+      "airRune": -30,
+      "airOrb": 1
+    }
+  },
+  "charge-fire-orb": {
+    "durationMs": 22000,
+    "inventoryChanges": {
+      "unpoweredOrb": -1,
+      "cosmicRune": -3,
+      "fireRune": -30,
+      "fireOrb": 1
+    }
+  },
+  "brew-defense-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "eyeOfNewt": -1,
+      "defensePotion": 1
+    }
+  },
+  "brew-fishing-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "fellroot": -1,
+      "fishingPotion": 1
+    }
+  },
+  "brew-attack-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "impweed": -1,
+      "attackPotion": 1
+    }
+  },
+  "brew-woodcutting-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "elmwort": -1,
+      "woodcuttingPotion": 1
+    }
+  },
+  "brew-mining-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "dwellberries": -1,
+      "miningPotion": 1
+    }
+  },
+  "brew-strength-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "limpwurtRoot": -1,
+      "strengthPotion": 1
+    }
+  },
+  "brew-cooking-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "chocolateDust": -1,
+      "cookingPotion": 1
+    }
+  },
+  "brew-herblaw-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "marshcap": -1,
+      "herblawPotion": 1
+    }
+  },
+  "brew-firemaking-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "ashes": -32,
+      "firemakingPotion": 1
+    }
+  },
+  "brew-fletching-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "featheredSeed": -1,
+      "fletchingPotion": 1
+    }
+  },
+  "brew-good-magic-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "havenfrond": -1,
+      "goodMagicPotion": 1
+    }
+  },
+  "brew-crafting-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "spiderSilk": -1,
+      "craftingPotion": 1
+    }
+  },
+  "brew-ranged-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "snailShell": -1,
+      "rangedPotion": 1
+    }
+  },
+  "brew-evil-magic-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "gloomroot": -1,
+      "evilMagicPotion": 1
+    }
+  },
+  "brew-smithing-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "coalTar": -1,
+      "smithingPotion": 1
+    }
+  },
+  "brew-piety-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "knightveil": -1,
+      "pietyPotion": 1
+    }
+  },
+  "brew-super-defense-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "eyeOfNewt": -1,
+      "frostcurl": -1,
+      "superDefensePotion": 1
+    }
+  },
+  "brew-super-fishing-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "fellroot": -1,
+      "snapeGrass": -1,
+      "superFishingPotion": 1
+    }
+  },
+  "brew-super-attack-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "impweed": -1,
+      "serpentleaf": -1,
+      "superAttackPotion": 1
+    }
+  },
+  "brew-super-woodcutting-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "elmwort": -1,
+      "falcrestFern": -1,
+      "superWoodcuttingPotion": 1
+    }
+  },
+  "brew-super-mining-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "dwellberries": -1,
+      "wickedwort": -1,
+      "superMiningPotion": 1
+    }
+  },
+  "brew-super-strength-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "limpwurtRoot": -1,
+      "drakestem": -1,
+      "superStrengthPotion": 1
+    }
+  },
+  "brew-super-cooking-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "chocolateDust": -1,
+      "nervine": -1,
+      "superCookingPotion": 1
+    }
+  },
+  "brew-super-herblaw-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "marshcap": -1,
+      "nervine": -1,
+      "superHerblawPotion": 1
+    }
+  },
+  "brew-super-firemaking-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "ashes": -32,
+      "lavabloom": -1,
+      "superFiremakingPotion": 1
+    }
+  },
+  "brew-super-fletching-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "featheredSeed": -1,
+      "serpentleaf": -1,
+      "superFletchingPotion": 1
+    }
+  },
+  "brew-super-good-magic-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "havenfrond": -1,
+      "oracleSage": -1,
+      "superGoodMagicPotion": 1
+    }
+  },
+  "brew-super-crafting-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "spiderSilk": -1,
+      "wickedwort": -1,
+      "superCraftingPotion": 1
+    }
+  },
+  "brew-super-ranged-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "snailShell": -1,
+      "nervine": -1,
+      "superRangedPotion": 1
+    }
+  },
+  "brew-super-evil-magic-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "gloomroot": -1,
+      "dragontongue": -1,
+      "superEvilMagicPotion": 1
+    }
+  },
+  "brew-super-smithing-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "coalTar": -1,
+      "dragontongue": -1,
+      "superSmithingPotion": 1
+    }
+  },
+  "brew-super-piety-potion": {
+    "durationMs": 396000,
+    "inventoryChanges": {
+      "vialOfWater": -1,
+      "knightveil": -1,
+      "drakestem": -1,
+      "superPietyPotion": 1
+    }
+  },
+  "mine-copper": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "copperOre": 1
+    }
+  },
+  "mine-tin": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "tinOre": 1
+    }
+  },
+  "mine-iron": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "ironOre": 1
+    }
+  },
+  "mine-silver": {
+    "durationMs": 36000,
+    "inventoryChanges": {
+      "silverOre": 1
+    }
+  },
+  "mine-coal": {
+    "durationMs": 40000,
+    "inventoryChanges": {
+      "coalOre": 1
+    }
+  },
+  "mine-gold": {
+    "durationMs": 42000,
+    "inventoryChanges": {
+      "goldOre": 1
+    }
+  },
+  "mine-mithril": {
+    "durationMs": 48000,
+    "inventoryChanges": {
+      "mithrilOre": 1
+    }
+  },
+  "mine-adamantite": {
+    "durationMs": 62000,
+    "inventoryChanges": {
+      "adamantiteOre": 1
+    }
+  },
+  "mine-prog": {
+    "durationMs": 92000,
+    "inventoryChanges": {
+      "progriteOre": 1
+    }
+  },
+  "smelt-bronze": {
+    "durationMs": 20000,
+    "inventoryChanges": {
+      "copperOre": -1,
+      "tinOre": -1,
+      "bronzeBar": 1
+    }
+  },
+  "forge-bronze-dagger": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "bronzeBar": -1,
+      "bronzeDagger": 1
+    }
+  },
+  "forge-bronze-axe": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "bronzeBar": -1,
+      "bronzeAxe": 1
+    }
+  },
+  "forge-bronze-pickaxe": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "bronzeBar": -1,
+      "bronzePickaxe": 1
+    }
+  },
+  "forge-bronze-medium-helm": {
+    "durationMs": 18000,
+    "inventoryChanges": {
+      "bronzeBar": -1,
+      "bronzeMedHelm": 1
+    }
+  },
+  "forge-bronze-scimitar": {
+    "durationMs": 24000,
+    "inventoryChanges": {
+      "bronzeBar": -2,
+      "bronzeScimitar": 1
+    }
+  },
+  "forge-bronze-sq-shield": {
+    "durationMs": 24000,
+    "inventoryChanges": {
+      "bronzeBar": -2,
+      "bronzeSqShield": 1
+    }
+  },
+  "forge-bronze-armor": {
+    "durationMs": 42000,
+    "inventoryChanges": {
+      "bronzeBar": -5,
+      "bronzeArmor": 1
+    }
+  },
+  "smelt-iron": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "ironOre": -2,
+      "ironBar": 1
+    }
+  },
+  "forge-iron-dagger": {
+    "durationMs": 24000,
+    "inventoryChanges": {
+      "ironBar": -1,
+      "ironDagger": 1
+    }
+  },
+  "forge-iron-shears": {
+    "durationMs": 24000,
+    "inventoryChanges": {
+      "ironBar": -1,
+      "ironShears": 1
+    }
+  },
+  "forge-iron-medium-helm": {
+    "durationMs": 24000,
+    "inventoryChanges": {
+      "ironBar": -1,
+      "ironMedHelm": 1
+    }
+  },
+  "forge-iron-pickaxe": {
+    "durationMs": 24000,
+    "inventoryChanges": {
+      "ironBar": -1,
+      "ironPickaxe": 1
+    }
+  },
+  "forge-iron-scimitar": {
+    "durationMs": 36000,
+    "inventoryChanges": {
+      "ironBar": -2,
+      "ironScimitar": 1
+    }
+  },
+  "smelt-silver": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "silverOre": -1,
+      "silverBar": 1
+    }
+  },
+  "forge-iron-sq-shield": {
+    "durationMs": 36000,
+    "inventoryChanges": {
+      "ironBar": -2,
+      "ironSqShield": 1
+    }
+  },
+  "forge-iron-armor": {
+    "durationMs": 72000,
+    "inventoryChanges": {
+      "ironBar": -5,
+      "ironArmor": 1
+    }
+  },
+  "smelt-steel": {
+    "durationMs": 36000,
+    "inventoryChanges": {
+      "ironOre": -1,
+      "coalOre": -2,
+      "steelBar": 1
+    }
+  },
+  "forge-steel-dagger": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "steelBar": -1,
+      "steelDagger": 1
+    }
+  },
+  "forge-steel-shovel-head": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "steelBar": -1,
+      "steelShovelHead": 1
+    }
+  },
+  "forge-steel-medium-helm": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "steelBar": -1,
+      "steelMedHelm": 1
+    }
+  },
+  "forge-steel-scimitar": {
+    "durationMs": 44000,
+    "inventoryChanges": {
+      "steelBar": -2,
+      "steelScimitar": 1
+    }
+  },
+  "forge-steel-sq-shield": {
+    "durationMs": 44000,
+    "inventoryChanges": {
+      "steelBar": -2,
+      "steelSqShield": 1
+    }
+  },
+  "forge-steel-armor": {
+    "durationMs": 92000,
+    "inventoryChanges": {
+      "steelBar": -5,
+      "steelArmor": 1
+    }
+  },
+  "smelt-gold": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "goldOre": -1,
+      "goldBar": 1
+    }
+  },
+  "smelt-mithril": {
+    "durationMs": 48000,
+    "inventoryChanges": {
+      "mithrilOre": -1,
+      "coalOre": -4,
+      "mithrilBar": 1
+    }
+  },
+  "forge-mithril-dagger": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "mithrilBar": -1,
+      "mithrilDagger": 1
+    }
+  },
+  "forge-mithril-medium-helm": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "mithrilBar": -1,
+      "mithrilMedHelm": 1
+    }
+  },
+  "forge-mithril-scimitar": {
+    "durationMs": 52000,
+    "inventoryChanges": {
+      "mithrilBar": -2,
+      "mithrilScimitar": 1
+    }
+  },
+  "forge-mithril-sq-shield": {
+    "durationMs": 52000,
+    "inventoryChanges": {
+      "mithrilBar": -2,
+      "mithrilSqShield": 1
+    }
+  },
+  "forge-mithril-armor": {
+    "durationMs": 112000,
+    "inventoryChanges": {
+      "mithrilBar": -5,
+      "mithrilArmor": 1
+    }
+  },
+  "smelt-adamantite": {
+    "durationMs": 56000,
+    "inventoryChanges": {
+      "adamantiteOre": -1,
+      "coalOre": -6,
+      "adamantiteBar": 1
+    }
+  },
+  "forge-adamant-dagger": {
+    "durationMs": 36000,
+    "inventoryChanges": {
+      "adamantiteBar": -1,
+      "adamantDagger": 1
+    }
+  },
+  "forge-adamant-medium-helm": {
+    "durationMs": 36000,
+    "inventoryChanges": {
+      "adamantiteBar": -1,
+      "adamantMedHelm": 1
+    }
+  },
+  "forge-adamant-scimitar": {
+    "durationMs": 60000,
+    "inventoryChanges": {
+      "adamantiteBar": -2,
+      "adamantScimitar": 1
+    }
+  },
+  "forge-adamant-sq-shield": {
+    "durationMs": 60000,
+    "inventoryChanges": {
+      "adamantiteBar": -2,
+      "adamantSqShield": 1
+    }
+  },
+  "forge-adamant-armor": {
+    "durationMs": 132000,
+    "inventoryChanges": {
+      "adamantiteBar": -5,
+      "adamantArmor": 1
+    }
+  },
+  "smelt-progrite": {
+    "durationMs": 68000,
+    "inventoryChanges": {
+      "progriteOre": -1,
+      "coalOre": -8,
+      "progriteBar": 1
+    }
+  },
+  "forge-progrite-dagger": {
+    "durationMs": 40000,
+    "inventoryChanges": {
+      "progriteBar": -1,
+      "progriteDagger": 1
+    }
+  },
+  "forge-progrite-medium-helm": {
+    "durationMs": 40000,
+    "inventoryChanges": {
+      "progriteBar": -1,
+      "progriteMedHelm": 1
+    }
+  },
+  "forge-progrite-scimitar": {
+    "durationMs": 68000,
+    "inventoryChanges": {
+      "progriteBar": -2,
+      "progriteScimitar": 1
+    }
+  },
+  "forge-progrite-sq-shield": {
+    "durationMs": 68000,
+    "inventoryChanges": {
+      "progriteBar": -2,
+      "progriteSqShield": 1
+    }
+  },
+  "forge-progrite-armor": {
+    "durationMs": 152000,
+    "inventoryChanges": {
+      "progriteBar": -5,
+      "progriteArmor": 1
+    }
+  },
+  "chop-tree": {
+    "durationMs": 24000,
+    "inventoryChanges": {
+      "logs": 1
+    }
+  },
+  "chop-oak": {
+    "durationMs": 24000,
+    "inventoryChanges": {
+      "oakLogs": 1
+    }
+  },
+  "chop-willow": {
+    "durationMs": 24000,
+    "inventoryChanges": {
+      "willowLogs": 1
+    }
+  },
+  "chop-maple": {
+    "durationMs": 28000,
+    "inventoryChanges": {
+      "mapleLogs": 1
+    }
+  },
+  "chop-yew": {
+    "durationMs": 30000,
+    "inventoryChanges": {
+      "yewLogs": 1
+    }
+  },
+  "chop-magic": {
+    "durationMs": 32000,
+    "inventoryChanges": {
+      "magicLogs": 1
+    }
+  }
+}

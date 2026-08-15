@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "Microscape Minion",
+  "version": "0.1.0",
+  "description": "Idle detection, goal tracking, and material-runout alerts for Microscape. Read-only — never sends input to the game.",
+
+  "permissions": ["notifications", "storage", "alarms"],
+  "host_permissions": ["https://microscape.cc/*"],
+
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["https://microscape.cc/play/*"],
+      "js": ["src/injected.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://microscape.cc/play/*"],
+      "js": ["src/content.js"],
+      "run_at": "document_start",
+      "world": "ISOLATED"
+    }
+  ],
+
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_title": "Microscape Minion",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}
