@@ -69,6 +69,7 @@ let lastServerUpdateAt = 0;
 let tickLog = []; // newest-first, capped at 40 entries
 let cycleCalibrations = {}; // activityId -> { lastCompletionAt, samples }
 let xpRateSamples = {}; // "activityId:skill" -> { lastGainAt, samples: [{ xp, ms }] }
+let dropRateSamples = {}; // "activityId:itemId" -> { lastGainAt, samples: [{ items, ms }] }
 
 let goal = null; // { itemName, itemId, targetCount }
 let goalNotifiedAt = null;
@@ -133,11 +134,13 @@ function handleServerFrame(frame) {
   calibrateTick();
   const prevAct = mirroredState.me?.activity;
   const prevExp = mirroredState.me?.exp;
+  const prevMe = mirroredState.me;
   const preSnap = snapshotEta();
 
   mirroredState = applyPatch(mirroredState, frame.args[0]);
   const newAct = mirroredState.me?.activity;
   trackXpGain(prevAct, newAct, prevExp, mirroredState.me?.exp);
+  trackDropGain(prevAct, newAct, prevMe, mirroredState.me);
 
   if (newAct?.preparedActivity && !prevAct?.preparedActivity && (newAct.remaining ?? 0) > 0) {
     observedOverheadTicks = newAct.remaining;
@@ -502,6 +505,61 @@ function observedXpPerMs(actId, skill) {
   return totals.xp > 0 && totals.ms > 0 ? totals.xp / totals.ms : null;
 }
 
+function trackDropGain(prevAct, newAct, prevMe, newMe) {
+  if (!prevMe || !newMe) return;
+
+  const act = getActivityId(newAct) ? newAct : prevAct;
+  const actId = getActivityId(act);
+  if (!isWorkActivityId(actId)) return;
+
+  const dropItems = ACTIVITY_DEFS[actId]?.dropItems;
+  if (!dropItems || Object.keys(dropItems).length === 0) return;
+
+  for (const itemId of Object.keys(dropItems)) {
+    const before = getMaterialCountForMe(prevMe, itemId);
+    const after = getMaterialCountForMe(newMe, itemId);
+    const gained = after - before;
+    if (gained <= 0) continue;
+
+    const key = dropRateKey(actId, itemId);
+    const now = Date.now();
+    const tracker = dropRateSamples[key] ?? { lastGainAt: null, samples: [] };
+    if (tracker.lastGainAt) {
+      const sampleMs = now - tracker.lastGainAt;
+      if (sampleMs >= 250 && sampleMs <= 30 * 60_000) {
+        tracker.samples.push({ items: gained, ms: sampleMs });
+        if (tracker.samples.length > 12) tracker.samples.shift();
+      }
+    }
+    tracker.lastGainAt = now;
+    dropRateSamples[key] = tracker;
+  }
+}
+
+function getMaterialCountForMe(me, itemId) {
+  const inv = me?.inventory?.[itemId] ?? 0;
+  const lb  = me?.lootBag?.[itemId]  ?? 0;
+  return inv + lb;
+}
+
+function dropRateKey(actId, itemId) {
+  return `${actId}:${itemId}`;
+}
+
+function observedDropItemsPerMs(actId, itemId) {
+  const samples = dropRateSamples[dropRateKey(actId, itemId)]?.samples ?? [];
+  const totals = samples.reduce((acc, sample) => {
+    acc.items += sample.items;
+    acc.ms += sample.ms;
+    return acc;
+  }, { items: 0, ms: 0 });
+  return totals.items > 0 && totals.ms > 0 ? totals.items / totals.ms : null;
+}
+
+function dropRateSampleCount(actId, itemId) {
+  return dropRateSamples[dropRateKey(actId, itemId)]?.samples.length ?? 0;
+}
+
 function isWorkActivityId(actId) {
   return !!actId && actId !== 'travel' && actId !== 'banking';
 }
@@ -651,7 +709,14 @@ function computeGoalEta(g, currentCount, actId) {
   if (!def) return null;
 
   const dropKey = findKey(def.dropItems, g.itemName, g.itemId);
-  if (dropKey) return { chanceBased: true };
+  if (dropKey) {
+    const observedRate = observedDropItemsPerMs(actId, dropKey);
+    return {
+      chanceBased: true,
+      totalMs: observedRate ? Math.ceil(remaining / observedRate) : null,
+      sampleCount: dropRateSampleCount(actId, dropKey),
+    };
+  }
 
   // Find the goal item in the activity's output (positive inventoryChanges)
   const goalKey = findKey(def.inventoryChanges, g.itemName, g.itemId);

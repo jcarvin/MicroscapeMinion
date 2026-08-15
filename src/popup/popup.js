@@ -217,9 +217,16 @@ function render(s) {
     goalCountDisp.textContent = `${gs.count ?? 0} / ${gs.goal.targetCount}`;
 
     if (gs.chanceBased) {
-      goalEtaEl.hidden = true;
-      goalEtaEl.textContent = '';
-      goalAnchor = null;
+      goalEtaEl.hidden = false;
+      if (gs.eta?.totalMs > 0) {
+        if (!goalAnchor || gs.eta.totalMs !== goalAnchor.srcTotalMs) {
+          goalAnchor = { totalMs: gs.eta.totalMs, srcTotalMs: gs.eta.totalMs, bankTrips: 0, at: Date.now() };
+        }
+        updateEtaDisplays();
+      } else {
+        goalEtaEl.textContent = 'ETA calibrating…';
+        goalAnchor = null;
+      }
     } else if (gs.eta == null) {
       goalEtaEl.hidden = false;
       goalEtaEl.textContent = 'ETA calibrating…';
