@@ -26,6 +26,8 @@ const skillNotches  = $('skill-xp-notch-labels');
 const skillTargetEl = $('skill-xp-target-label');
 const skillEtaEl    = $('skill-xp-eta');
 const debugMeEl     = $('debug-me');
+const tickLogPre    = $('tick-log-pre');
+const btnCopyLog    = $('btn-copy-log');
 const comboWrap     = $('item-combobox');
 const comboList     = $('combo-options');
 
@@ -110,7 +112,7 @@ document.addEventListener('mousedown', (e) => {
 // Anchors let the display tick down every second without waiting for a new
 // background recalculation. Re-anchored whenever the background value changes.
 
-let runoutAnchor = null; // { etaMs, srcEtaMs, at }
+let runoutAnchor = null; // { etaMs, srcEtaMs, bankTrips, at }
 let goalAnchor   = null; // { totalMs, srcTotalMs, bankTrips, at }
 let skillAnchor  = null; // { etaMs, srcEtaMs, targetLevel, at }
 let selectedLevelOffset = 1;
@@ -119,7 +121,9 @@ let lastStatus = null;
 function updateEtaDisplays() {
   if (runoutAnchor) {
     const ms = Math.max(0, runoutAnchor.etaMs - (Date.now() - runoutAnchor.at));
-    runoutEtaEl.textContent = ms > 0 ? `ETA ${formatDuration(ms)}` : 'Out now';
+    const trips    = runoutAnchor.bankTrips ?? 0;
+    const tripNote = trips > 0 ? ` (+${trips} bank trip${trips > 1 ? 's' : ''})` : '';
+    runoutEtaEl.textContent = ms > 0 ? `ETA ${formatDuration(ms)}${tripNote}` : 'Out now';
   }
   if (goalAnchor) {
     const ms = Math.max(0, goalAnchor.totalMs - (Date.now() - goalAnchor.at));
@@ -238,8 +242,8 @@ function render(s) {
     const cycles = rs.cyclesLeft != null ? `${rs.cyclesLeft} cycles left` : `${rs.totalMaterial} remaining`;
     runoutCycles.textContent = `${label}${cycles}`;
     if (rs.etaMs > 0) {
-      if (!runoutAnchor || rs.etaMs !== runoutAnchor.srcEtaMs) {
-        runoutAnchor = { etaMs: rs.etaMs, srcEtaMs: rs.etaMs, at: Date.now() };
+      if (!runoutAnchor || rs.etaMs !== runoutAnchor.srcEtaMs || rs.bankTrips !== runoutAnchor.bankTrips) {
+        runoutAnchor = { etaMs: rs.etaMs, srcEtaMs: rs.etaMs, bankTrips: rs.bankTrips, at: Date.now() };
       }
       updateEtaDisplays();
     } else {
@@ -286,10 +290,13 @@ function render(s) {
     skillXpCard.hidden = true;
   }
 
-  // Debug
+  // Debug — raw me state (only render when visible; it can be large)
   if ($('debug-me').parentElement.open) {
     debugMeEl.textContent = JSON.stringify(s.rawMe, null, 2);
   }
+
+  // Debug — tick log (always update so copy button and display are current)
+  renderTickLog(s.tickLog ?? []);
 }
 
 // ── Goal controls ──────────────────────────────────────────────────────────────
@@ -345,6 +352,64 @@ function formatSkillName(skill) {
 function formatNumber(value) {
   return Number(value ?? 0).toLocaleString();
 }
+
+// ── Tick log ───────────────────────────────────────────────────────────────────
+
+let lastTickLog = [];
+
+function renderTickLog(entries) {
+  lastTickLog = entries;
+  if (!entries.length) { tickLogPre.textContent = '(no ticks yet)'; return; }
+  tickLogPre.textContent = entries.map(formatTickEntry).join('\n');
+}
+
+function formatTickEntry(e) {
+  const t = fmtHMS(e.at);
+  if (e.type !== 'tick') return `${t}  ── ${e.type.toUpperCase()} ──`;
+
+  const ph  = (e.phase ?? '?').padEnd(8);
+  const cy  = e.cyclesLeft != null  ? `cy=${String(e.cyclesLeft).padStart(3)}`  : 'cy=  ?';
+  const rm  = e.actRemaining != null ? `rm=${String(e.actRemaining).padStart(2)}` : 'rm= ?';
+  const ln  = e.actLength != null   ? `ln=${String(e.actLength).padStart(2)}`   : 'ln= ?';
+  const oh  = `oh=${e.overheadTicks ?? '?'}`;
+  const lb  = e.lootBagItems != null ? `lb=${e.lootBagItems}/${e.bankTriggerItemCount ?? '?'}` : 'lb=?';
+  const gen = e.itemsGenerated != null ? `gen=${String(e.itemsGenerated).padStart(3)}` : 'gen=  ?';
+  const bt  = e.bankTrips != null ? `bt=${String(e.bankTrips).padStart(2)}` : 'bt= ?';
+  const sm  = e.cycleSamples != null ? `sm=${String(e.cycleSamples).padStart(2)}` : 'sm= ?';
+  const pg  = e.cycleProgressMs != null ? `pg=${(e.cycleProgressMs / 1000).toFixed(0)}s` : 'pg=?';
+  const cal = e.calibrated ? 'cal=Y' : 'cal=N';
+  const rd  = e.rawDuration != null ? `rd=${e.rawDuration}` : 'rd=?';
+  const dd  = e.defDurMs != null    ? `dd=${(e.defDurMs / 1000).toFixed(0)}s`  : 'dd=?';
+  const cd  = e.cycleDurMs != null  ? `cd=${(e.cycleDurMs / 1000).toFixed(0)}s` : 'cd=?';
+  const od  = e.observedCycleDurMs != null ? `od=${(e.observedCycleDurMs / 1000).toFixed(0)}s` : 'od=?';
+  const goal = e.goalEtaMs != null  ? `goal=${(e.goalEtaMs / 1000).toFixed(0)}s` : 'goal=?';
+  const gbt = e.goalBankTrips != null ? `gbt=${e.goalBankTrips}` : 'gbt=?';
+  const pre  = e.pre  != null ? `${(e.pre  / 1000).toFixed(0)}s` : '   ?';
+  const post = e.etaMs != null      ? `${(e.etaMs / 1000).toFixed(0)}s`         : '   ?';
+  const d    = e.deltaMs != null
+    ? (e.deltaMs >= 0 ? `+${(e.deltaMs / 1000).toFixed(1)}` : `${(e.deltaMs / 1000).toFixed(1)}`)
+    : '?';
+  return `${t}  ${ph}  ${cy}  ${rm}  ${ln}  ${oh}  ${lb}  ${gen}  ${bt}  ${sm}  ${cal}  ${pg}  ${rd}  ${dd}  ${cd}  ${od}  ${goal}  ${gbt}  ${pre}→${post}  Δ${d}s`;
+}
+
+function fmtHMS(ts) {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
+
+btnCopyLog.addEventListener('click', () => {
+  navigator.clipboard.writeText(JSON.stringify(lastTickLog, null, 2)).then(() => {
+    btnCopyLog.textContent = 'Copied!';
+    btnCopyLog.classList.add('copied');
+    setTimeout(() => { btnCopyLog.textContent = 'Copy'; btnCopyLog.classList.remove('copied'); }, 1500);
+  }).catch(() => {
+    btnCopyLog.textContent = 'Error';
+    setTimeout(() => { btnCopyLog.textContent = 'Copy'; }, 1500);
+  });
+});
 
 function formatDuration(ms) {
   const s = Math.round(ms / 1000);

@@ -17,7 +17,7 @@
 // Duration formula (confirmed from bundle):
 //   displayedSeconds = (activityDef.duration + 6) * 2   →  durationMs = (duration + 6) * 2000
 
-const INVENTORY_CAPACITY = 50;
+const BANK_TRIGGER_ITEM_COUNT = 25;
 
 // Bank trip timing — computed dynamically from zone mapPos when ZONE_DATA is available.
 // BANK_TRIP_MS is the fallback used before the bundle is parsed.
@@ -60,8 +60,14 @@ let prevActivityId = undefined; // undefined = not yet observed
 let microscopeTabId = null;
 
 let observedTickMs = 2000;
+let observedOverheadTicks = 6; // debug-only; not used to rewrite activity duration
 let tickSamples = [];
 let lastUpdateAt = null;
+let lastServerUpdateSignature = null;
+let lastServerUpdateAt = 0;
+
+let tickLog = []; // newest-first, capped at 40 entries
+let cycleCalibrations = {}; // activityId -> { lastCompletionAt, samples }
 
 let goal = null; // { itemName, itemId, targetCount }
 let goalNotifiedAt = null;
@@ -121,11 +127,97 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
 
 function handleServerFrame(frame) {
   if (frame.event !== 'update' || !frame.args?.length) return;
+  if (isDuplicateServerUpdate(frame.args[0])) return;
+
   calibrateTick();
+  const prevAct = mirroredState.me?.activity;
+  const preSnap = snapshotEta();
+
   mirroredState = applyPatch(mirroredState, frame.args[0]);
+  const newAct = mirroredState.me?.activity;
+
+  if (newAct?.preparedActivity && !prevAct?.preparedActivity && (newAct.remaining ?? 0) > 0) {
+    observedOverheadTicks = newAct.remaining;
+  }
+  resetCycleAnchorOnInterruption(prevAct, newAct);
+  calibrateCycleDuration(prevAct, newAct, preSnap);
+
+  const prevType = prevAct?.type;
+  const newType  = newAct?.type;
+  if (newType === 'travel'  && prevType !== 'travel')  pushTickEvent('travel-start');
+  if (prevType === 'travel'  && newType !== 'travel')  pushTickEvent('travel-end');
+  if (newType === 'banking' && prevType !== 'banking') pushTickEvent('banking-start');
+  if (prevType === 'banking' && newType !== 'banking') pushTickEvent('banking-end');
+
+  pushTickEntry(preSnap, snapshotEta());
+
   detectIdleTransition();
   detectGoalReached();
   detectMaterialRunout();
+}
+
+// ── Tick log helpers ──────────────────────────────────────────────────────────
+
+function snapshotEta() {
+  const me = mirroredState.me;
+  const act = me?.activity ?? null;
+  const actId = getActivityId(act);
+  const phase = act?.type === 'travel'  ? 'travel'
+    : act?.type === 'banking'           ? 'banking'
+    : act?.preparedActivity             ? 'overhead'
+    : actId                             ? 'active'
+    : null;
+  const def = actId ? ACTIVITY_DEFS[actId] : null;
+  const info = (def && actId) ? runoutInfo(actId) : null;
+  const durationInfo = def ? cycleDurationInfo(def, actId) : null;
+  const cycleDurMs = durationInfo?.durationMs ?? null;
+  const cycleProgressMs = durationInfo?.calibrated
+    ? currentCycleProgressMs(actId, cycleDurMs)
+    : 0;
+  const fallbackOverheadMs = (!durationInfo?.calibrated && act?.preparedActivity)
+    ? (act.remaining ?? 0) * TICK_MS
+    : 0;
+  const itemsGenerated = (info && def) ? info.cyclesLeft * producedItemsPerCycle(def) : 0;
+  const zoneId = getActivityZone(act);
+  const { bankTrips, bankOverheadMs } = bankOverheadForGeneratedItems(itemsGenerated, zoneId, actId);
+  const etaMs = (info && cycleDurMs != null)
+    ? Math.max(0, fallbackOverheadMs + info.cyclesLeft * cycleDurMs - cycleProgressMs + bankOverheadMs)
+    : null;
+  const goalEta = goal && actId ? computeGoalEta(goal, getGoalCount(goal.itemName, goal.itemId) ?? 0, actId) : null;
+  return {
+    phase,
+    etaMs,
+    cyclesLeft:    info?.cyclesLeft   ?? null,
+    itemsGenerated,
+    bankTrips,
+    bankOverheadMs,
+    cycleDurMs,
+    observedCycleDurMs: durationInfo?.observedDurationMs ?? null,
+    cycleProgressMs,
+    cycleSamples:  durationInfo?.sampleCount ?? 0,
+    calibrated:    durationInfo?.calibrated ?? false,
+    defDurMs:      def?.durationMs    ?? null,
+    rawDuration:   def ? def.durationMs / TICK_MS - 6 : null,
+    overheadTicks: observedOverheadTicks,
+    lootBagItems:  lootBagTotal(),
+    bankTriggerItemCount: BANK_TRIGGER_ITEM_COUNT,
+    actRemaining:  act?.remaining     ?? null,
+    actLength:     act?.length        ?? null,
+    observedTickMs,
+    goalEtaMs:     goalEta?.totalMs   ?? null,
+    goalBankTrips: goalEta?.bankTrips ?? null,
+  };
+}
+
+function pushTickEntry(pre, post) {
+  const deltaMs = (pre?.etaMs != null && post.etaMs != null) ? post.etaMs - pre.etaMs : null;
+  tickLog.unshift({ at: Date.now(), type: 'tick', pre: pre?.etaMs ?? null, ...post, deltaMs });
+  if (tickLog.length > 40) tickLog.pop();
+}
+
+function pushTickEvent(type) {
+  tickLog.unshift({ at: Date.now(), type });
+  if (tickLog.length > 40) tickLog.pop();
 }
 
 function handleClientFrame(frame) {
@@ -221,7 +313,7 @@ function getActivityZone(act) {
 
 // Computes round-trip bank time for a given zone using mapPos euclidean distance.
 // Falls back to BANK_TRIP_MS if zone data hasn't been loaded from the bundle yet.
-function bankTripMs(zoneId) {
+function bankTripMs(zoneId, tickMs = TICK_MS) {
   const zonePos = zoneId ? ZONE_DATA[zoneId] : null;
   if (!zonePos) return BANK_TRIP_MS;
 
@@ -235,7 +327,7 @@ function bankTripMs(zoneId) {
   if (!isFinite(minDist)) return BANK_TRIP_MS;
 
   const travelTicks = Math.max(1, Math.round(minDist / TRAVEL_SPEED));
-  return (2 * travelTicks + BANKING_TICKS) * TICK_MS;
+  return (2 * travelTicks + BANKING_TICKS) * tickMs;
 }
 
 // ── Idle detection ────────────────────────────────────────────────────────────
@@ -259,7 +351,7 @@ function detectIdleTransition() {
 
 function detectGoalReached() {
   if (!goal) return;
-  const count = getInventoryCount(goal.itemName, goal.itemId);
+  const count = getGoalCount(goal.itemName, goal.itemId);
   if (count === null || count < goal.targetCount) return;
   if (goalNotifiedAt) return;
   goalNotifiedAt = Date.now();
@@ -288,6 +380,121 @@ function detectMaterialRunout() {
   sendChime('runout');
 }
 
+// ── Duration and banking helpers ──────────────────────────────────────────────
+
+function cycleDurationInfo(def, actId) {
+  const samples = actId ? cycleCalibrations[actId]?.samples ?? [] : [];
+  const calibrated = samples.length >= 1;
+  const observedDurationMs = calibrated ? median(samples) : null;
+  return {
+    durationMs: calibrated ? Math.min(observedDurationMs, def.durationMs) : def.durationMs,
+    observedDurationMs,
+    sampleCount: samples.length,
+    calibrated,
+  };
+}
+
+function cycleDurationMs(def, actId) {
+  return cycleDurationInfo(def, actId).durationMs;
+}
+
+function calibrateCycleDuration(prevAct, newAct, preSnap) {
+  const actId = getActivityId(newAct);
+  if (!isWorkActivityId(actId)) return;
+  if (actId !== getActivityId(prevAct)) return;
+
+  const def = ACTIVITY_DEFS[actId];
+  if (!def) return;
+
+  let completedCycles = 0;
+  if (preSnap?.cyclesLeft != null) {
+    const postInfo = runoutInfo(actId);
+    if (postInfo?.cyclesLeft != null) {
+      completedCycles = preSnap.cyclesLeft - postInfo.cyclesLeft;
+    }
+  }
+  if (completedCycles <= 0 && isCycleCompletion(prevAct, newAct)) {
+    completedCycles = 1;
+  }
+  if (completedCycles <= 0) return;
+
+  const now = Date.now();
+  const cal = cycleCalibrations[actId] ?? { lastCompletionAt: null, samples: [] };
+  if (cal.lastCompletionAt !== null && completedCycles === 1) {
+    const sampleMs = (now - cal.lastCompletionAt) / completedCycles;
+    const minSample = def.durationMs * 0.5;
+    const maxSample = def.durationMs * 6;
+    if (sampleMs >= minSample && sampleMs <= maxSample) {
+      cal.samples.push(Math.round(sampleMs));
+      if (cal.samples.length > 8) cal.samples.shift();
+    }
+  }
+  cal.lastCompletionAt = now;
+  cycleCalibrations[actId] = cal;
+}
+
+function resetCycleAnchorOnInterruption(prevAct, newAct) {
+  const prevActId = getActivityId(prevAct);
+  const newActId = getActivityId(newAct);
+  if (!isWorkActivityId(prevActId)) return;
+  if (newActId === prevActId) return;
+
+  const cal = cycleCalibrations[prevActId];
+  if (cal) cal.lastCompletionAt = null;
+}
+
+function isWorkActivityId(actId) {
+  return !!actId && actId !== 'travel' && actId !== 'banking';
+}
+
+function isCycleCompletion(prevAct, newAct) {
+  return !prevAct?.preparedActivity && !!newAct?.preparedActivity;
+}
+
+function currentCycleProgressMs(actId, cycleMs) {
+  const lastCompletionAt = cycleCalibrations[actId]?.lastCompletionAt;
+  if (!lastCompletionAt) return 0;
+  return Math.min(cycleMs, Math.max(0, Date.now() - lastCompletionAt));
+}
+
+function median(values) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[mid]
+    : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+function producedItemsPerCycle(def) {
+  if (!def?.inventoryChanges) return 0;
+  return Object.values(def.inventoryChanges)
+    .filter((change) => change > 0)
+    .reduce((sum, change) => sum + change, 0);
+}
+
+function bankTripsForGeneratedItems(generatedItems) {
+  if (generatedItems <= 0) return 0;
+  return Math.floor((lootBagTotal() + generatedItems) / BANK_TRIGGER_ITEM_COUNT);
+}
+
+function effectiveTickMsForActivity(actId) {
+  const def = actId ? ACTIVITY_DEFS[actId] : null;
+  if (!def) return TICK_MS;
+  const durationInfo = cycleDurationInfo(def, actId);
+  if (!durationInfo.calibrated) return TICK_MS;
+  const bundleTicks = def.durationMs / TICK_MS;
+  return bundleTicks > 0 ? durationInfo.durationMs / bundleTicks : TICK_MS;
+}
+
+function bankOverheadForGeneratedItems(generatedItems, zoneId, actId) {
+  const bankTrips = bankTripsForGeneratedItems(generatedItems);
+  return {
+    bankTrips,
+    bankOverheadMs: bankTrips * bankTripMs(zoneId, effectiveTickMsForActivity(actId)),
+  };
+}
+
 // ── Status snapshot (for popup) ───────────────────────────────────────────────
 
 function buildStatus() {
@@ -303,7 +510,7 @@ function buildStatus() {
 
   let goalStatus = null;
   if (goal) {
-    const count = getInventoryCount(goal.itemName, goal.itemId) ?? 0;
+    const count = getGoalCount(goal.itemName, goal.itemId) ?? 0;
     const eta   = actId ? computeGoalEta(goal, count, actId) : null;
     goalStatus  = { goal, count, eta };
   }
@@ -312,11 +519,33 @@ function buildStatus() {
   if (actId) {
     const info = runoutInfo(actId);
     if (info) {
-      const etaMs = info.cyclesLeft * info.durationMs;
+      const def = ACTIVITY_DEFS[actId];
+      const durationInfo = cycleDurationInfo(def, actId);
+      const cycleProgressMs = durationInfo.calibrated
+        ? currentCycleProgressMs(actId, durationInfo.durationMs)
+        : 0;
+      const fallbackOverheadMs = (!durationInfo.calibrated && act?.preparedActivity)
+        ? (act.remaining ?? 0) * TICK_MS
+        : 0;
+      const itemsGenerated = info.cyclesLeft * producedItemsPerCycle(def);
+      const zoneId = getActivityZone(act);
+      const { bankTrips, bankOverheadMs } = bankOverheadForGeneratedItems(itemsGenerated, zoneId, actId);
+      const etaMs = Math.max(
+        0,
+        fallbackOverheadMs + info.cyclesLeft * durationInfo.durationMs - cycleProgressMs + bankOverheadMs
+      );
       runoutStatus = {
         itemId: info.itemId,
         totalMaterial: info.totalMaterial,
         cyclesLeft: info.cyclesLeft,
+        itemsGenerated,
+        bankTrips,
+        bankOverheadMs,
+        cycleDurationMs: durationInfo.durationMs,
+        observedCycleDurationMs: durationInfo.observedDurationMs,
+        cycleProgressMs,
+        cycleSamples: durationInfo.sampleCount,
+        calibrated: durationInfo.calibrated,
         etaMs,
       };
     }
@@ -344,6 +573,7 @@ function buildStatus() {
     skillLevelStatus,
     producibleItems,
     rawMe: me ?? null,
+    tickLog,
   };
 }
 
@@ -361,21 +591,55 @@ function computeGoalEta(g, currentCount, actId) {
   const yieldPerCycle = goalKey ? (def.inventoryChanges[goalKey] ?? 0) : 0;
   if (yieldPerCycle <= 0) return null; // this activity doesn't produce the goal item
 
+  const act = mirroredState.me?.activity ?? null;
+  const durationInfo = cycleDurationInfo(def, actId);
+  const cycleProgressMs = durationInfo.calibrated
+    ? currentCycleProgressMs(actId, durationInfo.durationMs)
+    : 0;
+  const fallbackOverheadMs = (!durationInfo.calibrated && act?.preparedActivity)
+    ? (act.remaining ?? 0) * TICK_MS
+    : 0;
+  const plan = estimateGoalPlan({
+    remaining,
+    yieldPerCycle,
+    itemsGeneratedPerCycle: producedItemsPerCycle(def),
+  });
+  const gatherMs = Math.max(
+    0,
+    fallbackOverheadMs + plan.cyclesNeeded * durationInfo.durationMs - cycleProgressMs
+  );
+  const zoneId = getActivityZone(act);
+  const bankOverheadMs = plan.bankTrips * bankTripMs(zoneId, effectiveTickMsForActivity(actId));
+
+  return {
+    totalMs: gatherMs + bankOverheadMs,
+    bankTrips: plan.bankTrips,
+    cyclesNeeded: plan.cyclesNeeded,
+    cycleDurationMs: durationInfo.durationMs,
+    observedCycleDurationMs: durationInfo.observedDurationMs,
+    cycleSamples: durationInfo.sampleCount,
+    calibrated: durationInfo.calibrated,
+  };
+}
+
+function estimateGoalPlan({ remaining, yieldPerCycle, itemsGeneratedPerCycle }) {
   const cyclesNeeded = Math.ceil(remaining / yieldPerCycle);
-  const gatherMs = cyclesNeeded * def.durationMs;
+  const generatedItems = cyclesNeeded * itemsGeneratedPerCycle;
+  const bankTrips = bankTripsBeforeGoalComplete(generatedItems);
+  return { cyclesNeeded, bankTrips };
+}
 
-  // Bank trips: account for loot bag already being partially full.
-  // totalProduced items will flow into the loot bag; the first trip fires
-  // sooner when there are fewer remaining slots.
-  const totalProduced = cyclesNeeded * yieldPerCycle;
-  const slotsLeft = Math.max(0, INVENTORY_CAPACITY - lootBagTotal());
-  const bankTrips = totalProduced <= slotsLeft
-    ? 0
-    : 1 + Math.floor((totalProduced - slotsLeft) / INVENTORY_CAPACITY);
-  const zoneId = getActivityZone(mirroredState.me?.activity ?? null);
-  const bankOverheadMs = bankTrips * bankTripMs(zoneId);
+function bankTripsBeforeGoalComplete(generatedItems) {
+  if (generatedItems <= 0) return 0;
 
-  return { totalMs: gatherMs + bankOverheadMs, bankTrips };
+  const lootBagItems = lootBagTotal();
+  const freeSlotsBeforeFirstTrip = Math.max(0, BANK_TRIGGER_ITEM_COUNT - lootBagItems);
+  if (generatedItems <= freeSlotsBeforeFirstTrip) return 0;
+
+  // A trip is needed before producing anything beyond the current free space.
+  // Subtract one item so a bag filled exactly by the final goal item does not
+  // charge another trip after the goal is already complete.
+  return 1 + Math.floor((generatedItems - freeSlotsBeforeFirstTrip - 1) / BANK_TRIGGER_ITEM_COUNT);
 }
 
 function computeSkillLevelEtas(actId, skill) {
@@ -426,7 +690,7 @@ function runoutInfo(actId) {
     const available = inv[itemId] ?? 0;
     const cyclesLeft = Math.floor(available / costPerCycle);
     if (!bottleneck || cyclesLeft < bottleneck.cyclesLeft) {
-      bottleneck = { itemId, costPerCycle, totalMaterial: available, cyclesLeft, durationMs: def.durationMs };
+      bottleneck = { itemId, costPerCycle, totalMaterial: available, cyclesLeft, durationMs: cycleDurationMs(def, actId) };
     }
   }
 
@@ -450,6 +714,17 @@ function lootBagTotal() {
   return Object.values(lb).reduce((sum, n) => sum + n, 0);
 }
 
+function getLootBagCount(itemId) {
+  return mirroredState.me?.lootBag?.[itemId] ?? 0;
+}
+
+function getGoalCount(itemName, itemId) {
+  const inv = getInventoryCount(itemName, itemId);
+  const lootKey = itemId ?? findLootBagKey(itemName);
+  const lb = lootKey ? getLootBagCount(lootKey) : 0;
+  return (inv ?? 0) + lb;
+}
+
 function getInventoryCount(itemName, itemId) {
   const inv = mirroredState.me?.inventory;
   if (!inv || typeof inv !== 'object') return null;
@@ -467,6 +742,13 @@ function findInventoryKey(itemName) {
   if (!inv) return null;
   const norm = itemName.toLowerCase().replace(/[\s_-]/g, '');
   return Object.keys(inv).find((k) => k.toLowerCase().replace(/[\s_-]/g, '') === norm) ?? null;
+}
+
+function findLootBagKey(itemName) {
+  const lb = mirroredState.me?.lootBag;
+  if (!lb || !itemName) return null;
+  const norm = itemName.toLowerCase().replace(/[\s_-]/g, '');
+  return Object.keys(lb).find((k) => k.toLowerCase().replace(/[\s_-]/g, '') === norm) ?? null;
 }
 
 // Same lookup against an arbitrary object (used for inventoryChanges keys)
@@ -520,6 +802,24 @@ function calibrateTick() {
     }
   }
   lastUpdateAt = now;
+}
+
+function isDuplicateServerUpdate(delta) {
+  const now = Date.now();
+  let signature;
+  try {
+    signature = JSON.stringify(delta);
+  } catch {
+    signature = null;
+  }
+
+  if (signature && signature === lastServerUpdateSignature && now - lastServerUpdateAt < 100) {
+    return true;
+  }
+
+  lastServerUpdateSignature = signature;
+  lastServerUpdateAt = now;
+  return false;
 }
 
 // ── Notifications and audio ───────────────────────────────────────────────────
