@@ -100,8 +100,9 @@
     .then((bundle) => {
       const defs = parseActivityDefs(bundle);
       const zones = parseZones(bundle);
+      const xpTable = parseXpTable(bundle);
       if (Object.keys(defs).length > 0) {
-        window.postMessage({ __mm: true, type: 'ACTIVITY_DEFS', defs, zones }, '*');
+        window.postMessage({ __mm: true, type: 'ACTIVITY_DEFS', defs, zones, xpTable }, '*');
       }
     })
     .catch(() => {});
@@ -110,13 +111,15 @@
     const defs = {};
     // Matches activity defs in the (non-minified) game bundle. Optional string
     // fields like customActionText/customPrepText may appear between name and level.
-    const re = /\{\s*id:\s*`([^`]+)`(?:,\s*\w+:\s*`[^`]*`)*,\s*level:\s*\d+,\s*exp:\s*\d+,\s*duration:\s*(\d+),\s*entity:\s*`[^`]+`,\s*inventoryChanges:\s*\{([^}]+)\}/g;
+    // Groups: 1=id, 2=exp (xpPerCycle), 3=duration, 4=inventoryChanges body
+    const re = /\{\s*id:\s*`([^`]+)`(?:,\s*\w+:\s*`[^`]*`)*,\s*level:\s*\d+,\s*exp:\s*(\d+),\s*duration:\s*(\d+),\s*entity:\s*`[^`]+`,\s*inventoryChanges:\s*\{([^}]+)\}/g;
     let m;
     while ((m = re.exec(bundle)) !== null) {
       const id = m[1];
-      const durationMs = (parseInt(m[2], 10) + 6) * 2000;
+      const xpPerCycle = parseInt(m[2], 10);
+      const durationMs = (parseInt(m[3], 10) + 6) * 2000;
       const changes = {};
-      for (const part of m[3].split(',')) {
+      for (const part of m[4].split(',')) {
         const colon = part.indexOf(':');
         if (colon < 0) continue;
         const k = part.slice(0, colon).trim();
@@ -125,9 +128,37 @@
         const n = parseInt(v, 10);
         if (!isNaN(n)) changes[k] = n;
       }
-      defs[id] = { durationMs, inventoryChanges: changes };
+      defs[id] = { durationMs, xpPerCycle, inventoryChanges: changes };
     }
     return defs;
+  }
+
+  function parseXpTable(bundle) {
+    // Prefer a bundled table if one is exposed. Microscape's XP curve is the
+    // OSRS curve with the per-level points multiplied by 10 before division.
+    const m = bundle.match(/\[0\s*,\s*830\s*,\s*1740[\d,\s]*?\]/);
+    if (m) {
+      try {
+        const nums = m[0].match(/\d+/g).map(Number);
+        if (nums.length >= 20 && nums[16] === 31174) {
+          // Bundle array is 0-indexed (nums[0]=level1=0 XP, nums[1]=level2=830 XP).
+          // Prepend a dummy entry so XP_TABLE[level] = min XP for that level.
+          return [0, ...nums];
+        }
+      } catch {}
+    }
+    return computeMicroscapeXpTable();
+  }
+
+  function computeMicroscapeXpTable() {
+    // table[level] = min XP required for that level (1-indexed; table[0] unused).
+    const table = [0, 0]; // table[1] = level 1 = 0 XP
+    let points = 0;
+    for (let level = 1; level <= 98; level++) {
+      points += Math.floor(10 * (level + 300 * Math.pow(2, level / 7)));
+      table.push(Math.floor(points / 4)); // table[level+1] = XP for level+1
+    }
+    return table;
   }
 
   function parseZones(bundle) {

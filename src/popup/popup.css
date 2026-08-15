@@ -222,6 +222,73 @@ button:hover { filter: brightness(1.1); }
   font-size: 12px;
 }
 
+/* ── Skill XP card ───────────────────────────────────── */
+
+.skill-xp-slider-row {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+#skill-level-slider {
+  width: 100%;
+  height: 16px;
+  accent-color: var(--accent);
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+#skill-level-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--border);
+  border-radius: 99px;
+}
+
+#skill-level-slider::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  background: var(--accent);
+  border: 2px solid var(--text);
+  border-radius: 50%;
+  cursor: pointer;
+  -webkit-appearance: none;
+}
+
+#skill-level-slider::-moz-range-track {
+  height: 4px;
+  background: var(--border);
+  border-radius: 99px;
+}
+
+#skill-level-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border: 2px solid var(--text);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.skill-xp-notch-labels {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1;
+  padding: 0 2px;
+  user-select: none;
+}
+
+.skill-xp-eta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
 /* ── Debug ───────────────────────────────────────────── */
 
 .debug-details {
