@@ -130,7 +130,134 @@
       }
       defs[id] = { durationMs, xpPerCycle, inventoryChanges: changes };
     }
+
+    const mobs = parseMobDefs(bundle);
+    const combatRe = /\{\s*id:\s*`(fight-[^`]+)`(?:,\s*\w+:\s*`[^`]*`)*,\s*mob:\s*`([^`]+)`\s*,\s*level:\s*\d+/g;
+    while ((m = combatRe.exec(bundle)) !== null) {
+      const id = m[1];
+      const mobId = m[2];
+      const mob = mobs[mobId];
+      defs[id] = {
+        durationMs: mob?.speed ? mob.speed * 2000 : 0,
+        xpPerCycle: 0,
+        inventoryChanges: {},
+        mob: mobId,
+        dropItems: mob?.drops ?? {},
+      };
+    }
+
     return defs;
+  }
+
+  function parseMobDefs(bundle) {
+    const mobs = {};
+    const templates = parseMobTemplates(bundle);
+    const re = /\{\s*id:\s*`([^`]+)`/g;
+    let m;
+    while ((m = re.exec(bundle)) !== null) {
+      const start = m.index;
+      const end = findMatchingBrace(bundle, start);
+      if (end < 0) continue;
+
+      const body = bundle.slice(start, end + 1);
+      const spreadMatch = body.match(/\.\.\.([A-Za-z_$][\w$]*)/);
+      const template = spreadMatch ? templates[spreadMatch[1]] : null;
+      if (!body.includes('enemyType:') && !body.includes('stats:') && !body.includes('drops:') && !body.includes('safeVersionOf:') && !template) continue;
+
+      const id = m[1];
+      const speedMatch = body.match(/speed:\s*(\d+)/);
+      const safeMatch = body.match(/safeVersionOf:\s*`([^`]+)`/);
+      const dropsBody = extractObjectProperty(body, 'drops');
+      mobs[id] = {
+        speed: speedMatch ? parseInt(speedMatch[1], 10) : template?.speed ?? null,
+        safeVersionOf: safeMatch?.[1] ?? null,
+        drops: dropsBody ? parseDropItems(dropsBody) : template?.drops ?? null,
+      };
+    }
+
+    for (const mob of Object.values(mobs)) {
+      if (!mob.drops && mob.safeVersionOf && mobs[mob.safeVersionOf]?.drops) {
+        mob.drops = mobs[mob.safeVersionOf].drops;
+      }
+    }
+
+    return mobs;
+  }
+
+  function parseMobTemplates(bundle) {
+    const templates = {};
+    const re = /\b([A-Za-z_$][\w$]*)=\{/g;
+    let m;
+    while ((m = re.exec(bundle)) !== null) {
+      const openIndex = m.index + m[0].length - 1;
+      const end = findMatchingBrace(bundle, openIndex);
+      if (end < 0) continue;
+
+      const body = bundle.slice(openIndex, end + 1);
+      if (!body.includes('drops:') || (!body.includes('enemyType:') && !body.includes('stats:'))) continue;
+
+      const speedMatch = body.match(/speed:\s*(\d+)/);
+      const dropsBody = extractObjectProperty(body, 'drops');
+      templates[m[1]] = {
+        speed: speedMatch ? parseInt(speedMatch[1], 10) : null,
+        drops: dropsBody ? parseDropItems(dropsBody) : {},
+      };
+    }
+    return templates;
+  }
+
+  function extractObjectProperty(source, name) {
+    const prop = `${name}:`;
+    const propIndex = source.indexOf(prop);
+    if (propIndex < 0) return null;
+    const openIndex = source.indexOf('{', propIndex + prop.length);
+    if (openIndex < 0) return null;
+    const closeIndex = findMatchingBrace(source, openIndex);
+    if (closeIndex < 0) return null;
+    return source.slice(openIndex + 1, closeIndex);
+  }
+
+  function parseDropItems(body) {
+    const drops = {};
+    const re = /([A-Za-z_$][\w$]*):\s*\{\s*quantity:\s*([^,}]+)/g;
+    let m;
+    while ((m = re.exec(body)) !== null) {
+      const quantity = Number(m[2]);
+      if (Number.isFinite(quantity) && quantity > 0) drops[m[1]] = quantity;
+    }
+    return drops;
+  }
+
+  function findMatchingBrace(source, openIndex) {
+    let depth = 0;
+    let quote = null;
+    let escaped = false;
+
+    for (let i = openIndex; i < source.length; i++) {
+      const ch = source[i];
+
+      if (quote) {
+        if (escaped) {
+          escaped = false;
+        } else if (ch === '\\') {
+          escaped = true;
+        } else if (ch === quote) {
+          quote = null;
+        }
+        continue;
+      }
+
+      if (ch === '`' || ch === '"' || ch === "'") {
+        quote = ch;
+      } else if (ch === '{') {
+        depth++;
+      } else if (ch === '}') {
+        depth--;
+        if (depth === 0) return i;
+      }
+    }
+
+    return -1;
   }
 
   function parseXpTable(bundle) {
