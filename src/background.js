@@ -2,7 +2,7 @@
 //
 // Patch format (confirmed from live frames):
 //   Initial state: top-level values wrapped in [value] arrays.
-//   Delta updates: [current] = added; [current, previous] = modified; [old, 0, 0] = deleted.
+//   Delta updates follow jsondiffpatch: [current] = added; [previous, current] = modified; [old, 0, 0] = deleted.
 //   Array-typed fields (e.g. toasts) use jsondiffpatch _t:"a" format.
 //
 // Confirmed field layout:
@@ -36,8 +36,9 @@ const TICK_MS = 2000;        // server tick duration (confirmed from bundle form
 
 let ACTIVITY_DEFS = {};
 let ZONE_DATA = {}; // zoneId → [mapX, mapY] — used for dynamic bank trip calculation
+let XP_TABLE = computeMicroscapeXpTable(); // XP_TABLE[level] = min total XP for that level (1-indexed)
 
-chrome.storage.local.get(['activityDefs', 'zoneData'], (res) => {
+chrome.storage.local.get(['activityDefs', 'zoneData', 'xpTable'], (res) => {
   if (res.activityDefs && Object.keys(res.activityDefs).length > 0) {
     ACTIVITY_DEFS = res.activityDefs;
   } else {
@@ -48,6 +49,7 @@ chrome.storage.local.get(['activityDefs', 'zoneData'], (res) => {
       .catch(() => {});
   }
   if (res.zoneData) ZONE_DATA = res.zoneData;
+  if (isValidXpTable(res.xpTable)) XP_TABLE = res.xpTable;
 });
 
 // ── Module state ──────────────────────────────────────────────────────────────
@@ -82,6 +84,10 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       if (msg.zones && Object.keys(msg.zones).length > 0) {
         ZONE_DATA = msg.zones;
         toCache.zoneData = msg.zones;
+      }
+      if (isValidXpTable(msg.xpTable)) {
+        XP_TABLE = msg.xpTable;
+        toCache.xpTable = msg.xpTable;
       }
       chrome.storage.local.set(toCache);
     }
@@ -141,8 +147,12 @@ function applyPatch(base, delta) {
   if (Array.isArray(delta) && delta.length === 3 && delta[1] === 0 && delta[2] === 0) {
     return undefined;
   }
-  // Scalar/initial delta: [current] or [current, previous] → first element is current value
+  // Scalar/initial delta:
+  //   [current] = add/initial value
+  //   [previous, current] = modified value
   if (Array.isArray(delta)) {
+    if (delta.length === 1) return delta[0];
+    if (delta.length === 2) return delta[1];
     return delta.length > 0 ? delta[0] : undefined;
   }
 
@@ -312,6 +322,10 @@ function buildStatus() {
     }
   }
 
+  const skillLevelStatus = actId && actSkill
+    ? computeSkillLevelEtas(actId, actSkill)
+    : null;
+
   // Items the current activity produces — drives the goal dropdown
   const producibleItems = [];
   if (actId && ACTIVITY_DEFS[actId]) {
@@ -327,6 +341,7 @@ function buildStatus() {
     tickMs: observedTickMs,
     goalStatus,
     runoutStatus,
+    skillLevelStatus,
     producibleItems,
     rawMe: me ?? null,
   };
@@ -361,6 +376,34 @@ function computeGoalEta(g, currentCount, actId) {
   const bankOverheadMs = bankTrips * bankTripMs(zoneId);
 
   return { totalMs: gatherMs + bankOverheadMs, bankTrips };
+}
+
+function computeSkillLevelEtas(actId, skill) {
+  const def = ACTIVITY_DEFS[actId];
+  const xpPerCycle = def?.xpPerCycle ?? 0;
+  if (!def || xpPerCycle <= 0 || XP_TABLE.length < 3) return null;
+
+  const currentXp = mirroredState.me?.exp?.[skill];
+  if (typeof currentXp !== 'number' || !isFinite(currentXp)) return null;
+
+  const currentLevel = getLevelFromXp(currentXp);
+  const etas = [];
+  for (let offset = 1; offset <= 10; offset++) {
+    const targetLevel = currentLevel + offset;
+    const targetXp = XP_TABLE[targetLevel];
+    if (typeof targetXp !== 'number') break;
+
+    const xpNeeded = Math.max(0, targetXp - currentXp);
+    const cyclesNeeded = Math.ceil(xpNeeded / xpPerCycle);
+    etas.push({
+      targetLevel,
+      xpNeeded,
+      etaMs: cyclesNeeded * def.durationMs,
+    });
+  }
+
+  if (etas.length === 0) return null;
+  return { skill, currentXp, currentLevel, xpPerCycle, etas };
 }
 
 // ── Runout info ───────────────────────────────────────────────────────────────
@@ -433,6 +476,37 @@ function findKey(obj, itemName, itemId) {
   if (!itemName) return null;
   const norm = itemName.toLowerCase().replace(/[\s_-]/g, '');
   return Object.keys(obj).find((k) => k.toLowerCase().replace(/[\s_-]/g, '') === norm) ?? null;
+}
+
+function getLevelFromXp(xp) {
+  if (XP_TABLE.length < 3) return 1;
+
+  let lo = 1;
+  let hi = XP_TABLE.length - 1;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (XP_TABLE[mid] <= xp) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return Math.max(1, hi);
+}
+
+function isValidXpTable(table) {
+  return Array.isArray(table)
+    && table.length >= 99
+    && table[1] === 0
+    && table[2] === 830
+    && table[17] === 31174;
+}
+
+function computeMicroscapeXpTable() {
+  const table = [0, 0];
+  let points = 0;
+  for (let level = 1; level <= 98; level++) {
+    points += Math.floor(10 * (level + 300 * Math.pow(2, level / 7)));
+    table.push(Math.floor(points / 4));
+  }
+  return table;
 }
 
 function calibrateTick() {

@@ -49,6 +49,18 @@
     </div>
   </section>
 
+  <section class="card" id="skill-xp-card" hidden>
+    <div class="card-label">Skill XP — <span id="skill-xp-name"></span> Lv <span id="skill-xp-level"></span></div>
+    <div class="skill-xp-slider-row">
+      <input type="range" id="skill-level-slider" min="1" max="10" step="1" value="1">
+      <div class="skill-xp-notch-labels" id="skill-xp-notch-labels"></div>
+    </div>
+    <div class="skill-xp-eta-row">
+      <span id="skill-xp-target-label"></span>
+      <span id="skill-xp-eta" class="eta-label"></span>
+    </div>
+  </section>
+
   <details class="debug-details">
     <summary>Debug — raw <code>me</code> state</summary>
     <pre id="debug-me"></pre>

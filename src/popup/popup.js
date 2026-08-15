@@ -18,6 +18,13 @@ const goalEtaEl     = $('goal-eta');
 const runoutCard    = $('runout-card');
 const runoutCycles  = $('runout-cycles');
 const runoutEtaEl   = $('runout-eta');
+const skillXpCard   = $('skill-xp-card');
+const skillXpName   = $('skill-xp-name');
+const skillXpLevel  = $('skill-xp-level');
+const skillSlider   = $('skill-level-slider');
+const skillNotches  = $('skill-xp-notch-labels');
+const skillTargetEl = $('skill-xp-target-label');
+const skillEtaEl    = $('skill-xp-eta');
 const debugMeEl     = $('debug-me');
 const comboWrap     = $('item-combobox');
 const comboList     = $('combo-options');
@@ -105,6 +112,9 @@ document.addEventListener('mousedown', (e) => {
 
 let runoutAnchor = null; // { etaMs, srcEtaMs, at }
 let goalAnchor   = null; // { totalMs, srcTotalMs, bankTrips, at }
+let skillAnchor  = null; // { etaMs, srcEtaMs, targetLevel, at }
+let selectedLevelOffset = 1;
+let lastStatus = null;
 
 function updateEtaDisplays() {
   if (runoutAnchor) {
@@ -116,6 +126,10 @@ function updateEtaDisplays() {
     const trips    = goalAnchor.bankTrips ?? 0;
     const tripNote = trips > 0 ? ` (+${trips} bank trip${trips > 1 ? 's' : ''})` : '';
     goalEtaEl.textContent = ms > 0 ? `ETA ${formatDuration(ms)}${tripNote}` : 'Done!';
+  }
+  if (skillAnchor) {
+    const ms = Math.max(0, skillAnchor.etaMs - (Date.now() - skillAnchor.at));
+    skillEtaEl.textContent = ms > 0 ? `ETA ${formatDuration(ms)}` : 'Now';
   }
 }
 
@@ -137,6 +151,8 @@ window.addEventListener('unload', () => clearInterval(interval));
 // ── Render ─────────────────────────────────────────────────────────────────────
 
 function render(s) {
+  lastStatus = s;
+
   // Connection dot
   dot.className = 'dot' + (s.connected ? (s.idle ? ' idle' : ' connected') : '');
 
@@ -235,6 +251,41 @@ function render(s) {
     runoutCard.hidden = true;
   }
 
+  // Skill XP status
+  const xs = s.skillLevelStatus;
+  if (xs && xs.etas?.length > 0) {
+    skillXpCard.hidden = false;
+    skillXpName.textContent = formatSkillName(xs.skill);
+    skillXpLevel.textContent = xs.currentLevel;
+
+    const maxOffset = Math.min(10, xs.etas.length);
+    selectedLevelOffset = Math.min(Math.max(1, selectedLevelOffset), maxOffset);
+    skillSlider.max = String(maxOffset);
+    skillSlider.value = String(selectedLevelOffset);
+    renderSkillNotches(maxOffset);
+
+    const eta = xs.etas[selectedLevelOffset - 1];
+    skillTargetEl.textContent = `→ Lv ${eta.targetLevel} (${formatNumber(eta.xpNeeded)} XP)`;
+
+    if (eta.etaMs > 0) {
+      if (!skillAnchor || eta.etaMs !== skillAnchor.srcEtaMs || eta.targetLevel !== skillAnchor.targetLevel) {
+        skillAnchor = {
+          etaMs: eta.etaMs,
+          srcEtaMs: eta.etaMs,
+          targetLevel: eta.targetLevel,
+          at: Date.now(),
+        };
+      }
+      updateEtaDisplays();
+    } else {
+      skillAnchor = null;
+      skillEtaEl.textContent = 'Now';
+    }
+  } else {
+    skillAnchor = null;
+    skillXpCard.hidden = true;
+  }
+
   // Debug
   if ($('debug-me').parentElement.open) {
     debugMeEl.textContent = JSON.stringify(s.rawMe, null, 2);
@@ -266,7 +317,34 @@ btnClearGoal.addEventListener('click', () => {
 
 goalCountInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnSetGoal.click(); });
 
+skillSlider.addEventListener('input', () => {
+  selectedLevelOffset = parseInt(skillSlider.value, 10) || 1;
+  skillAnchor = null;
+  if (lastStatus) render(lastStatus);
+});
+
 // ── Utilities ─────────────────────────────────────────────────────────────────
+
+function renderSkillNotches(maxOffset) {
+  const current = skillNotches.dataset.maxOffset;
+  if (current === String(maxOffset)) return;
+
+  skillNotches.dataset.maxOffset = String(maxOffset);
+  skillNotches.innerHTML = '';
+  for (let i = 1; i <= maxOffset; i++) {
+    const span = document.createElement('span');
+    span.textContent = `+${i}`;
+    skillNotches.appendChild(span);
+  }
+}
+
+function formatSkillName(skill) {
+  return String(skill ?? '').replace(/[-_]/g, ' ').replace(/\b\w/g, s => s.toUpperCase());
+}
+
+function formatNumber(value) {
+  return Number(value ?? 0).toLocaleString();
+}
 
 function formatDuration(ms) {
   const s = Math.round(ms / 1000);
