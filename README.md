@@ -161,13 +161,15 @@ npm run test:ui   # opens Vitest UI
 
 ## Publishing
 
+Run `npm run zip:all` to build both zips in one step. They land in `artifacts/`.
+
 ### Chrome Web Store
 
 ```bash
 npm run zip:chrome
 ```
 
-This builds and packages the extension into `microscape-minion-<version>.zip`. Upload that file to the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole).
+This builds and packages the extension into `artifacts/microscape-minion-<version>-chrome.zip`. Upload that file to the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole).
 
 ### Firefox Add-ons (AMO)
 
@@ -175,14 +177,14 @@ This builds and packages the extension into `microscape-minion-<version>.zip`. U
 npm run zip:firefox
 ```
 
-This produces `web-ext-artifacts/microscape_minion-<version>.zip`. Upload that to [addons.mozilla.org](https://addons.mozilla.org/developers/).
+This produces `artifacts/microscape-minion-<version>-firefox.zip`. Upload that to [addons.mozilla.org](https://addons.mozilla.org/developers/).
 
 AMO requires a source code submission alongside the built extension because this project uses Vite. Create the source ZIP with:
 
 ```bash
 zip -r microscape-minion-source-<version>.zip . \
   -x 'node_modules/*' -x 'dist-chrome/*' -x 'dist-firefox/*' \
-  -x 'web-ext-artifacts/*' -x '*.DS_Store' -x '.git/*'
+  -x 'artifacts/*' -x '*.DS_Store' -x '.git/*'
 ```
 
 Include this reviewer note in the AMO submission form:

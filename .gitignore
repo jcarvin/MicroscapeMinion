@@ -140,7 +140,7 @@ dist
 microscape-minion*.zip
 dist-chrome/
 dist-firefox/
-web-ext-artifacts/
+artifacts/
 
 # Vite files
 vite.config.js.timestamp-*
