@@ -18,6 +18,11 @@
 //   displayedSeconds = (activityDef.duration + 6) * 2   →  durationMs = (duration + 6) * 2000
 
 const BANK_TRIGGER_ITEM_COUNT = 25;
+const CYCLE_SAMPLE_LIMIT = 100;
+const XP_RATE_SAMPLE_LIMIT = 100;
+const DROP_RATE_SAMPLE_LIMIT = 100;
+const COMBAT_CONSUMABLE_SAMPLE_LIMIT = 100;
+const TICK_SAMPLE_LIMIT = 100;
 
 // Bank trip timing — computed dynamically from zone mapPos when ZONE_DATA is available.
 // BANK_TRIP_MS is the fallback used before the bundle is parsed.
@@ -192,6 +197,11 @@ function handleServerFrame(frame) {
   detectGoalReached();
   detectMaterialRunout();
   detectSkillLevelReached();
+}
+
+function pushCappedSample(samples, sample, limit) {
+  samples.push(sample);
+  if (samples.length > limit) samples.shift();
 }
 
 // ── Tick log helpers ──────────────────────────────────────────────────────────
@@ -569,8 +579,11 @@ function calibrateCycleDuration(prevAct, newAct, preSnap) {
     const minSample = def.durationMs * 0.5;
     const maxSample = def.durationMs * 6;
     if (sampleMs >= minSample && sampleMs <= maxSample) {
-      cal.samples.push(Math.round(sampleMs));
-      if (cal.samples.length > 8) cal.samples.shift();
+      pushCappedSample(
+        cal.samples,
+        Math.round(sampleMs),
+        CYCLE_SAMPLE_LIMIT
+      );
     }
   }
   cal.lastCompletionAt = now;
@@ -613,8 +626,11 @@ function trackXpGain(prevAct, newAct, prevExp, newExp) {
   }
 
   if (sampleMs && sampleMs > 0) {
-    tracker.samples.push({ xp: xpGained, ms: sampleMs });
-    if (tracker.samples.length > 8) tracker.samples.shift();
+    pushCappedSample(
+      tracker.samples,
+      { xp: xpGained, ms: sampleMs },
+      XP_RATE_SAMPLE_LIMIT
+    );
   }
   tracker.lastGainAt = now;
   xpRateSamples[key] = tracker;
@@ -666,8 +682,11 @@ function trackDropGain(prevAct, newAct, prevMe, newMe) {
     if (tracker.lastGainAt) {
       const sampleMs = now - tracker.lastGainAt;
       if (sampleMs >= 250 && sampleMs <= 30 * 60_000) {
-        tracker.samples.push({ items: gained, ms: sampleMs });
-        if (tracker.samples.length > 12) tracker.samples.shift();
+        pushCappedSample(
+          tracker.samples,
+          { items: gained, ms: sampleMs },
+          DROP_RATE_SAMPLE_LIMIT
+        );
       }
     }
     tracker.lastGainAt = now;
@@ -698,8 +717,11 @@ function trackCombatConsumables(prevAct, newAct, prevMe, newMe) {
     if (tracker.lastConsumedAt !== null) {
       const sampleMs = now - tracker.lastConsumedAt;
       if (sampleMs >= 500 && sampleMs <= 60 * 60_000) {
-        tracker.samples.push({ count: consumed, ms: sampleMs });
-        if (tracker.samples.length > 12) tracker.samples.shift();
+        pushCappedSample(
+          tracker.samples,
+          { count: consumed, ms: sampleMs },
+          COMBAT_CONSUMABLE_SAMPLE_LIMIT
+        );
       }
     }
     tracker.lastConsumedAt = now;
@@ -1208,8 +1230,7 @@ function calibrateTick() {
   if (lastUpdateAt !== null) {
     const d = now - lastUpdateAt;
     if (d > 500 && d < 10_000) {
-      tickSamples.push(d);
-      if (tickSamples.length > 20) tickSamples.shift();
+      pushCappedSample(tickSamples, d, TICK_SAMPLE_LIMIT);
       observedTickMs = Math.round(
         tickSamples.reduce((a, b) => a + b, 0) / tickSamples.length
       );
