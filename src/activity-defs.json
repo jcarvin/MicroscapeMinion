@@ -463,6 +463,31 @@
       "magicBowU": 1
     }
   },
+  "bury-bones": {
+    "durationMs": 16000,
+    "xpPerCycle": 4,
+    "inventoryChanges": {
+      "bones": -1,
+      "spiritRune": 1
+    }
+  },
+  "bury-big-bones": {
+    "durationMs": 16000,
+    "xpPerCycle": 12,
+    "inventoryChanges": {
+      "bigBones": -1,
+      "spiritRune": 3
+    }
+  },
+  "bury-dragon-bones": {
+    "durationMs": 16000,
+    "xpPerCycle": 60,
+    "inventoryChanges": {
+      "dragonBones": -1,
+      "spiritRune": 7,
+      "sacredRune": 1
+    }
+  },
   "bones-to-bread": {
     "durationMs": 42000,
     "inventoryChanges": {
