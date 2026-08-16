@@ -39,9 +39,11 @@ const comboList     = $('combo-options');
 // ── Combobox state ────────────────────────────────────────────────────────────
 
 const ETA_INFO_TITLE = 'Estimates are based on average tick rate which is variable depending on latency. They may not be totally accurate.';
+const SKILL_LEVEL_SELECTIONS_KEY = 'skillLevelSelections';
 
 let comboItems = [];   // [{ id, count }] from status.producibleItems
 let selectedId = null;
+let savedSkillLevelSelections = {}; // skill -> absolute target level
 
 function formatItemId(id) {
   return id.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
@@ -124,6 +126,14 @@ let goalAnchor   = null; // { totalMs, srcTotalMs, bankTrips, at }
 let skillAnchor  = null; // { etaMs, srcEtaMs, targetLevel, at }
 let selectedLevelOffset = 1;
 let lastStatus = null;
+
+chrome.storage.local.get([SKILL_LEVEL_SELECTIONS_KEY], (res) => {
+  const saved = res[SKILL_LEVEL_SELECTIONS_KEY];
+  if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+    savedSkillLevelSelections = saved;
+  }
+  if (lastStatus) render(lastStatus);
+});
 
 function updateEtaDisplays() {
   if (runoutAnchor) {
@@ -311,7 +321,7 @@ function render(s) {
     skillXpLevel.textContent = xs.currentLevel;
 
     const maxOffset = Math.min(10, xs.etas.length);
-    selectedLevelOffset = Math.min(Math.max(1, selectedLevelOffset), maxOffset);
+    selectedLevelOffset = resolveSelectedLevelOffset(xs, maxOffset);
     skillSlider.max = String(maxOffset);
     skillSlider.value = String(selectedLevelOffset);
     renderSkillNotches(maxOffset);
@@ -385,6 +395,7 @@ goalCountInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnSe
 skillSlider.addEventListener('input', () => {
   selectedLevelOffset = parseInt(skillSlider.value, 10) || 1;
   skillAnchor = null;
+  saveSelectedSkillTargetLevel();
   if (lastStatus) render(lastStatus);
 });
 
@@ -401,6 +412,36 @@ skillNotifyToggle.addEventListener('change', () => {
 });
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
+
+function resolveSelectedLevelOffset(xs, maxOffset) {
+  const savedTargetLevel = getSavedSkillTargetLevel(xs.skill);
+  if (savedTargetLevel) {
+    if (savedTargetLevel <= xs.currentLevel) return 1;
+    const savedOffset =
+      xs.etas.findIndex((eta) => eta.targetLevel === savedTargetLevel) + 1;
+    return savedOffset >= 1 && savedOffset <= maxOffset ? savedOffset : 1;
+  }
+  return Math.min(Math.max(1, selectedLevelOffset), maxOffset);
+}
+
+function getSavedSkillTargetLevel(skill) {
+  const targetLevel = savedSkillLevelSelections[skill];
+  return Number.isInteger(targetLevel) && targetLevel > 0 ? targetLevel : null;
+}
+
+function saveSelectedSkillTargetLevel() {
+  const xs = lastStatus?.skillLevelStatus;
+  const eta = xs?.etas?.[selectedLevelOffset - 1];
+  if (!xs?.skill || !eta?.targetLevel) return;
+
+  savedSkillLevelSelections = {
+    ...savedSkillLevelSelections,
+    [xs.skill]: eta.targetLevel,
+  };
+  chrome.storage.local.set({
+    [SKILL_LEVEL_SELECTIONS_KEY]: savedSkillLevelSelections,
+  });
+}
 
 function renderSkillNotches(maxOffset) {
   const current = skillNotches.dataset.maxOffset;
