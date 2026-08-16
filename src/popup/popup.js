@@ -20,13 +20,16 @@ const runoutCycles  = $('runout-cycles');
 const runoutEtaEl   = $('runout-eta');
 const combatConsumableCard = $('combat-consumable-card');
 const combatConsumableList = $('combat-consumable-list');
-const skillXpCard   = $('skill-xp-card');
-const skillXpName   = $('skill-xp-name');
-const skillXpLevel  = $('skill-xp-level');
-const skillSlider   = $('skill-level-slider');
-const skillNotches  = $('skill-xp-notch-labels');
-const skillTargetEl = $('skill-xp-target-label');
-const skillEtaEl    = $('skill-xp-eta');
+const skillXpCard      = $('skill-xp-card');
+const skillXpName      = $('skill-xp-name');
+const skillXpLevel     = $('skill-xp-level');
+const skillSlider      = $('skill-level-slider');
+const skillNotches     = $('skill-xp-notch-labels');
+const skillTargetEl    = $('skill-xp-target-label');
+const skillEtaEl       = $('skill-xp-eta');
+const skillNotifyRow   = $('skill-notify-row');
+const skillNotifyToggle= $('skill-notify-toggle');
+const skillNotifyLevel = $('skill-notify-level');
 const debugMeEl     = $('debug-me');
 const tickLogPre    = $('tick-log-pre');
 const btnCopyLog    = $('btn-copy-log');
@@ -34,6 +37,8 @@ const comboWrap     = $('item-combobox');
 const comboList     = $('combo-options');
 
 // ── Combobox state ────────────────────────────────────────────────────────────
+
+const ETA_INFO_TITLE = 'Estimates are based on average tick rate which is variable depending on latency. They may not be totally accurate.';
 
 let comboItems = [];   // [{ id, count }] from status.producibleItems
 let selectedId = null;
@@ -287,7 +292,10 @@ function render(s) {
         `<span class="consumable-name">${formatItemId(item.itemId)}</span>` +
         `<span class="consumable-right">` +
           `<span class="consumable-count">${item.currentCount}</span>` +
-          `<span class="eta-label">${etaText}</span>` +
+          `<span class="eta-group">` +
+            `<span class="eta-label">${etaText}</span>` +
+            `<span class="eta-info" title="${ETA_INFO_TITLE}">i</span>` +
+          `</span>` +
         `</span>`;
       combatConsumableList.appendChild(row);
     }
@@ -328,9 +336,16 @@ function render(s) {
       skillAnchor = null;
       skillEtaEl.textContent = 'Now';
     }
+
+    // Notify toggle
+    skillNotifyLevel.textContent = String(eta.targetLevel);
+    const target = s.skillNotifyTarget;
+    skillNotifyToggle.checked = !!(target && target.skill === xs.skill && target.level === eta.targetLevel);
+    skillNotifyRow.hidden = false;
   } else {
     skillAnchor = null;
     skillXpCard.hidden = true;
+    skillNotifyRow.hidden = true;
   }
 
   // Debug — raw me state (only render when visible; it can be large)
@@ -371,6 +386,18 @@ skillSlider.addEventListener('input', () => {
   selectedLevelOffset = parseInt(skillSlider.value, 10) || 1;
   skillAnchor = null;
   if (lastStatus) render(lastStatus);
+});
+
+skillNotifyToggle.addEventListener('change', () => {
+  const xs = lastStatus?.skillLevelStatus;
+  if (!xs?.etas?.length) { skillNotifyToggle.checked = false; return; }
+  if (skillNotifyToggle.checked) {
+    const eta = xs.etas[selectedLevelOffset - 1];
+    if (!eta) { skillNotifyToggle.checked = false; return; }
+    chrome.runtime.sendMessage({ type: 'SET_SKILL_NOTIFY', skill: xs.skill, level: eta.targetLevel });
+  } else {
+    chrome.runtime.sendMessage({ type: 'CLEAR_SKILL_NOTIFY' });
+  }
 });
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

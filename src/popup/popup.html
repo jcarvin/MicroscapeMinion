@@ -35,7 +35,10 @@
       </div>
       <div class="progress-label">
         <span id="goal-count-display">0 / 0</span>
-        <span id="goal-eta" class="eta-label"></span>
+        <span class="eta-group">
+          <span id="goal-eta" class="eta-label"></span>
+          <span class="eta-info" title="Estimates are based on average tick rate which is variable depending on latency. They may not be totally accurate.">i</span>
+        </span>
       </div>
     </div>
     <button id="btn-clear-goal" class="clear-btn" hidden>Clear goal</button>
@@ -45,7 +48,10 @@
     <div class="card-label">Material Runout</div>
     <div class="runout-row">
       <span id="runout-cycles"></span>
-      <span id="runout-eta" class="eta-label"></span>
+      <span class="eta-group">
+        <span id="runout-eta" class="eta-label"></span>
+        <span class="eta-info" title="Estimates are based on average tick rate which is variable depending on latency. They may not be totally accurate.">i</span>
+      </span>
     </div>
   </section>
 
@@ -62,7 +68,19 @@
     </div>
     <div class="skill-xp-eta-row">
       <span id="skill-xp-target-label"></span>
-      <span id="skill-xp-eta" class="eta-label"></span>
+      <span class="eta-group">
+        <span id="skill-xp-eta" class="eta-label"></span>
+        <span class="eta-info" title="Estimates are based on average tick rate which is variable depending on latency. They may not be totally accurate.">i</span>
+      </span>
+    </div>
+    <div class="skill-notify-row" id="skill-notify-row">
+      <label class="skill-notify-label">
+        <span class="toggle-switch">
+          <input type="checkbox" id="skill-notify-toggle">
+          <span class="toggle-track"></span>
+        </span>
+        Notify when Lv <span id="skill-notify-level">—</span> is reached
+      </label>
     </div>
   </section>
 
