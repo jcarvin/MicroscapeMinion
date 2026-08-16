@@ -23,6 +23,8 @@ const XP_RATE_SAMPLE_LIMIT = 100;
 const DROP_RATE_SAMPLE_LIMIT = 100;
 const COMBAT_CONSUMABLE_SAMPLE_LIMIT = 100;
 const TICK_SAMPLE_LIMIT = 100;
+const ETA_CALIBRATION_CACHE_VERSION = 1;
+const ETA_CALIBRATION_CACHE_KEY = 'etaCalibrationCache';
 
 // Bank trip timing — computed dynamically from zone mapPos when ZONE_DATA is available.
 // BANK_TRIP_MS is the fallback used before the bundle is parsed.
@@ -43,22 +45,32 @@ let ACTIVITY_DEFS = {};
 let ZONE_DATA = {}; // zoneId → [mapX, mapY] — used for dynamic bank trip calculation
 let XP_TABLE = computeMicroscapeXpTable(); // XP_TABLE[level] = min total XP for that level (1-indexed)
 
-chrome.storage.local.get(['activityDefs', 'zoneData', 'xpTable', 'skillNotifyTarget'], (res) => {
-  if (res.activityDefs && Object.keys(res.activityDefs).length > 0) {
-    ACTIVITY_DEFS = res.activityDefs;
-  } else {
-    // No cache yet — bootstrap from the bundled static seed
-    fetch(chrome.runtime.getURL('src/activity-defs.json'))
-      .then((r) => r.json())
-      .then((data) => {
-        if (Object.keys(ACTIVITY_DEFS).length === 0) ACTIVITY_DEFS = data;
-      })
-      .catch(() => {});
+chrome.storage.local.get(
+  [
+    'activityDefs',
+    'zoneData',
+    'xpTable',
+    'skillNotifyTarget',
+    ETA_CALIBRATION_CACHE_KEY,
+  ],
+  (res) => {
+    if (res.activityDefs && Object.keys(res.activityDefs).length > 0) {
+      ACTIVITY_DEFS = res.activityDefs;
+    } else {
+      // No cache yet — bootstrap from the bundled static seed
+      fetch(chrome.runtime.getURL('src/activity-defs.json'))
+        .then((r) => r.json())
+        .then((data) => {
+          if (Object.keys(ACTIVITY_DEFS).length === 0) ACTIVITY_DEFS = data;
+        })
+        .catch(() => {});
+    }
+    if (res.zoneData) ZONE_DATA = res.zoneData;
+    if (isValidXpTable(res.xpTable)) XP_TABLE = res.xpTable;
+    if (res.skillNotifyTarget) skillNotifyTarget = res.skillNotifyTarget;
+    hydrateEtaCalibrationCache(res[ETA_CALIBRATION_CACHE_KEY]);
   }
-  if (res.zoneData) ZONE_DATA = res.zoneData;
-  if (isValidXpTable(res.xpTable)) XP_TABLE = res.xpTable;
-  if (res.skillNotifyTarget) skillNotifyTarget = res.skillNotifyTarget;
-});
+);
 
 // ── Module state ──────────────────────────────────────────────────────────────
 
@@ -73,11 +85,13 @@ let tickSamples = [];
 let lastUpdateAt = null;
 let lastServerUpdateSignature = null;
 let lastServerUpdateAt = 0;
+let etaCalibrationSaveTimer = null;
 
 let tickLog = []; // newest-first, capped at 40 entries
 let cycleCalibrations = {}; // activityId -> { lastCompletionAt, samples }
 let xpRateSamples = {}; // "activityId:skill" -> { lastGainAt, samples: [{ xp, ms }] }
 let dropRateSamples = {}; // "activityId:itemId" -> { lastGainAt, samples: [{ items, ms }] }
+let lastWorkActivity = null; // Last non-travel/banking activity, used to keep ETAs visible during travel.
 
 let goal = null; // { itemName, itemId, targetCount }
 let goalNotifiedAt = null;
@@ -86,8 +100,9 @@ let skillNotifyTarget = null; // { skill, level }
 
 let combatConsumableSamples = {}; // "actId:itemId" -> { lastConsumedAt, samples: [{ count, ms }] }
 
-chrome.storage.session.get(['goal'], (res) => {
+chrome.storage.session.get(['goal', 'lastWorkActivity'], (res) => {
   if (res.goal) goal = res.goal;
+  if (res.lastWorkActivity) lastWorkActivity = res.lastWorkActivity;
 });
 
 // ── Message router ────────────────────────────────────────────────────────────
@@ -166,6 +181,7 @@ function handleServerFrame(frame) {
 
   mirroredState = applyPatch(mirroredState, frame.args[0]);
   const newAct = mirroredState.me?.activity;
+  rememberWorkActivity(newAct);
   trackXpGain(prevAct, newAct, prevExp, mirroredState.me?.exp);
   trackDropGain(prevAct, newAct, prevMe, mirroredState.me);
   trackCombatConsumables(prevAct, newAct, prevMe, mirroredState.me);
@@ -202,20 +218,140 @@ function handleServerFrame(frame) {
 function pushCappedSample(samples, sample, limit) {
   samples.push(sample);
   if (samples.length > limit) samples.shift();
+  scheduleEtaCalibrationSave();
+}
+
+function hydrateEtaCalibrationCache(cache) {
+  if (!cache || cache.version !== ETA_CALIBRATION_CACHE_VERSION) return;
+
+  if (isReasonableTickMs(cache.observedTickMs)) {
+    observedTickMs = Math.round(cache.observedTickMs);
+  }
+  tickSamples = cleanNumberSamples(cache.tickSamples, TICK_SAMPLE_LIMIT);
+  cycleCalibrations = hydrateTrackerMap(
+    cache.cycleCalibrations,
+    CYCLE_SAMPLE_LIMIT,
+    cleanCycleSample,
+    'lastCompletionAt'
+  );
+  xpRateSamples = hydrateTrackerMap(
+    cache.xpRateSamples,
+    XP_RATE_SAMPLE_LIMIT,
+    cleanRateSample('xp'),
+    'lastGainAt'
+  );
+  dropRateSamples = hydrateTrackerMap(
+    cache.dropRateSamples,
+    DROP_RATE_SAMPLE_LIMIT,
+    cleanRateSample('items'),
+    'lastGainAt'
+  );
+  combatConsumableSamples = hydrateTrackerMap(
+    cache.combatConsumableSamples,
+    COMBAT_CONSUMABLE_SAMPLE_LIMIT,
+    cleanRateSample('count'),
+    'lastConsumedAt'
+  );
+}
+
+function hydrateTrackerMap(raw, limit, cleanSample, timestampKey) {
+  if (!raw || typeof raw !== 'object') return {};
+
+  const hydrated = {};
+  for (const [key, tracker] of Object.entries(raw)) {
+    if (!tracker || typeof tracker !== 'object') continue;
+    const samples = Array.isArray(tracker.samples)
+      ? tracker.samples.map(cleanSample).filter(Boolean).slice(-limit)
+      : [];
+    if (samples.length === 0) continue;
+    hydrated[key] = { [timestampKey]: null, samples };
+  }
+  return hydrated;
+}
+
+function cleanNumberSamples(samples, limit) {
+  return Array.isArray(samples)
+    ? samples.filter(isReasonableTickMs).map(Math.round).slice(-limit)
+    : [];
+}
+
+function cleanCycleSample(value) {
+  return isReasonableMs(value) ? Math.round(value) : null;
+}
+
+function cleanRateSample(amountKey) {
+  return (sample) => {
+    const amount = sample?.[amountKey];
+    const ms = sample?.ms;
+    if (typeof amount !== 'number' || amount <= 0 || !isReasonableMs(ms)) {
+      return null;
+    }
+    return { [amountKey]: amount, ms: Math.round(ms) };
+  };
+}
+
+function isReasonableMs(value) {
+  return (
+    typeof value === 'number' &&
+    isFinite(value) &&
+    value >= 250 &&
+    value <= 60 * 60_000
+  );
+}
+
+function isReasonableTickMs(value) {
+  return typeof value === 'number' && value > 500 && value < 10_000;
+}
+
+function scheduleEtaCalibrationSave() {
+  if (etaCalibrationSaveTimer !== null) return;
+  etaCalibrationSaveTimer = setTimeout(() => {
+    etaCalibrationSaveTimer = null;
+    chrome.storage.local.set({
+      [ETA_CALIBRATION_CACHE_KEY]: serializeEtaCalibrationCache(),
+    });
+  }, 3000);
+}
+
+function serializeEtaCalibrationCache() {
+  return {
+    version: ETA_CALIBRATION_CACHE_VERSION,
+    observedTickMs,
+    tickSamples: tickSamples.slice(-TICK_SAMPLE_LIMIT),
+    cycleCalibrations: stripTrackerTimestamps(cycleCalibrations),
+    xpRateSamples: stripTrackerTimestamps(xpRateSamples),
+    dropRateSamples: stripTrackerTimestamps(dropRateSamples),
+    combatConsumableSamples: stripTrackerTimestamps(combatConsumableSamples),
+    updatedAt: Date.now(),
+  };
+}
+
+function stripTrackerTimestamps(trackers) {
+  const stripped = {};
+  for (const [key, tracker] of Object.entries(trackers ?? {})) {
+    if (!Array.isArray(tracker?.samples) || tracker.samples.length === 0) {
+      continue;
+    }
+    stripped[key] = { samples: tracker.samples };
+  }
+  return stripped;
 }
 
 // ── Tick log helpers ──────────────────────────────────────────────────────────
 
 function snapshotEta() {
   const me = mirroredState.me;
-  const act = me?.activity ?? null;
-  const actId = getActivityId(act);
+  const liveAct = me?.activity ?? null;
+  const etaAct = getEtaActivity(liveAct);
+  const actId = getActivityId(etaAct);
+  const liveActId = getActivityId(liveAct);
+  const etaActIsLive = isWorkActivityId(liveActId);
   const phase =
-    act?.type === 'travel'
+    liveAct?.type === 'travel'
       ? 'travel'
-      : act?.type === 'banking'
+      : liveAct?.type === 'banking'
         ? 'banking'
-        : act?.preparedActivity
+        : liveAct?.preparedActivity
           ? 'overhead'
           : actId
             ? 'active'
@@ -224,16 +360,16 @@ function snapshotEta() {
   const info = def && actId ? runoutInfo(actId) : null;
   const durationInfo = def ? cycleDurationInfo(def, actId) : null;
   const cycleDurMs = durationInfo?.durationMs ?? null;
-  const cycleProgressMs = durationInfo?.calibrated
+  const cycleProgressMs = etaActIsLive && durationInfo?.calibrated
     ? currentCycleProgressMs(actId, cycleDurMs)
     : 0;
   const fallbackOverheadMs =
-    !durationInfo?.calibrated && act?.preparedActivity
-      ? (act.remaining ?? 0) * TICK_MS
+    etaActIsLive && !durationInfo?.calibrated && liveAct?.preparedActivity
+      ? (liveAct.remaining ?? 0) * TICK_MS
       : 0;
   const itemsGenerated =
     info && def ? info.cyclesLeft * producedItemsPerCycle(def) : 0;
-  const zoneId = getActivityZone(act);
+  const zoneId = getActivityZone(etaAct);
   const { bankTrips, bankOverheadMs } = bankOverheadForGeneratedItems(
     itemsGenerated,
     zoneId,
@@ -254,7 +390,9 @@ function snapshotEta() {
       ? computeGoalEta(
           goal,
           getGoalCount(goal.itemName, goal.itemId) ?? 0,
-          actId
+          actId,
+          etaAct,
+          etaActIsLive
         )
       : null;
   return {
@@ -274,8 +412,8 @@ function snapshotEta() {
     overheadTicks: observedOverheadTicks,
     lootBagItems: lootBagTotal(),
     bankTriggerItemCount: BANK_TRIGGER_ITEM_COUNT,
-    actRemaining: act?.remaining ?? null,
-    actLength: act?.length ?? null,
+    actRemaining: liveAct?.remaining ?? null,
+    actLength: liveAct?.length ?? null,
     observedTickMs,
     goalEtaMs: goalEta?.totalMs ?? null,
     goalBankTrips: goalEta?.bankTrips ?? null,
@@ -309,6 +447,8 @@ function handleClientFrame(frame) {
     ...mirroredState,
     me: { ...mirroredState.me, activity: null },
   };
+  lastWorkActivity = null;
+  chrome.storage.session.remove('lastWorkActivity');
   detectIdleTransition();
   detectMaterialRunout(); // clears runout state since activity is now null
 }
@@ -384,6 +524,36 @@ function applyPatch(base, delta) {
 //
 // Character is idle ONLY when me.activity is null/absent entirely.
 // Travel and banking are transient states — not idle.
+
+function rememberWorkActivity(act) {
+  const actId = getActivityId(act);
+  if (isWorkActivityId(actId)) {
+    lastWorkActivity = cloneForStorage(act);
+    chrome.storage.session.set({ lastWorkActivity });
+    return;
+  }
+  if (!act) {
+    lastWorkActivity = null;
+    chrome.storage.session.remove('lastWorkActivity');
+  }
+}
+
+function getEtaActivity(liveAct) {
+  const liveActId = getActivityId(liveAct);
+  if (isWorkActivityId(liveActId)) return liveAct;
+  if (liveAct?.type === 'travel' || liveAct?.type === 'banking') {
+    return lastWorkActivity;
+  }
+  return null;
+}
+
+function cloneForStorage(value) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return null;
+  }
+}
 
 function getActivityId(act) {
   if (!act) return null;
@@ -535,10 +705,11 @@ function cycleDurationInfo(def, actId) {
   const samples = actId ? (cycleCalibrations[actId]?.samples ?? []) : [];
   const calibrated = samples.length >= 1;
   const observedDurationMs = calibrated ? median(samples) : null;
+  const tickBasedDurationMs = tickBasedActivityDurationMs(def);
   return {
     durationMs: calibrated
-      ? Math.min(observedDurationMs, def.durationMs)
-      : def.durationMs,
+      ? Math.min(observedDurationMs, tickBasedDurationMs)
+      : tickBasedDurationMs,
     observedDurationMs,
     sampleCount: samples.length,
     calibrated,
@@ -547,6 +718,13 @@ function cycleDurationInfo(def, actId) {
 
 function cycleDurationMs(def, actId) {
   return cycleDurationInfo(def, actId).durationMs;
+}
+
+function tickBasedActivityDurationMs(def) {
+  const bundleTicks = def?.durationMs ? def.durationMs / TICK_MS : 0;
+  return bundleTicks > 0
+    ? Math.round(bundleTicks * observedTickMs)
+    : (def?.durationMs ?? TICK_MS);
 }
 
 function calibrateCycleDuration(prevAct, newAct, preSnap) {
@@ -824,11 +1002,11 @@ function bankTripsForGeneratedItems(generatedItems) {
 
 function effectiveTickMsForActivity(actId) {
   const def = actId ? ACTIVITY_DEFS[actId] : null;
-  if (!def) return TICK_MS;
+  if (!def) return observedTickMs;
   const durationInfo = cycleDurationInfo(def, actId);
-  if (!durationInfo.calibrated) return TICK_MS;
+  if (!durationInfo.calibrated) return observedTickMs;
   const bundleTicks = def.durationMs / TICK_MS;
-  return bundleTicks > 0 ? durationInfo.durationMs / bundleTicks : TICK_MS;
+  return bundleTicks > 0 ? durationInfo.durationMs / bundleTicks : observedTickMs;
 }
 
 function bankOverheadForGeneratedItems(generatedItems, zoneId, actId) {
@@ -844,45 +1022,51 @@ function bankOverheadForGeneratedItems(generatedItems, zoneId, actId) {
 
 function buildStatus() {
   const me = mirroredState.me;
-  const act = me?.activity ?? null;
+  const liveAct = me?.activity ?? null;
+  const etaAct = getEtaActivity(liveAct);
+  const etaActIsLive = etaAct === liveAct;
 
-  const actSkill = getActivitySkill(act);
-  const actId = getActivityId(act);
+  const liveActSkill = getActivitySkill(liveAct);
+  const liveActId = getActivityId(liveAct);
+  const etaActSkill = getActivitySkill(etaAct);
+  const etaActId = getActivityId(etaAct);
   const actDisplay =
-    actId === 'travel'
+    liveActId === 'travel'
       ? 'Traveling'
-      : actId === 'banking'
+      : liveActId === 'banking'
         ? 'Banking'
-        : actSkill && actId
-          ? `${actSkill} — ${actId}`
-          : (actId ?? actSkill ?? null);
+        : liveActSkill && liveActId
+          ? `${liveActSkill} — ${liveActId}`
+          : (liveActId ?? liveActSkill ?? null);
 
   let goalStatus = null;
   if (goal) {
     const count = getGoalCount(goal.itemName, goal.itemId) ?? 0;
-    const eta = actId ? computeGoalEta(goal, count, actId) : null;
+    const eta = etaActId
+      ? computeGoalEta(goal, count, etaActId, etaAct, etaActIsLive)
+      : null;
     goalStatus = { goal, count, eta, chanceBased: eta?.chanceBased === true };
   }
 
   let runoutStatus = null;
-  if (actId) {
-    const info = runoutInfo(actId);
+  if (etaActId) {
+    const info = runoutInfo(etaActId);
     if (info) {
-      const def = ACTIVITY_DEFS[actId];
-      const durationInfo = cycleDurationInfo(def, actId);
-      const cycleProgressMs = durationInfo.calibrated
-        ? currentCycleProgressMs(actId, durationInfo.durationMs)
+      const def = ACTIVITY_DEFS[etaActId];
+      const durationInfo = cycleDurationInfo(def, etaActId);
+      const cycleProgressMs = etaActIsLive && durationInfo.calibrated
+        ? currentCycleProgressMs(etaActId, durationInfo.durationMs)
         : 0;
       const fallbackOverheadMs =
-        !durationInfo.calibrated && act?.preparedActivity
-          ? (act.remaining ?? 0) * TICK_MS
+        etaActIsLive && !durationInfo.calibrated && liveAct?.preparedActivity
+          ? (liveAct.remaining ?? 0) * TICK_MS
           : 0;
       const itemsGenerated = info.cyclesLeft * producedItemsPerCycle(def);
-      const zoneId = getActivityZone(act);
+      const zoneId = getActivityZone(etaAct);
       const { bankTrips, bankOverheadMs } = bankOverheadForGeneratedItems(
         itemsGenerated,
         zoneId,
-        actId
+        etaActId
       );
       const etaMs = Math.max(
         0,
@@ -909,20 +1093,22 @@ function buildStatus() {
   }
 
   const skillLevelStatus =
-    actId && actSkill ? computeSkillLevelEtas(actId, actSkill, act) : null;
+    etaActId && etaActSkill
+      ? computeSkillLevelEtas(etaActId, etaActSkill, etaAct)
+      : null;
 
   const combatConsumables =
-    act && isCombatActivity(act) ? computeCombatConsumableStatus(act) : null;
+    etaAct && isCombatActivity(etaAct) ? computeCombatConsumableStatus(etaAct) : null;
 
   // Items the current activity produces — drives the goal dropdown
   const producibleItems = [];
-  if (actId && ACTIVITY_DEFS[actId]) {
+  if (etaActId && ACTIVITY_DEFS[etaActId]) {
     for (const [id, change] of Object.entries(
-      ACTIVITY_DEFS[actId].inventoryChanges ?? {}
+      ACTIVITY_DEFS[etaActId].inventoryChanges ?? {}
     )) {
       if (change > 0) producibleItems.push({ id, count: getMaterialCount(id) });
     }
-    for (const id of Object.keys(ACTIVITY_DEFS[actId].dropItems ?? {})) {
+    for (const id of Object.keys(ACTIVITY_DEFS[etaActId].dropItems ?? {})) {
       if (!producibleItems.some((item) => item.id === id)) {
         producibleItems.push({
           id,
@@ -936,7 +1122,7 @@ function buildStatus() {
   return {
     connected: microscopeTabId !== null,
     activity: actDisplay,
-    idle: act === null && prevActivityId !== undefined,
+    idle: liveAct === null && prevActivityId !== undefined,
     tickMs: observedTickMs,
     goalStatus,
     runoutStatus,
@@ -951,7 +1137,13 @@ function buildStatus() {
 
 // ── ETA calculation ───────────────────────────────────────────────────────────
 
-function computeGoalEta(g, currentCount, actId) {
+function computeGoalEta(
+  g,
+  currentCount,
+  actId,
+  actForEta = mirroredState.me?.activity ?? null,
+  actIsLive = true
+) {
   const remaining = g.targetCount - currentCount;
   if (remaining <= 0) return 0;
 
@@ -973,14 +1165,13 @@ function computeGoalEta(g, currentCount, actId) {
   const yieldPerCycle = goalKey ? (def.inventoryChanges[goalKey] ?? 0) : 0;
   if (yieldPerCycle <= 0) return null; // this activity doesn't produce the goal item
 
-  const act = mirroredState.me?.activity ?? null;
   const durationInfo = cycleDurationInfo(def, actId);
-  const cycleProgressMs = durationInfo.calibrated
+  const cycleProgressMs = actIsLive && durationInfo.calibrated
     ? currentCycleProgressMs(actId, durationInfo.durationMs)
     : 0;
   const fallbackOverheadMs =
-    !durationInfo.calibrated && act?.preparedActivity
-      ? (act.remaining ?? 0) * TICK_MS
+    actIsLive && !durationInfo.calibrated && actForEta?.preparedActivity
+      ? (actForEta.remaining ?? 0) * TICK_MS
       : 0;
   const plan = estimateGoalPlan({
     remaining,
@@ -993,7 +1184,7 @@ function computeGoalEta(g, currentCount, actId) {
       plan.cyclesNeeded * durationInfo.durationMs -
       cycleProgressMs
   );
-  const zoneId = getActivityZone(act);
+  const zoneId = getActivityZone(actForEta);
   const bankOverheadMs =
     plan.bankTrips * bankTripMs(zoneId, effectiveTickMsForActivity(actId));
 
@@ -1046,6 +1237,7 @@ function computeSkillLevelEtas(actId, skill, act) {
   const observedRate = observedXpPerMs(actId, skill);
   const mayGainXp = xpPerCycle > 0 || observedRate || isCombatActivity(act);
   if (!mayGainXp || XP_TABLE.length < 3) return null;
+  const durationInfo = def ? cycleDurationInfo(def, actId) : null;
 
   const currentXp = mirroredState.me?.exp?.[skill];
   if (typeof currentXp !== 'number' || !isFinite(currentXp)) return null;
@@ -1062,7 +1254,7 @@ function computeSkillLevelEtas(actId, skill, act) {
       xpPerCycle > 0 ? Math.ceil(xpNeeded / xpPerCycle) : null;
     const etaMs =
       xpPerCycle > 0
-        ? cyclesNeeded * def.durationMs
+        ? cyclesNeeded * durationInfo.durationMs
         : observedRate
           ? Math.ceil(xpNeeded / observedRate)
           : null;
