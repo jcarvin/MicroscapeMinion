@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getStatus } from './utils/messages';
 import Header from './components/Header';
 import StatusSection from './components/StatusSection';
@@ -10,6 +10,15 @@ import DebugSection from './components/DebugSection';
 
 export default function App() {
   const [status, setStatus] = useState(null);
+  const selectedSkillEtaRef = useRef(null);
+  const [selectedSkillEta, setSelectedSkillEta] = useState(null);
+
+  function handleSelectedEtaChange(eta) {
+    if (eta?.targetLevel !== selectedSkillEtaRef.current?.targetLevel) {
+      selectedSkillEtaRef.current = eta ?? null;
+      setSelectedSkillEta(eta ?? null);
+    }
+  }
 
   useEffect(() => {
     function poll() {
@@ -33,11 +42,16 @@ export default function App() {
         producibleItems={status?.producibleItems ?? []}
         goalStatus={status?.goalStatus ?? null}
       />
-      <MaterialSection runoutStatus={status?.runoutStatus ?? null} />
+      <MaterialSection
+        runoutStatus={status?.runoutStatus ?? null}
+        selectedSkillEta={selectedSkillEta}
+        xpPerCycle={status?.skillLevelStatus?.xpPerCycle ?? 0}
+      />
       <CombatConsumableSection combatConsumables={status?.combatConsumables ?? []} />
       <SkillSection
         skillLevelStatus={status?.skillLevelStatus ?? null}
         skillNotifyTarget={status?.skillNotifyTarget ?? null}
+        onSelectedEtaChange={handleSelectedEtaChange}
       />
       <DebugSection rawMe={status?.rawMe} tickLog={status?.tickLog ?? []} />
     </>

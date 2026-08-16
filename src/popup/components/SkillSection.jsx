@@ -16,7 +16,7 @@ function resolveOffset(xs, maxOffset, savedTargetLevel, currentOffset) {
   return Math.min(Math.max(1, currentOffset), maxOffset);
 }
 
-export default function SkillSection({ skillLevelStatus, skillNotifyTarget }) {
+export default function SkillSection({ skillLevelStatus, skillNotifyTarget, onSelectedEtaChange }) {
   const [selectedLevelOffset, setSelectedLevelOffset] = useState(1);
   const [savedSelections, setSavedSelections] = useState({});
 
@@ -43,9 +43,14 @@ export default function SkillSection({ skillLevelStatus, skillNotifyTarget }) {
     [maxOffset, etas.length]
   );
 
-  if (!etas.length) return null;
+  const eta = etas.length > 0 ? etas[clampedOffset - 1] : null;
 
-  const eta = etas[clampedOffset - 1];
+  useEffect(() => {
+    onSelectedEtaChange?.(eta ?? null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eta?.targetLevel]);
+
+  if (!etas.length) return null;
 
   function handleSliderChange(e) {
     const newOffset = parseInt(e.target.value, 10) || 1;
