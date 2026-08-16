@@ -11,8 +11,9 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "zip": "npm run zip:chrome",
-    "zip:chrome": "npm run build:chrome && (cd dist-chrome && zip -r ../microscape-minion-$npm_package_version.zip . -x '*.DS_Store')",
-    "zip:firefox": "npm run build:firefox && web-ext build --source-dir dist-firefox --artifacts-dir web-ext-artifacts --overwrite-dest",
+    "zip:all": "npm run zip:chrome && npm run zip:firefox",
+    "zip:chrome": "npm run build:chrome && (cd dist-chrome && mkdir -p ../artifacts && zip -r ../artifacts/microscape-minion-$npm_package_version-chrome.zip . -x '*.DS_Store')",
+    "zip:firefox": "npm run build:firefox && web-ext build --source-dir dist-firefox --artifacts-dir artifacts --overwrite-dest --filename microscape-minion-{version}-firefox.zip",
     "firefox:lint": "npm run build:firefox && web-ext lint --source-dir dist-firefox",
     "firefox:run": "npm run build:firefox && web-ext run --source-dir dist-firefox"
   },
