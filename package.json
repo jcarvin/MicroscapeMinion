@@ -8,7 +8,7 @@
     "build": "vite build",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "zip": "npm run build && (cd dist && zip -r ../microscape-minion.zip . -x '*.DS_Store')"
+    "zip": "npm run build && (cd dist && zip -r ../microscape-minion-$npm_package_version.zip . -x '*.DS_Store')"
   },
   "dependencies": {
     "react": "^18",
