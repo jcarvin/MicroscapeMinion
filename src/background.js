@@ -38,7 +38,7 @@ let ACTIVITY_DEFS = {};
 let ZONE_DATA = {}; // zoneId → [mapX, mapY] — used for dynamic bank trip calculation
 let XP_TABLE = computeMicroscapeXpTable(); // XP_TABLE[level] = min total XP for that level (1-indexed)
 
-chrome.storage.local.get(['activityDefs', 'zoneData', 'xpTable'], (res) => {
+chrome.storage.local.get(['activityDefs', 'zoneData', 'xpTable', 'skillNotifyTarget'], (res) => {
   if (res.activityDefs && Object.keys(res.activityDefs).length > 0) {
     ACTIVITY_DEFS = res.activityDefs;
   } else {
@@ -52,6 +52,7 @@ chrome.storage.local.get(['activityDefs', 'zoneData', 'xpTable'], (res) => {
   }
   if (res.zoneData) ZONE_DATA = res.zoneData;
   if (isValidXpTable(res.xpTable)) XP_TABLE = res.xpTable;
+  if (res.skillNotifyTarget) skillNotifyTarget = res.skillNotifyTarget;
 });
 
 // ── Module state ──────────────────────────────────────────────────────────────
@@ -76,6 +77,7 @@ let dropRateSamples = {}; // "activityId:itemId" -> { lastGainAt, samples: [{ it
 let goal = null; // { itemName, itemId, targetCount }
 let goalNotifiedAt = null;
 let runoutNotifiedFor = null;
+let skillNotifyTarget = null; // { skill, level }
 
 let combatConsumableSamples = {}; // "actId:itemId" -> { lastConsumedAt, samples: [{ count, ms }] }
 
@@ -128,6 +130,18 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
     case 'GET_STATUS':
       respond(buildStatus());
       break;
+
+    case 'SET_SKILL_NOTIFY':
+      skillNotifyTarget = { skill: msg.skill, level: msg.level };
+      chrome.storage.local.set({ skillNotifyTarget });
+      respond({ ok: true });
+      break;
+
+    case 'CLEAR_SKILL_NOTIFY':
+      skillNotifyTarget = null;
+      chrome.storage.local.remove('skillNotifyTarget');
+      respond({ ok: true });
+      break;
   }
 
   return true;
@@ -177,6 +191,7 @@ function handleServerFrame(frame) {
   detectIdleTransition();
   detectGoalReached();
   detectMaterialRunout();
+  detectSkillLevelReached();
 }
 
 // ── Tick log helpers ──────────────────────────────────────────────────────────
@@ -478,6 +493,30 @@ function detectMaterialRunout() {
     `${info.itemId} ran out — character will go idle.`
   );
   sendChime('runout');
+}
+
+// ── Skill level notification ──────────────────────────────────────────────────
+
+function detectSkillLevelReached() {
+  if (!skillNotifyTarget) return;
+  const exp = mirroredState.me?.exp;
+  if (!exp) return;
+
+  const currentXp = exp[skillNotifyTarget.skill];
+  if (typeof currentXp !== 'number') return;
+
+  const currentLevel = getLevelFromXp(currentXp);
+  if (currentLevel < skillNotifyTarget.level) return;
+
+  const skill = String(skillNotifyTarget.skill ?? '').replace(/[-_]/g, ' ').replace(/\b\w/g, s => s.toUpperCase());
+  fireNotification(
+    'skill-level',
+    'Microscape: Level up!',
+    `${skill} reached level ${skillNotifyTarget.level}!`
+  );
+  sendChime('default');
+  skillNotifyTarget = null;
+  chrome.storage.local.remove('skillNotifyTarget');
 }
 
 // ── Duration and banking helpers ──────────────────────────────────────────────
@@ -882,6 +921,7 @@ function buildStatus() {
     skillLevelStatus,
     combatConsumables,
     producibleItems,
+    skillNotifyTarget,
     rawMe: me ?? null,
     tickLog,
   };
