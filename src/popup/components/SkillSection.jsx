@@ -1,19 +1,42 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { formatSkillName, formatNumber } from '../utils/format';
 import { setSkillNotify, clearSkillNotify } from '../utils/messages';
 import EtaDisplay from './EtaDisplay';
 import EtaTooltip from './EtaTooltip';
 import SkillNotifyToggleSection from './SkillNotifyToggleSection';
 
+const SKILL_LEVEL_SELECTIONS_KEY = 'skillLevelSelections';
+
+function resolveOffset(xs, maxOffset, savedTargetLevel, currentOffset) {
+  if (savedTargetLevel != null) {
+    if (savedTargetLevel <= xs.currentLevel) return 1;
+    const idx = xs.etas.findIndex(eta => eta.targetLevel === savedTargetLevel) + 1;
+    if (idx >= 1 && idx <= maxOffset) return idx;
+  }
+  return Math.min(Math.max(1, currentOffset), maxOffset);
+}
+
 export default function SkillSection({ skillLevelStatus, skillNotifyTarget }) {
   const [selectedLevelOffset, setSelectedLevelOffset] = useState(1);
+  const [savedSelections, setSavedSelections] = useState({});
+
+  useEffect(() => {
+    chrome.storage.local.get([SKILL_LEVEL_SELECTIONS_KEY], (res) => {
+      const saved = res[SKILL_LEVEL_SELECTIONS_KEY];
+      if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+        setSavedSelections(saved);
+      }
+    });
+  }, []);
 
   const xs   = skillLevelStatus;
   const etas = xs?.etas ?? [];
 
-  // All hooks before the conditional return
-  const maxOffset    = Math.min(10, etas.length) || 1;
-  const clampedOffset = Math.min(Math.max(1, selectedLevelOffset), maxOffset);
+  const maxOffset      = Math.min(10, etas.length) || 1;
+  const savedTarget    = xs?.skill ? (savedSelections[xs.skill] ?? null) : null;
+  const clampedOffset  = etas.length > 0
+    ? resolveOffset(xs, maxOffset, savedTarget, selectedLevelOffset)
+    : 1;
 
   const notchLabels = useMemo(
     () => Array.from({ length: etas.length > 0 ? maxOffset : 0 }, (_, i) => `+${i + 1}`),
@@ -23,6 +46,17 @@ export default function SkillSection({ skillLevelStatus, skillNotifyTarget }) {
   if (!etas.length) return null;
 
   const eta = etas[clampedOffset - 1];
+
+  function handleSliderChange(e) {
+    const newOffset = parseInt(e.target.value, 10) || 1;
+    setSelectedLevelOffset(newOffset);
+    const newEta = xs?.etas?.[newOffset - 1];
+    if (xs?.skill && newEta?.targetLevel) {
+      const updated = { ...savedSelections, [xs.skill]: newEta.targetLevel };
+      setSavedSelections(updated);
+      chrome.storage.local.set({ [SKILL_LEVEL_SELECTIONS_KEY]: updated });
+    }
+  }
 
   const isNotifyChecked = !!(
     skillNotifyTarget &&
@@ -48,7 +82,7 @@ export default function SkillSection({ skillLevelStatus, skillNotifyTarget }) {
           max={maxOffset}
           step="1"
           value={clampedOffset}
-          onChange={e => setSelectedLevelOffset(parseInt(e.target.value, 10) || 1)}
+          onChange={handleSliderChange}
         />
         <div className="skill-xp-notch-labels">
           {notchLabels.map(label => <span key={label}>{label}</span>)}
