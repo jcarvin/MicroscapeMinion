@@ -54,17 +54,27 @@ chrome.storage.local.get(
     ETA_CALIBRATION_CACHE_KEY,
   ],
   (res) => {
-    if (res.activityDefs && Object.keys(res.activityDefs).length > 0) {
-      ACTIVITY_DEFS = res.activityDefs;
-    } else {
-      // No cache yet — bootstrap from the bundled static seed
-      fetch(chrome.runtime.getURL('src/activity-defs.json'))
-        .then((r) => r.json())
-        .then((data) => {
-          if (Object.keys(ACTIVITY_DEFS).length === 0) ACTIVITY_DEFS = data;
-        })
-        .catch(() => {});
-    }
+    fetch(chrome.runtime.getURL('src/activity-defs.json'))
+      .then((r) => r.json())
+      .then((seed) => {
+        if (res.activityDefs && Object.keys(res.activityDefs).length > 0) {
+          ACTIVITY_DEFS = res.activityDefs;
+          // Merge seed entries missing from cache so newly added activities
+          // are available without needing to reload the game tab first.
+          let added = false;
+          for (const [id, def] of Object.entries(seed)) {
+            if (!(id in ACTIVITY_DEFS)) { ACTIVITY_DEFS[id] = def; added = true; }
+          }
+          if (added) chrome.storage.local.set({ activityDefs: ACTIVITY_DEFS });
+        } else {
+          ACTIVITY_DEFS = seed;
+        }
+      })
+      .catch(() => {
+        if (res.activityDefs && Object.keys(res.activityDefs).length > 0) {
+          ACTIVITY_DEFS = res.activityDefs;
+        }
+      });
     if (res.zoneData) ZONE_DATA = res.zoneData;
     if (isValidXpTable(res.xpTable)) XP_TABLE = res.xpTable;
     if (res.skillNotifyTarget) skillNotifyTarget = res.skillNotifyTarget;

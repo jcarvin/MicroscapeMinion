@@ -131,6 +131,26 @@
       defs[id] = { durationMs, xpPerCycle, inventoryChanges: changes };
     }
 
+    // Piety skill activities (bury-bones etc.) have entity before exp/duration/level
+    const pietyRe = /\{\s*id:\s*`([^`]+)`,(?:\s*\w+:\s*`[^`]*`,)*\s*entity:\s*`[^`]+`,\s*exp:\s*(\d+),\s*duration:\s*(\d+),\s*level:\s*\d+,\s*inventoryChanges:\s*\{([^}]+)\}/g;
+    while ((m = pietyRe.exec(bundle)) !== null) {
+      const id = m[1];
+      if (id in defs) continue;
+      const xpPerCycle = parseInt(m[2], 10);
+      const durationMs = (parseInt(m[3], 10) + 6) * 2000;
+      const changes = {};
+      for (const part of m[4].split(',')) {
+        const colon = part.indexOf(':');
+        if (colon < 0) continue;
+        const k = part.slice(0, colon).trim();
+        const v = part.slice(colon + 1).trim();
+        if (!k || v.includes('/')) continue;
+        const n = parseInt(v, 10);
+        if (!isNaN(n)) changes[k] = n;
+      }
+      defs[id] = { durationMs, xpPerCycle, inventoryChanges: changes };
+    }
+
     const mobs = parseMobDefs(bundle);
     const combatRe = /\{\s*id:\s*`(fight-[^`]+)`(?:,\s*\w+:\s*`[^`]*`)*,\s*mob:\s*`([^`]+)`\s*,\s*level:\s*\d+/g;
     while ((m = combatRe.exec(bundle)) !== null) {
