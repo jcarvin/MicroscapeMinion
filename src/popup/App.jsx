@@ -1,0 +1,45 @@
+import { useState, useEffect } from 'react';
+import { getStatus } from './utils/messages';
+import Header from './components/Header';
+import StatusSection from './components/StatusSection';
+import GoalSection from './components/GoalSection';
+import MaterialSection from './components/MaterialSection';
+import CombatConsumableSection from './components/CombatConsumableSection';
+import SkillSection from './components/SkillSection';
+import DebugSection from './components/DebugSection';
+
+export default function App() {
+  const [status, setStatus] = useState(null);
+
+  useEffect(() => {
+    function poll() {
+      getStatus().then(s => { if (s) setStatus(s); });
+    }
+    poll();
+    const id = setInterval(poll, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <>
+      <Header connected={status?.connected} idle={status?.idle} />
+      <StatusSection
+        connected={status?.connected}
+        idle={status?.idle}
+        activity={status?.activity}
+        tickMs={status?.tickMs}
+      />
+      <GoalSection
+        producibleItems={status?.producibleItems ?? []}
+        goalStatus={status?.goalStatus ?? null}
+      />
+      <MaterialSection runoutStatus={status?.runoutStatus ?? null} />
+      <CombatConsumableSection combatConsumables={status?.combatConsumables ?? []} />
+      <SkillSection
+        skillLevelStatus={status?.skillLevelStatus ?? null}
+        skillNotifyTarget={status?.skillNotifyTarget ?? null}
+      />
+      <DebugSection rawMe={status?.rawMe} tickLog={status?.tickLog ?? []} />
+    </>
+  );
+}
