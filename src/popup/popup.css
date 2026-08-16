@@ -222,6 +222,44 @@ button:hover { filter: brightness(1.1); }
   font-size: 12px;
 }
 
+/* ── Combat consumable card ──────────────────────────── */
+
+.consumable-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  padding: 2px 0;
+}
+
+.consumable-row + .consumable-row {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 6px;
+}
+
+.consumable-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.consumable-right {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.consumable-count {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 /* ── Skill XP card ───────────────────────────────────── */
 
 .skill-xp-slider-row {
