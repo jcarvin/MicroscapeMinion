@@ -1077,6 +1077,7 @@ function buildStatus() {
       );
       runoutStatus = {
         itemId: info.itemId,
+        costPerCycle: info.costPerCycle,
         totalMaterial: info.totalMaterial,
         cyclesLeft: info.cyclesLeft,
         itemsGenerated,
