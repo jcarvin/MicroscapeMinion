@@ -318,4 +318,8 @@
     }
     return zones;
   }
+
+  if (window.__MM_TEST_HOOKS__) {
+    window.__MM_TEST_HOOKS__.parseActivityDefs = parseActivityDefs;
+  }
 })();

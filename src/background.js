@@ -57,17 +57,10 @@ chrome.storage.local.get(
     fetch(chrome.runtime.getURL('src/activity-defs.json'))
       .then((r) => r.json())
       .then((seed) => {
-        if (res.activityDefs && Object.keys(res.activityDefs).length > 0) {
-          ACTIVITY_DEFS = res.activityDefs;
-          // Merge seed entries missing from cache so newly added activities
-          // are available without needing to reload the game tab first.
-          let added = false;
-          for (const [id, def] of Object.entries(seed)) {
-            if (!(id in ACTIVITY_DEFS)) { ACTIVITY_DEFS[id] = def; added = true; }
-          }
-          if (added) chrome.storage.local.set({ activityDefs: ACTIVITY_DEFS });
-        } else {
-          ACTIVITY_DEFS = seed;
+        const { defs, added } = mergeMissingActivityDefs(res.activityDefs, seed);
+        ACTIVITY_DEFS = defs;
+        if (added) {
+          chrome.storage.local.set({ activityDefs: ACTIVITY_DEFS });
         }
       })
       .catch(() => {
@@ -1482,3 +1475,69 @@ function sendChime(variant) {
     .sendMessage(microscopeTabId, { type: 'PLAY_CHIME', variant })
     .catch(() => {});
 }
+
+function mergeMissingActivityDefs(cachedDefs, seedDefs) {
+  if (!cachedDefs || Object.keys(cachedDefs).length === 0) {
+    return { defs: seedDefs ?? {}, added: false };
+  }
+
+  const defs = { ...cachedDefs };
+  let added = false;
+  for (const [id, def] of Object.entries(seedDefs ?? {})) {
+    if (!(id in defs)) {
+      defs[id] = def;
+      added = true;
+    }
+  }
+  return { defs, added };
+}
+
+function resetTestState() {
+  ACTIVITY_DEFS = {};
+  ZONE_DATA = {};
+  XP_TABLE = computeMicroscapeXpTable();
+  mirroredState = {};
+  prevActivityId = undefined;
+  microscopeTabId = null;
+  observedTickMs = 2000;
+  observedOverheadTicks = 6;
+  tickSamples = [];
+  lastUpdateAt = null;
+  lastServerUpdateSignature = null;
+  lastServerUpdateAt = 0;
+  tickLog = [];
+  cycleCalibrations = {};
+  xpRateSamples = {};
+  dropRateSamples = {};
+  lastWorkActivity = null;
+  goal = null;
+  goalNotifiedAt = null;
+  runoutNotifiedFor = null;
+  skillNotifyTarget = null;
+  combatConsumableSamples = {};
+}
+
+function setTestState({
+  activityDefs,
+  zoneData,
+  xpTable,
+  state,
+  lastWorkAct,
+  tickMs,
+} = {}) {
+  if (activityDefs) ACTIVITY_DEFS = activityDefs;
+  if (zoneData) ZONE_DATA = zoneData;
+  if (xpTable) XP_TABLE = xpTable;
+  if (state) mirroredState = state;
+  if (lastWorkAct !== undefined) lastWorkActivity = lastWorkAct;
+  if (tickMs) observedTickMs = tickMs;
+}
+
+export const __test = {
+  buildStatus,
+  computeSkillLevelEtas,
+  mergeMissingActivityDefs,
+  resetTestState,
+  runoutInfo,
+  setTestState,
+};
