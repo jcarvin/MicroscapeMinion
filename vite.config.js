@@ -3,7 +3,11 @@ import react from '@vitejs/plugin-react';
 import { copyFileSync, cpSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
 
-function extensionPlugin() {
+function extensionPlugin(mode) {
+  const isFirefox = mode === 'firefox';
+  const outDir = isFirefox ? 'dist-firefox' : 'dist-chrome';
+  const manifestSrc = isFirefox ? 'manifest.firefox.json' : 'manifest.json';
+
   return {
     name: 'extension-copy',
     transformIndexHtml(html) {
@@ -11,10 +15,9 @@ function extensionPlugin() {
       return html.replace(/ crossorigin/g, '');
     },
     closeBundle() {
-      const dist = resolve(__dirname, 'dist');
+      const dist = resolve(__dirname, outDir);
 
-      // manifest.json is unchanged — popup path "src/popup/popup.html" stays valid
-      copyFileSync(resolve(__dirname, 'manifest.json'), resolve(dist, 'manifest.json'));
+      copyFileSync(resolve(__dirname, manifestSrc), resolve(dist, 'manifest.json'));
 
       cpSync(resolve(__dirname, 'icons'), resolve(dist, 'icons'), { recursive: true });
 
@@ -26,10 +29,10 @@ function extensionPlugin() {
   };
 }
 
-export default defineConfig({
-  plugins: [react(), extensionPlugin()],
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), extensionPlugin(mode)],
   build: {
-    outDir: 'dist',
+    outDir: mode === 'firefox' ? 'dist-firefox' : 'dist-chrome',
     emptyOutDir: true,
     rollupOptions: {
       input: { popup: resolve(__dirname, 'src/popup/popup.html') },
@@ -42,4 +45,4 @@ export default defineConfig({
     include: ['tests/**/*.test.{js,jsx}'],
     clearMocks: true,
   },
-});
+}));
