@@ -18,6 +18,8 @@ const goalEtaEl     = $('goal-eta');
 const runoutCard    = $('runout-card');
 const runoutCycles  = $('runout-cycles');
 const runoutEtaEl   = $('runout-eta');
+const combatConsumableCard = $('combat-consumable-card');
+const combatConsumableList = $('combat-consumable-list');
 const skillXpCard   = $('skill-xp-card');
 const skillXpName   = $('skill-xp-name');
 const skillXpLevel  = $('skill-xp-level');
@@ -268,6 +270,29 @@ function render(s) {
   } else {
     runoutAnchor = null;
     runoutCard.hidden = true;
+  }
+
+  // Combat consumable status
+  const cc = s.combatConsumables;
+  if (cc && cc.length > 0) {
+    combatConsumableCard.hidden = false;
+    combatConsumableList.innerHTML = '';
+    for (const item of cc) {
+      const row = document.createElement('div');
+      row.className = 'consumable-row';
+      const etaText = item.etaMs != null
+        ? `ETA ${formatDuration(item.etaMs)}`
+        : 'ETA calibrating…';
+      row.innerHTML =
+        `<span class="consumable-name">${formatItemId(item.itemId)}</span>` +
+        `<span class="consumable-right">` +
+          `<span class="consumable-count">${item.currentCount}</span>` +
+          `<span class="eta-label">${etaText}</span>` +
+        `</span>`;
+      combatConsumableList.appendChild(row);
+    }
+  } else {
+    combatConsumableCard.hidden = true;
   }
 
   // Skill XP status

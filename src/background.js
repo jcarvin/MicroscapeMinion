@@ -77,6 +77,8 @@ let goal = null; // { itemName, itemId, targetCount }
 let goalNotifiedAt = null;
 let runoutNotifiedFor = null;
 
+let combatConsumableSamples = {}; // "actId:itemId" -> { lastConsumedAt, samples: [{ count, ms }] }
+
 chrome.storage.session.get(['goal'], (res) => {
   if (res.goal) goal = res.goal;
 });
@@ -147,6 +149,7 @@ function handleServerFrame(frame) {
   const newAct = mirroredState.me?.activity;
   trackXpGain(prevAct, newAct, prevExp, mirroredState.me?.exp);
   trackDropGain(prevAct, newAct, prevMe, mirroredState.me);
+  trackCombatConsumables(prevAct, newAct, prevMe, mirroredState.me);
 
   if (
     newAct?.preparedActivity &&
@@ -633,6 +636,67 @@ function trackDropGain(prevAct, newAct, prevMe, newMe) {
   }
 }
 
+function trackCombatConsumables(prevAct, newAct, prevMe, newMe) {
+  const act = isCombatActivity(newAct) ? newAct : isCombatActivity(prevAct) ? prevAct : null;
+  if (!act) return;
+
+  const actId = getActivityId(act);
+  if (!isWorkActivityId(actId)) return;
+
+  const prevInv = prevMe?.inventory ?? {};
+  const newInv = newMe?.inventory ?? {};
+  const dropItems = ACTIVITY_DEFS[actId]?.dropItems ?? {};
+  const now = Date.now();
+
+  const allIds = new Set([...Object.keys(prevInv), ...Object.keys(newInv)]);
+  for (const itemId of allIds) {
+    if (itemId in dropItems) continue;
+    const consumed = (prevInv[itemId] ?? 0) - (newInv[itemId] ?? 0);
+    if (consumed <= 0) continue;
+
+    const key = `${actId}:${itemId}`;
+    const tracker = combatConsumableSamples[key] ?? { lastConsumedAt: null, samples: [] };
+    if (tracker.lastConsumedAt !== null) {
+      const sampleMs = now - tracker.lastConsumedAt;
+      if (sampleMs >= 500 && sampleMs <= 60 * 60_000) {
+        tracker.samples.push({ count: consumed, ms: sampleMs });
+        if (tracker.samples.length > 12) tracker.samples.shift();
+      }
+    }
+    tracker.lastConsumedAt = now;
+    combatConsumableSamples[key] = tracker;
+  }
+}
+
+function computeCombatConsumableStatus(act) {
+  const actId = getActivityId(act);
+  if (!actId) return null;
+
+  const inv = mirroredState.me?.inventory ?? {};
+  const dropItems = ACTIVITY_DEFS[actId]?.dropItems ?? {};
+  const prefix = actId + ':';
+  const items = [];
+
+  for (const [key, tracker] of Object.entries(combatConsumableSamples)) {
+    if (!key.startsWith(prefix)) continue;
+    const itemId = key.slice(prefix.length);
+    if (itemId in dropItems) continue;
+    if (tracker.samples.length === 0) continue;
+
+    const currentCount = inv[itemId] ?? 0;
+    const totalConsumed = tracker.samples.reduce((s, x) => s + x.count, 0);
+    const totalMs = tracker.samples.reduce((s, x) => s + x.ms, 0);
+    const ratePerMs = totalMs > 0 ? totalConsumed / totalMs : null;
+    const etaMs = ratePerMs && currentCount > 0
+      ? Math.round(currentCount / ratePerMs)
+      : null;
+
+    items.push({ itemId, currentCount, etaMs, sampleCount: tracker.samples.length });
+  }
+
+  return items.length > 0 ? items : null;
+}
+
 function getMaterialCountForMe(me, itemId) {
   const inv = me?.inventory?.[itemId] ?? 0;
   const lb = me?.lootBag?.[itemId] ?? 0;
@@ -786,6 +850,9 @@ function buildStatus() {
   const skillLevelStatus =
     actId && actSkill ? computeSkillLevelEtas(actId, actSkill, act) : null;
 
+  const combatConsumables =
+    act && isCombatActivity(act) ? computeCombatConsumableStatus(act) : null;
+
   // Items the current activity produces — drives the goal dropdown
   const producibleItems = [];
   if (actId && ACTIVITY_DEFS[actId]) {
@@ -813,6 +880,7 @@ function buildStatus() {
     goalStatus,
     runoutStatus,
     skillLevelStatus,
+    combatConsumables,
     producibleItems,
     rawMe: me ?? null,
     tickLog,
