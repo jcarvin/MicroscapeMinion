@@ -1,6 +1,6 @@
 # Microscape Minion
 
-A Chrome extension for [Microscape](https://microscape.cc/play/) that watches your character in real time and shows you:
+A browser extension for [Microscape](https://microscape.cc/play/) that watches your character in real time and shows you:
 
 - **Idle alerts** — get notified the moment your character stops working
 - **Material runout** — see how many cycles of materials you have left and when they'll run out
@@ -8,21 +8,25 @@ A Chrome extension for [Microscape](https://microscape.cc/play/) that watches yo
 
 Microscape Minion is read-only. It never sends anything to the game — it only watches.
 
+Available for Chrome and Firefox.
+
 ---
 
 ## Installation
 
-Chrome extensions from outside the Chrome Web Store need to be loaded manually. This takes about two minutes.
+### Chrome
 
-### Step 1 — Download the extension
+Extensions from outside the Chrome Web Store need to be loaded manually. This takes about two minutes.
+
+**Step 1 — Download the extension**
 
 1. Go to the [Releases](https://github.com/jcarvin/MicroscapeMinion/releases) page on GitHub
-2. Download the latest `MicroscapeMinion.zip` file
+2. Download the latest `microscape-minion-*.zip` file
 3. Unzip it somewhere you'll remember — your Desktop or Documents folder works fine
 
 > **Important:** Don't move or delete the unzipped folder after installing. Chrome loads the extension directly from that folder every time it starts.
 
-### Step 2 — Open Chrome's Extensions page
+**Step 2 — Open Chrome's Extensions page**
 
 In Chrome, navigate to:
 
@@ -30,31 +34,45 @@ In Chrome, navigate to:
 chrome://extensions
 ```
 
-You can also get there by clicking the three-dot menu (⋮) in the top-right corner of Chrome → **Extensions** → **Manage Extensions**.
+**Step 3 — Turn on Developer Mode**
 
-### Step 3 — Turn on Developer Mode
+In the top-right corner of the Extensions page, turn on the **Developer mode** toggle. Three buttons will appear: **Load unpacked**, Pack extension, and Update.
 
-In the top-right corner of the Extensions page, you'll see a toggle labeled **Developer mode**. Turn it on.
-
-Once enabled, three new buttons will appear at the top left of the page: **Load unpacked**, Pack extension, and Update.
-
-> Developer mode just means you can install extensions that aren't in the Chrome Web Store. It doesn't change anything else about how Chrome works.
-
-### Step 4 — Load the extension
+**Step 4 — Load the extension**
 
 1. Click **Load unpacked**
-2. In the file picker that opens, navigate to the folder you unzipped in Step 1
-3. Select that folder and click **Open** (or **Select Folder** on some systems)
+2. Navigate to the folder you unzipped in Step 1
+3. Select that folder and click **Open**
 
-Microscape Minion will appear in your extensions list with a green toggle showing it's active.
+Microscape Minion will appear in your extensions list with a green toggle.
 
-### Step 5 — Pin it to your toolbar (recommended)
+**Step 5 — Pin it to your toolbar (recommended)**
 
 1. Click the puzzle-piece icon (🧩) in the top-right corner of Chrome
-2. Find **Microscape Minion** in the list
-3. Click the pin icon next to it
+2. Find **Microscape Minion** and click the pin icon next to it
 
-The Microscape Minion icon will now appear in your toolbar for easy access while you play.
+---
+
+### Firefox
+
+Firefox extensions from outside AMO can be loaded temporarily for testing. For a permanent install, use the Firefox Add-ons store once it's listed.
+
+**Step 1 — Download the extension**
+
+1. Go to the [Releases](https://github.com/jcarvin/MicroscapeMinion/releases) page on GitHub
+2. Download the latest `microscape-minion-firefox-*.xpi` file
+
+**Step 2 — Install the XPI**
+
+Open Firefox and navigate to:
+
+```
+about:addons
+```
+
+Click the gear icon → **Install Add-on From File…** → select the `.xpi` file. Click **Add** when prompted.
+
+Microscape Minion will appear in your extensions list and remain installed permanently.
 
 ---
 
@@ -72,21 +90,109 @@ The Microscape Minion icon will now appear in your toolbar for easy access while
 
 ## Updating
 
-If a new version is released:
+**Chrome:** Download the new zip from the Releases page, replace the contents of your existing folder, then go to `chrome://extensions` and click the refresh icon on the Microscape Minion card.
 
-1. Download the new zip from the Releases page
-2. Replace the contents of your existing folder with the new files (or unzip to a new folder)
-3. Go back to `chrome://extensions` and click the refresh icon on the Microscape Minion card
+**Firefox:** Download and install the new `.xpi` file the same way you installed the original. Firefox will update the existing installation automatically.
 
 ---
 
 ## Troubleshooting
 
 **The popup shows "Not connected"**
-Make sure you have Microscape open in a Chrome tab and you're logged in. The extension connects automatically when it detects the game.
+Make sure you have Microscape open in a tab and you're logged in. The extension connects automatically when it detects the game.
 
-**The extension disappeared after a Chrome update**
-Chrome occasionally disables unpacked extensions after updates. Go to `chrome://extensions`, find Microscape Minion, and turn its toggle back on. If it's gone entirely, repeat Step 4.
+**Chrome: the extension disappeared after an update**
+Chrome occasionally disables unpacked extensions after updates. Go to `chrome://extensions`, find Microscape Minion, and turn its toggle back on. If it's gone entirely, repeat the load steps above.
 
-**I get a warning about "Developer mode extensions"**
+**Chrome: I get a warning about "Developer mode extensions"**
 This is a normal Chrome notice about extensions loaded outside the Web Store. Click the X to dismiss it — it's safe to ignore.
+
+---
+
+## Development
+
+### Prerequisites
+
+- Node 22 (`nvm use` will pick the right version from `.nvmrc`)
+- `npm install`
+
+### Chrome
+
+```bash
+# Build (outputs to dist-chrome/)
+npm run build:chrome
+
+# Build and watch for changes
+npm run dev
+
+# Load in Chrome
+# 1. Go to chrome://extensions
+# 2. Enable Developer mode
+# 3. Click "Load unpacked" and select the dist-chrome/ folder
+# 4. After rebuilding, click the refresh icon on the extension card
+```
+
+### Firefox
+
+```bash
+# Build (outputs to dist-firefox/)
+npm run build:firefox
+
+# Launch Firefox with the extension pre-loaded (auto-reloads on rebuild)
+npm run firefox:run
+
+# Or load manually:
+# 1. Go to about:debugging → "This Firefox"
+# 2. Click "Load Temporary Add-on…"
+# 3. Select dist-firefox/manifest.json
+
+# Validate the extension against Firefox's linter
+npm run firefox:lint
+```
+
+### Tests
+
+```bash
+npm test
+npm run test:ui   # opens Vitest UI
+```
+
+---
+
+## Publishing
+
+### Chrome Web Store
+
+```bash
+npm run zip:chrome
+```
+
+This builds and packages the extension into `microscape-minion-<version>.zip`. Upload that file to the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole).
+
+### Firefox Add-ons (AMO)
+
+```bash
+npm run zip:firefox
+```
+
+This produces `web-ext-artifacts/microscape_minion-<version>.zip`. Upload that to [addons.mozilla.org](https://addons.mozilla.org/developers/).
+
+AMO requires a source code submission alongside the built extension because this project uses Vite. Create the source ZIP with:
+
+```bash
+zip -r microscape-minion-source-<version>.zip . \
+  -x 'node_modules/*' -x 'dist-chrome/*' -x 'dist-firefox/*' \
+  -x 'web-ext-artifacts/*' -x '*.DS_Store' -x '.git/*'
+```
+
+Include this reviewer note in the AMO submission form:
+
+> Run `npm ci && npm run build:firefox` to reproduce the extension. Node version is in `.nvmrc` (22.14.0).
+
+### Versioning
+
+Before publishing a new release, bump the version in all three files:
+
+- `package.json`
+- `manifest.json`
+- `manifest.firefox.json`
