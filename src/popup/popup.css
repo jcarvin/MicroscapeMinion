@@ -219,8 +219,22 @@ button:hover { filter: brightness(1.1); }
 
 .eta-group {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
+}
+
+.eta-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+
+.calibrating-note {
+  color: var(--muted);
+  font-size: 10px;
+  opacity: 0.72;
+  white-space: nowrap;
 }
 
 .eta-tooltip {

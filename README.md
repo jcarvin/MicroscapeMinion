@@ -101,6 +101,12 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.7
+
+- Fix bank-trip ETA accounting so in-progress banking and travel are not charged as a future trip.
+- Extend ETA warmup to 5 minutes and show a subtle live `Calibrating...` countdown on warming ETAs.
+- Clear goal tracking when switching work activities while preserving warmed goal calibration when updating the same goal item.
+
 ### v0.1.6
 
 - Improve ETA calibration with warmed observed rates for goal accumulation, material runout, skill levels, and combat consumable depletion.

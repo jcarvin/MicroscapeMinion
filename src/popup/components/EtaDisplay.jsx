@@ -6,9 +6,12 @@ export default function EtaDisplay({
   bankTrips = 0,
   doneLabel = 'Done!',
   complete = null,
+  warmupRemainingMs = 0,
 }) {
   const anchorRef = useRef(null);
+  const warmupAnchorRef = useRef(null);
   const [displayMs, setDisplayMs] = useState(etaMs);
+  const [displayWarmupMs, setDisplayWarmupMs] = useState(warmupRemainingMs);
 
   // Re-anchor whenever the upstream etaMs value changes
   useEffect(() => {
@@ -20,16 +23,34 @@ export default function EtaDisplay({
     setDisplayMs(etaMs);
   }, [etaMs]);
 
+  useEffect(() => {
+    if (warmupRemainingMs != null && warmupRemainingMs > 0) {
+      warmupAnchorRef.current = { warmupRemainingMs, at: Date.now() };
+    } else {
+      warmupAnchorRef.current = null;
+    }
+    setDisplayWarmupMs(warmupRemainingMs ?? 0);
+  }, [warmupRemainingMs]);
+
   // Tick every second while there's an active anchor
   useEffect(() => {
-    if (etaMs == null || etaMs <= 0) return;
+    if ((etaMs == null || etaMs <= 0) && (!warmupRemainingMs || warmupRemainingMs <= 0)) return;
     const id = setInterval(() => {
-      if (!anchorRef.current) return;
-      const remaining = Math.max(0, anchorRef.current.etaMs - (Date.now() - anchorRef.current.at));
-      setDisplayMs(remaining);
+      const now = Date.now();
+      if (anchorRef.current) {
+        const remaining = Math.max(0, anchorRef.current.etaMs - (now - anchorRef.current.at));
+        setDisplayMs(remaining);
+      }
+      if (warmupAnchorRef.current) {
+        const remaining = Math.max(
+          0,
+          warmupAnchorRef.current.warmupRemainingMs - (now - warmupAnchorRef.current.at)
+        );
+        setDisplayWarmupMs(remaining);
+      }
     }, 1000);
     return () => clearInterval(id);
-  }, [etaMs]);
+  }, [etaMs, warmupRemainingMs]);
 
   if (displayMs == null) return <span className="eta-label">ETA calibrating…</span>;
   if (displayMs <= 0) {
@@ -44,5 +65,12 @@ export default function EtaDisplay({
     ? ` (+${bankTrips} bank trip${bankTrips > 1 ? 's' : ''})`
     : '';
 
-  return <span className="eta-label">ETA {formatDuration(displayMs)}{tripNote}</span>;
+  return (
+    <span className="eta-stack">
+      <span className="eta-label">ETA {formatDuration(displayMs)}{tripNote}</span>
+      {displayWarmupMs > 0 && (
+        <span className="calibrating-note">Calibrating... {formatDuration(displayWarmupMs)}</span>
+      )}
+    </span>
+  );
 }

@@ -102,4 +102,19 @@ describe('GoalSection', () => {
     await user.click(screen.getByText('Clear goal'));
     expect(clearGoal).toHaveBeenCalled();
   });
+
+  it('shows calibration countdown for warming goal ETA', () => {
+    render(
+      <GoalSection
+        producibleItems={singleItem}
+        goalStatus={{
+          count: 10,
+          goal: { itemId: 'woodLog', itemName: 'Wood Log', targetCount: 50 },
+          eta: { totalMs: 120000 },
+          warmupRemainingMs: 300000,
+        }}
+      />
+    );
+    expect(screen.getByText('Calibrating... 5m 0s')).toBeInTheDocument();
+  });
 });

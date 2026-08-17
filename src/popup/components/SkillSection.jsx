@@ -100,6 +100,7 @@ export default function SkillSection({ skillLevelStatus, skillNotifyTarget, onSe
             etaMs={eta.etaMs ?? null}
             bankTrips={eta.bankTrips ?? 0}
             doneLabel="Now"
+            warmupRemainingMs={eta.warmupRemainingMs ?? 0}
           />
           <EtaTooltip />
         </span>

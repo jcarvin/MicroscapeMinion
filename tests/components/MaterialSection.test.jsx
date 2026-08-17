@@ -85,6 +85,17 @@ describe('MaterialSection', () => {
     expect(screen.queryByText(/for Lv/)).not.toBeInTheDocument();
   });
 
+  it('shows calibration countdown for warming material ETA', () => {
+    render(
+      <MaterialSection
+        runoutStatus={{ ...baseRunout, warmupRemainingMs: 300000 }}
+        selectedSkillEta={null}
+        xpPerCycle={4}
+      />
+    );
+    expect(screen.getByText('Calibrating... 5m 0s')).toBeInTheDocument();
+  });
+
   it('works correctly with big bones (xpPerCycle 12)', () => {
     render(
       <MaterialSection

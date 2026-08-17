@@ -23,10 +23,10 @@ const RATE_SAMPLE_LIMIT = 1000;
 const ETA_DEBUG_LOG_LIMIT = 2000;
 const ETA_DEBUG_LOG_VERSION = 1;
 const TICK_SAMPLE_LIMIT = 100;
-// Rate-based ETA: 2-minute warmup before switching from cycle-based fallback.
+// Rate-based ETA: 5-minute warmup before switching from cycle-based fallback.
 // After a 5-minute gap with no samples, the window resets so idle time isn't
 // counted in the elapsed denominator.
-const RATE_WARMUP_MS = 120_000;
+const RATE_WARMUP_MS = 300_000;
 const GAP_RESET_MS = 300_000;
 const ETA_CALIBRATION_CACHE_VERSION = 3;
 const ETA_CALIBRATION_CACHE_KEY = 'etaCalibrationCache';
@@ -156,10 +156,22 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
 
   switch (msg?.type) {
     case 'SET_GOAL':
-      goal = msg.goal ?? null;
+      {
+        const nextGoal = msg.goal ?? null;
+        const preserveGoalCalibration = sameGoalItem(goal, nextGoal);
+        const currentCount = nextGoal
+          ? (getGoalCount(nextGoal.itemName, nextGoal.itemId) ?? 0)
+          : null;
+
+        goal = nextGoal;
+        if (!preserveGoalCalibration) goalRateSamples = {};
+        goalHighWaterMark = goal
+          ? preserveGoalCalibration
+            ? Math.max(goalHighWaterMark ?? currentCount ?? 0, currentCount ?? 0)
+            : currentCount
+          : null;
+      }
       goalNotifiedAt = null;
-      goalRateSamples = {};
-      goalHighWaterMark = goal ? (getGoalCount(goal.itemName, goal.itemId) ?? 0) : null;
       chrome.storage.session.set({ goal });
       respond({ ok: true });
       break;
@@ -209,7 +221,18 @@ function handleServerFrame(frame) {
 
   mirroredState = applyPatch(mirroredState, frame.args[0]);
   const newAct = mirroredState.me?.activity;
+  // Snapshot the previous work activity ID before rememberWorkActivity updates it
+  const prevWorkActId = getActivityId(lastWorkActivity);
   rememberWorkActivity(newAct);
+  // Clear goal when the user switches to a different work activity
+  const newWorkActId = getActivityId(getEtaActivity(newAct));
+  if (goal && prevWorkActId !== null && newWorkActId !== null && newWorkActId !== prevWorkActId) {
+    goal = null;
+    goalNotifiedAt = null;
+    goalRateSamples = {};
+    goalHighWaterMark = null;
+    chrome.storage.session.set({ goal: null });
+  }
   trackXpGain(prevAct, newAct, prevExp, mirroredState.me?.exp);
   trackDropGain(prevAct, newAct, prevMe, mirroredState.me);
   trackCombatConsumables(prevAct, newAct, prevMe, mirroredState.me);
@@ -641,6 +664,7 @@ function pushEtaDebugEntry({
       projectedTrips: generatedBank?.bankTrips ?? null,
       projectedOverheadMs: generatedBank?.bankOverheadMs ?? null,
       tripMs: actId ? bankTripMs(zoneId, effectiveTickMsForActivity(actId)) : null,
+      bankingPhaseActive: liveAct?.type === 'banking' || liveAct?.type === 'travel',
     },
     runout: info ? {
       itemId: info.itemId,
@@ -1143,6 +1167,12 @@ function rateFromSamples(samples) {
   return delta / elapsed; // positive for accumulation, negative for consumption
 }
 
+function warmupRemainingMs(samples, now = Date.now()) {
+  if (samples.length === 0) return RATE_WARMUP_MS;
+  const oldest = samples[0];
+  return Math.max(0, RATE_WARMUP_MS - (now - oldest.at));
+}
+
 function pushRateSample(samples, value, now, workMs) {
   const last = samples[samples.length - 1];
   if (last && now - last.at > GAP_RESET_MS) {
@@ -1367,6 +1397,16 @@ function getGoalCountForMe(me, g) {
   return Math.max(invCount, lbCount);
 }
 
+function sameGoalItem(a, b) {
+  if (!a || !b) return false;
+  const itemKey = (g) => (g.itemId ?? g.itemName ?? '')
+    .toLowerCase()
+    .replace(/[\s_-]/g, '');
+  const aKey = itemKey(a);
+  const bKey = itemKey(b);
+  return aKey !== '' && aKey === bKey;
+}
+
 function trackRunoutConsumption(prevAct, newAct, prevMe, newMe) {
   const act = isWorkActivityId(getActivityId(newAct)) ? newAct : prevAct;
   const actId = getActivityId(act);
@@ -1438,8 +1478,15 @@ function producedItemsPerCycle(def) {
 
 function bankTripsForGeneratedItems(generatedItems) {
   if (generatedItems <= 0) return 0;
+  // During travel/banking the current trip is already in progress — treat the
+  // loot bag as empty so the in-progress trip is not double-counted.
+  const liveAct = mirroredState.me?.activity ?? null;
+  const currentLootBag =
+    liveAct?.type === 'banking' || liveAct?.type === 'travel'
+      ? 0
+      : lootBagTotal();
   return Math.floor(
-    (lootBagTotal() + generatedItems) / BANK_TRIGGER_ITEM_COUNT
+    (currentLootBag + generatedItems) / BANK_TRIGGER_ITEM_COUNT
   );
 }
 
@@ -1480,6 +1527,7 @@ function estimateGeneratedItemsForActiveMs(activeMs, def, durationInfo) {
 // ── Status snapshot (for popup) ───────────────────────────────────────────────
 
 function buildStatus() {
+  const now = Date.now();
   const me = mirroredState.me;
   const liveAct = me?.activity ?? null;
   const etaAct = getEtaActivity(liveAct);
@@ -1505,7 +1553,16 @@ function buildStatus() {
     const eta = etaActId
       ? computeGoalEta(goal, effectiveCount, etaActId, etaAct, etaActIsLive)
       : null;
-    goalStatus = { goal, count, eta, chanceBased: eta?.chanceBased === true };
+    const isChanceBased = eta?.chanceBased === true;
+    const isRateBased = eta?.rateBased === true;
+    const goalSamples = etaActId ? (goalRateSamples[etaActId] ?? []) : [];
+    goalStatus = {
+      goal, count, eta,
+      chanceBased: isChanceBased,
+      warmupRemainingMs: !isChanceBased && !isRateBased && eta && eta !== 0
+        ? warmupRemainingMs(goalSamples, now)
+        : 0,
+    };
   }
 
   let runoutStatus = null;
@@ -1564,6 +1621,7 @@ function buildStatus() {
         cycleDurationMs: durationInfo.durationMs,
         observedCycleDurationMs: durationInfo.observedDurationMs,
         rateBased: consumptionRate !== null,
+        warmupRemainingMs: consumptionRate !== null ? 0 : warmupRemainingMs(runoutSamples, now),
         runoutSampleCount: runoutSamples.length,
         cycleSamples: durationInfo.sampleCount,
         calibrated: durationInfo.calibrated,
@@ -1729,7 +1787,15 @@ function estimateGoalPlan({
 function bankTripsBeforeGoalComplete(generatedItems) {
   if (generatedItems <= 0) return 0;
 
-  const lootBagItems = lootBagTotal();
+  // During travel/banking the current trip is already in progress — treat the
+  // loot bag as empty so the in-progress trip is not charged again as a future
+  // trip. The real bank time is already counting down in wall-clock time.
+  const liveAct = mirroredState.me?.activity ?? null;
+  const lootBagItems =
+    liveAct?.type === 'banking' || liveAct?.type === 'travel'
+      ? 0
+      : lootBagTotal();
+
   const freeSlotsBeforeFirstTrip = Math.max(
     0,
     BANK_TRIGGER_ITEM_COUNT - lootBagItems
@@ -1750,6 +1816,7 @@ function bankTripsBeforeGoalComplete(generatedItems) {
 function computeSkillLevelEtas(actId, skill, act) {
   const def = ACTIVITY_DEFS[actId];
   const xpPerCycle = def?.xpPerCycle ?? 0;
+  const xpSamples = xpRateSamples[xpRateKey(actId, skill)]?.samples ?? [];
   const observedRate = observedXpPerMs(actId, skill);
   const mayGainXp = xpPerCycle > 0 || observedRate || isCombatActivity(act);
   if (!mayGainXp || XP_TABLE.length < 3) return null;
@@ -1799,6 +1866,7 @@ function computeSkillLevelEtas(actId, skill, act) {
       etaMs,
       bankTrips,
       bankOverheadMs,
+      warmupRemainingMs: observedRate ? 0 : warmupRemainingMs(xpSamples),
     });
   }
 

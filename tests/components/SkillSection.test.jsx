@@ -73,4 +73,17 @@ describe('SkillSection', () => {
     await user.click(screen.getByRole('checkbox'));
     expect(clearSkillNotify).toHaveBeenCalled();
   });
+
+  it('shows calibration countdown for warming skill ETA', () => {
+    render(
+      <SkillSection
+        skillLevelStatus={{
+          ...skillStatus,
+          etas: [{ ...skillStatus.etas[0], warmupRemainingMs: 300000 }],
+        }}
+        skillNotifyTarget={null}
+      />
+    );
+    expect(screen.getByText('Calibrating... 5m 0s')).toBeInTheDocument();
+  });
 });

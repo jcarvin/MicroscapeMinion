@@ -29,7 +29,7 @@ export default function MaterialSection({ runoutStatus, selectedSkillEta, xpPerC
       <div className="runout-row">
         <span>{label}{cycles}</span>
         <span className="eta-group">
-          <EtaDisplay etaMs={etaMs} doneLabel="Out now" />
+          <EtaDisplay etaMs={etaMs} doneLabel="Out now" warmupRemainingMs={rs.warmupRemainingMs ?? 0} />
           <EtaTooltip />
         </span>
       </div>

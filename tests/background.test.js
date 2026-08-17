@@ -193,7 +193,13 @@ describe('background activity definitions', () => {
 
     vi.setSystemTime(1_000);
     sendServerUpdate({ me: { inventory: { ironOre: [0, 1] } } });
-    vi.setSystemTime(121_000);
+
+    vi.setSystemTime(61_000);
+    const warmingStatus = __test.buildStatus();
+    expect(warmingStatus.goalStatus.eta.rateBased).toBeFalsy();
+    expect(warmingStatus.goalStatus.warmupRemainingMs).toBe(240_000);
+
+    vi.setSystemTime(301_000);
     sendServerUpdate({ me: { inventory: { ironOre: [1, 5] } } });
 
     const status = __test.buildStatus();
@@ -205,25 +211,80 @@ describe('background activity definitions', () => {
       sampleCount: 2,
       bankTrips: 7,
       bankOverheadMs: 350_000,
-      totalMs: 6_200_000,
+      totalMs: 14_975_000,
     });
+    expect(status.goalStatus.warmupRemainingMs).toBe(0);
     expect(status.etaDebugLog[0]).toMatchObject({
       phase: 'active',
       goal: {
         itemId: 'ironOre',
         currentCount: 5,
         model: 'rate',
-        etaMs: 6_200_000,
+        etaMs: 14_975_000,
         samples: {
           source: 'inventoryChanges',
           count: 2,
-          wallSpanMs: 120_000,
-          workSpanMs: 120_000,
+          wallSpanMs: 300_000,
+          workSpanMs: 300_000,
         },
       },
       bank: {
         lootBagItems: 0,
         triggerItemCount: 25,
+      },
+    });
+  });
+
+  it('preserves warmed goal rate samples when updating the same goal item', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'mine-iron': {
+          durationMs: 32000,
+          xpPerCycle: 10,
+          inventoryChanges: { ironOre: 1 },
+        },
+      },
+      state: {
+        me: {
+          activity: { skill: 'mining', activity: 'mine-iron', remaining: 1 },
+          exp: { mining: 0 },
+          inventory: { ironOre: 0 },
+          lootBag: {},
+        },
+      },
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOAL',
+      goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 200 },
+    });
+
+    vi.setSystemTime(1_000);
+    sendServerUpdate({ me: { inventory: { ironOre: [0, 1] } } });
+    vi.setSystemTime(301_000);
+    sendServerUpdate({ me: { inventory: { ironOre: [1, 5] } } });
+
+    expect(__test.buildStatus().goalStatus).toMatchObject({
+      warmupRemainingMs: 0,
+      eta: {
+        rateBased: true,
+        sampleCount: 2,
+      },
+    });
+
+    sendRuntimeMessage({
+      type: 'SET_GOAL',
+      goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 250 },
+    });
+
+    expect(__test.buildStatus().goalStatus).toMatchObject({
+      goal: { targetCount: 250 },
+      warmupRemainingMs: 0,
+      eta: {
+        rateBased: true,
+        sampleCount: 2,
       },
     });
   });
@@ -267,7 +328,7 @@ describe('background activity definitions', () => {
     let status = __test.buildStatus();
     expect(status.goalStatus.count).toBe(1);
 
-    vi.setSystemTime(121_000);
+    vi.setSystemTime(301_000);
     sendServerUpdate({
       me: {
         inventory: { ironOre: [1, 5] },
@@ -279,7 +340,7 @@ describe('background activity definitions', () => {
     expect(status.goalStatus.count).toBe(5);
     expect(status.goalStatus.eta.sampleCount).toBe(2);
 
-    vi.setSystemTime(155_000);
+    vi.setSystemTime(335_000);
     sendServerUpdate({
       me: {
         activity: [miningAct, { type: 'banking' }],
@@ -290,7 +351,7 @@ describe('background activity definitions', () => {
     status = __test.buildStatus();
     expect(status.goalStatus.count).toBe(5);
 
-    vi.setSystemTime(180_000);
+    vi.setSystemTime(360_000);
     sendServerUpdate({
       me: {
         activity: [{ type: 'banking' }, miningAct],
@@ -331,16 +392,16 @@ describe('background activity definitions', () => {
       goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 200 },
     });
 
-    // Mine 10 ores over 3 minutes (past warmup) — activity stays mining
+    // Mine 10 ores over 5 minutes (past warmup) — activity stays mining
     vi.setSystemTime(1_000);
     sendServerUpdate({ me: { lootBag: { ironOre: [5] } } });
-    vi.setSystemTime(121_000);
+    vi.setSystemTime(301_000);
     sendServerUpdate({ me: { lootBag: { ironOre: [5, 10] } } }); // hwm = 10
 
     // Bank trip simulation: count drops while in banking (non-work) activity
-    vi.setSystemTime(155_000);
+    vi.setSystemTime(335_000);
     sendServerUpdate({ me: { activity: [miningAct, { type: 'banking' }], lootBag: { ironOre: [10, 0] } } });
-    vi.setSystemTime(165_000);
+    vi.setSystemTime(345_000);
     // Return to mining with 2 new ores — activity back to work
     sendServerUpdate({ me: { activity: [{ type: 'banking' }, miningAct], lootBag: { ironOre: [2] } } });
 
@@ -353,6 +414,113 @@ describe('background activity definitions', () => {
     // Verify we're using hwm (190 remaining), not the inflated live count (198 remaining)
     expect(status.goalStatus.eta.totalMs).toBeLessThan(198 * 32_000 + 7 * 50_000); // < live-count ETA
     expect(status.goalStatus.eta.totalMs).toBeGreaterThan(185 * 32_000);            // clearly non-zero
+  });
+
+  it('does not charge an extra bank trip when travel/banking is already in progress', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    __test.resetTestState();
+    const smeltAct = { skill: 'smithing', activity: 'smelt-iron', remaining: 1 };
+    __test.setTestState({
+      activityDefs: {
+        'smelt-iron': {
+          durationMs: 30_000,
+          xpPerCycle: 12,
+          inventoryChanges: { ironBar: 1 },
+        },
+      },
+      state: {
+        me: {
+          activity: smeltAct,
+          exp: { smithing: 0 },
+          inventory: { ironBar: 34 },
+          lootBag: {},
+        },
+      },
+      lastWorkAct: smeltAct,
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOAL',
+      goal: { itemName: 'Iron Bar', itemId: 'ironBar', targetCount: 55 },
+    });
+
+    // Before banking: lootBag empty, 21 bars remaining.
+    // generatedItems=21, freeSlotsBeforeFirstTrip=25 → 21≤25 → bankTrips=0
+    const etaBefore = __test.buildStatus().goalStatus.eta;
+    expect(etaBefore.bankTrips).toBe(0);
+    const totalMsBefore = etaBefore.totalMs;
+
+    // Loot bag fills with other items (not ironBar) and banking starts.
+    // The current trip is in progress — must NOT add an extra bankTripMs.
+    sendServerUpdate({
+      me: {
+        activity: [smeltAct, { type: 'banking' }],
+        lootBag: { ironOre: [0, 25] },
+      },
+    });
+    const etaDuring = __test.buildStatus().goalStatus.eta;
+    expect(etaDuring.bankTrips).toBe(0);
+    expect(etaDuring.totalMs).toBe(totalMsBefore);
+
+    // Banking completes: loot bag cleared, back to smelting.
+    sendServerUpdate({
+      me: {
+        activity: [{ type: 'banking' }, smeltAct],
+        lootBag: { ironOre: [25, 0] },
+      },
+    });
+    const etaAfter = __test.buildStatus().goalStatus.eta;
+    expect(etaAfter.bankTrips).toBe(0);
+    expect(etaAfter.totalMs).toBe(totalMsBefore);
+  });
+
+  it('keeps the goal during banking but clears it when the work activity changes', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+    const miningAct = { skill: 'mining', activity: 'mine-iron', remaining: 1 };
+    const smeltAct = { skill: 'smithing', activity: 'smelt-iron', remaining: 1 };
+    __test.setTestState({
+      activityDefs: {
+        'mine-iron': {
+          durationMs: 32_000,
+          xpPerCycle: 10,
+          inventoryChanges: { ironOre: 1 },
+        },
+        'smelt-iron': {
+          durationMs: 30_000,
+          xpPerCycle: 12,
+          inventoryChanges: { ironBar: 1 },
+        },
+      },
+      state: {
+        me: {
+          activity: miningAct,
+          exp: { mining: 0 },
+          inventory: { ironOre: 5, ironBar: 0 },
+          lootBag: {},
+        },
+      },
+      lastWorkAct: miningAct,
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOAL',
+      goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 20 },
+    });
+
+    sendServerUpdate({
+      me: {
+        activity: [miningAct, { type: 'banking' }],
+      },
+    });
+    expect(__test.buildStatus().goalStatus.goal.itemId).toBe('ironOre');
+
+    sendServerUpdate({
+      me: {
+        activity: [{ type: 'banking' }, smeltAct],
+      },
+    });
+    expect(__test.buildStatus().goalStatus).toBeNull();
+    expect(chrome.storage.session.set).toHaveBeenCalledWith({ goal: null });
   });
 
   it('clears goal rate samples when banked count slips below last sample (missed banking transition)', async () => {
@@ -386,23 +554,23 @@ describe('background activity definitions', () => {
     // Mine 10 ores past warmup → 2 samples pushed with values 5 and 10
     vi.setSystemTime(1_000);
     sendServerUpdate({ me: { lootBag: { ironOre: [5] } } });
-    vi.setSystemTime(121_000);
+    vi.setSystemTime(301_000);
     sendServerUpdate({ me: { lootBag: { ironOre: [5, 10] } } });
 
     // Bank trip: count drops to 0 during non-work (banking) activity —
     // the existing newCount<prevCount clear branch is skipped because both
     // prevAct and newAct resolve to non-work IDs on the banking→travel tick.
-    vi.setSystemTime(155_000);
+    vi.setSystemTime(335_000);
     sendServerUpdate({ me: { activity: [miningAct, { type: 'banking' }], lootBag: { ironOre: [10, 0] } } });
-    vi.setSystemTime(165_000);
+    vi.setSystemTime(345_000);
     sendServerUpdate({ me: { activity: [{ type: 'banking' }, { type: 'travel' }] } });
-    vi.setSystemTime(175_000);
+    vi.setSystemTime(355_000);
     // Return to mining — activity becomes work again; lootBag still 0
     sendServerUpdate({ me: { activity: [{ type: 'travel' }, miningAct] } });
 
     // First ore after bank trip: count = 1, which is below last sample value (10).
     // The monotonic check should clear stale samples so a bad rate isn't used.
-    vi.setSystemTime(180_000);
+    vi.setSystemTime(360_000);
     sendServerUpdate({ me: { lootBag: { ironOre: [1] } } });
 
     const status = __test.buildStatus();
@@ -432,7 +600,7 @@ describe('background activity definitions', () => {
 
     vi.setSystemTime(1_000);
     sendServerUpdate({ me: { inventory: { clay: [100, 99] } } });
-    vi.setSystemTime(121_000);
+    vi.setSystemTime(301_000);
     sendServerUpdate({ me: { inventory: { clay: [99, 89] } } });
 
     expect(__test.buildStatus().runoutStatus).toMatchObject({
@@ -442,7 +610,7 @@ describe('background activity definitions', () => {
       runoutSampleCount: 2,
       bankTrips: 3,
       bankOverheadMs: 150_000,
-      etaMs: 1_218_000,
+      etaMs: 2_820_000,
     });
   });
 
@@ -464,20 +632,20 @@ describe('background activity definitions', () => {
 
     vi.setSystemTime(1_000);
     sendServerUpdate({ me: { exp: { piety: [0, 10] } } });
-    vi.setSystemTime(121_000);
+    vi.setSystemTime(301_000);
     sendServerUpdate({ me: { exp: { piety: [10, 50] } } });
 
     expect(__test.buildStatus().skillLevelStatus).toMatchObject({
       skill: 'piety',
       currentXp: 50,
-      observedXpPerMs: 40 / 120_000,
+      observedXpPerMs: 40 / 300_000,
     });
     expect(__test.buildStatus().skillLevelStatus.etas[0]).toMatchObject({
       targetLevel: 2,
       xpNeeded: 780,
-      bankTrips: 5,
-      bankOverheadMs: 250_000,
-      etaMs: 2_590_000,
+      bankTrips: 14,
+      bankOverheadMs: 700_000,
+      etaMs: 6_550_000,
     });
   });
 
@@ -504,14 +672,14 @@ describe('background activity definitions', () => {
 
     vi.setSystemTime(1_000);
     sendServerUpdate({ me: { inventory: { potion: [10, 9] } } });
-    vi.setSystemTime(121_000);
+    vi.setSystemTime(301_000);
     sendServerUpdate({ me: { inventory: { potion: [9, 7] } } });
 
     expect(__test.buildStatus().combatConsumables).toEqual([
-      { itemId: 'potion', currentCount: 7, etaMs: 420_000, sampleCount: 2 },
+      { itemId: 'potion', currentCount: 7, etaMs: 1_050_000, sampleCount: 2 },
     ]);
 
-    vi.setSystemTime(122_000);
+    vi.setSystemTime(302_000);
     sendServerUpdate({ me: { inventory: { potion: [7, 20] } } });
 
     expect(__test.buildStatus().combatConsumables).toBeNull();
