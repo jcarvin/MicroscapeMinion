@@ -43,6 +43,12 @@ describe('EtaDisplay', () => {
     expect(screen.getByText('Done!')).toBeInTheDocument();
   });
 
+  it('does not show doneLabel at zero when completion is explicitly false', () => {
+    render(<EtaDisplay etaMs={0} complete={false} />);
+    expect(screen.getByText('ETA <1s')).toBeInTheDocument();
+    expect(screen.queryByText('Done!')).not.toBeInTheDocument();
+  });
+
   it('appends singular bank trip note', () => {
     render(<EtaDisplay etaMs={60000} bankTrips={1} />);
     expect(screen.getByText('ETA 1m 0s (+1 bank trip)')).toBeInTheDocument();

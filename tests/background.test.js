@@ -46,12 +46,31 @@ async function loadBackground({ cachedDefs = null, seed = {}, storageSet } = {})
   return mod;
 }
 
+function runtimeListener() {
+  return globalThis.chrome.runtime.onMessage.addListener.mock.calls[0][0];
+}
+
+function sendRuntimeMessage(msg) {
+  const respond = vi.fn();
+  runtimeListener()(msg, { tab: { id: 1 } }, respond);
+  return respond;
+}
+
+function sendServerUpdate(delta) {
+  return sendRuntimeMessage({
+    __mm: true,
+    direction: 'server',
+    frame: { event: 'update', args: [delta] },
+  });
+}
+
 describe('background activity definitions', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -140,7 +159,361 @@ describe('background activity definitions', () => {
     expect(status.skillLevelStatus.etas[0]).toMatchObject({
       targetLevel: 2,
       xpNeeded: 830,
-      etaMs: 3328000,
+      etaMs: 3728000,
+      bankTrips: 8,
+      bankOverheadMs: 400000,
     });
+  });
+
+  it('uses warmed observed accumulation rate for material goal ETA', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'mine-iron': {
+          durationMs: 32000,
+          xpPerCycle: 10,
+          inventoryChanges: { ironOre: 1 },
+        },
+      },
+      state: {
+        me: {
+          activity: { skill: 'mining', activity: 'mine-iron', remaining: 1 },
+          exp: { mining: 0 },
+          inventory: { ironOre: 0 },
+          lootBag: {},
+        },
+      },
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOAL',
+      goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 200 },
+    });
+
+    vi.setSystemTime(1_000);
+    sendServerUpdate({ me: { inventory: { ironOre: [0, 1] } } });
+    vi.setSystemTime(121_000);
+    sendServerUpdate({ me: { inventory: { ironOre: [1, 5] } } });
+
+    const status = __test.buildStatus();
+
+    expect(status.etaDebugLogVersion).toBe(1);
+    expect(status.goalStatus.count).toBe(5);
+    expect(status.goalStatus.eta).toMatchObject({
+      rateBased: true,
+      sampleCount: 2,
+      bankTrips: 7,
+      bankOverheadMs: 350_000,
+      totalMs: 6_200_000,
+    });
+    expect(status.etaDebugLog[0]).toMatchObject({
+      phase: 'active',
+      goal: {
+        itemId: 'ironOre',
+        currentCount: 5,
+        model: 'rate',
+        etaMs: 6_200_000,
+        samples: {
+          source: 'inventoryChanges',
+          count: 2,
+          wallSpanMs: 120_000,
+          workSpanMs: 120_000,
+        },
+      },
+      bank: {
+        lootBagItems: 0,
+        triggerItemCount: 25,
+      },
+    });
+  });
+
+  it('does not double-count mirrored inventory and loot bag goal progress', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    __test.resetTestState();
+    const miningAct = { skill: 'mining', activity: 'mine-iron', remaining: 1 };
+    __test.setTestState({
+      activityDefs: {
+        'mine-iron': {
+          durationMs: 32000,
+          xpPerCycle: 10,
+          inventoryChanges: { ironOre: 1 },
+        },
+      },
+      state: {
+        me: {
+          activity: miningAct,
+          exp: { mining: 0 },
+          inventory: { ironOre: 0 },
+          lootBag: {},
+        },
+      },
+      lastWorkAct: miningAct,
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOAL',
+      goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 20 },
+    });
+
+    vi.setSystemTime(1_000);
+    sendServerUpdate({
+      me: {
+        inventory: { ironOre: [0, 1] },
+        lootBag: { ironOre: [1] },
+      },
+    });
+
+    let status = __test.buildStatus();
+    expect(status.goalStatus.count).toBe(1);
+
+    vi.setSystemTime(121_000);
+    sendServerUpdate({
+      me: {
+        inventory: { ironOre: [1, 5] },
+        lootBag: { ironOre: [1, 5] },
+      },
+    });
+
+    status = __test.buildStatus();
+    expect(status.goalStatus.count).toBe(5);
+    expect(status.goalStatus.eta.sampleCount).toBe(2);
+
+    vi.setSystemTime(155_000);
+    sendServerUpdate({
+      me: {
+        activity: [miningAct, { type: 'banking' }],
+        lootBag: { ironOre: [5, 0] },
+      },
+    });
+
+    status = __test.buildStatus();
+    expect(status.goalStatus.count).toBe(5);
+
+    vi.setSystemTime(180_000);
+    sendServerUpdate({
+      me: {
+        activity: [{ type: 'banking' }, miningAct],
+        inventory: { ironOre: [5, 6] },
+        lootBag: { ironOre: [0, 1] },
+      },
+    });
+
+    status = __test.buildStatus();
+    expect(status.goalStatus.count).toBe(6);
+  });
+
+  it('holds remaining stable across a bank trip (high-water mark)', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    __test.resetTestState();
+    const miningAct = { skill: 'mining', activity: 'mine-iron', remaining: 1 };
+    __test.setTestState({
+      activityDefs: {
+        'mine-iron': {
+          durationMs: 32000,
+          xpPerCycle: 10,
+          inventoryChanges: { ironOre: 1 },
+        },
+      },
+      state: {
+        me: {
+          activity: miningAct,
+          exp: { mining: 0 },
+          inventory: { ironOre: 0 },
+          lootBag: {},
+        },
+      },
+      lastWorkAct: miningAct,
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOAL',
+      goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 200 },
+    });
+
+    // Mine 10 ores over 3 minutes (past warmup) — activity stays mining
+    vi.setSystemTime(1_000);
+    sendServerUpdate({ me: { lootBag: { ironOre: [5] } } });
+    vi.setSystemTime(121_000);
+    sendServerUpdate({ me: { lootBag: { ironOre: [5, 10] } } }); // hwm = 10
+
+    // Bank trip simulation: count drops while in banking (non-work) activity
+    vi.setSystemTime(155_000);
+    sendServerUpdate({ me: { activity: [miningAct, { type: 'banking' }], lootBag: { ironOre: [10, 0] } } });
+    vi.setSystemTime(165_000);
+    // Return to mining with 2 new ores — activity back to work
+    sendServerUpdate({ me: { activity: [{ type: 'banking' }, miningAct], lootBag: { ironOre: [2] } } });
+
+    // Remaining should use high-water mark (10), not live count (2).
+    // ETA = (200 - 10) = 190 remaining, not inflated (200 - 2) = 198.
+    const status = __test.buildStatus();
+    expect(status.goalStatus.count).toBe(2);  // live inventory+lootBag shown to user
+    // hwm-based ETA: 190 cycles × 32000ms + 7 bank trips × 50000ms = 6,430,000ms
+    // live-count ETA: 198 cycles × 32000ms + 7 bank trips × 50000ms = 6,686,000ms
+    // Verify we're using hwm (190 remaining), not the inflated live count (198 remaining)
+    expect(status.goalStatus.eta.totalMs).toBeLessThan(198 * 32_000 + 7 * 50_000); // < live-count ETA
+    expect(status.goalStatus.eta.totalMs).toBeGreaterThan(185 * 32_000);            // clearly non-zero
+  });
+
+  it('clears goal rate samples when banked count slips below last sample (missed banking transition)', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    __test.resetTestState();
+    const miningAct = { skill: 'mining', activity: 'mine-iron', remaining: 1 };
+    __test.setTestState({
+      activityDefs: {
+        'mine-iron': {
+          durationMs: 32000,
+          xpPerCycle: 10,
+          inventoryChanges: { ironOre: 1 },
+        },
+      },
+      state: {
+        me: {
+          activity: miningAct,
+          exp: { mining: 0 },
+          inventory: { ironOre: 0 },
+          lootBag: {},
+        },
+      },
+      lastWorkAct: miningAct,
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOAL',
+      goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 200 },
+    });
+
+    // Mine 10 ores past warmup → 2 samples pushed with values 5 and 10
+    vi.setSystemTime(1_000);
+    sendServerUpdate({ me: { lootBag: { ironOre: [5] } } });
+    vi.setSystemTime(121_000);
+    sendServerUpdate({ me: { lootBag: { ironOre: [5, 10] } } });
+
+    // Bank trip: count drops to 0 during non-work (banking) activity —
+    // the existing newCount<prevCount clear branch is skipped because both
+    // prevAct and newAct resolve to non-work IDs on the banking→travel tick.
+    vi.setSystemTime(155_000);
+    sendServerUpdate({ me: { activity: [miningAct, { type: 'banking' }], lootBag: { ironOre: [10, 0] } } });
+    vi.setSystemTime(165_000);
+    sendServerUpdate({ me: { activity: [{ type: 'banking' }, { type: 'travel' }] } });
+    vi.setSystemTime(175_000);
+    // Return to mining — activity becomes work again; lootBag still 0
+    sendServerUpdate({ me: { activity: [{ type: 'travel' }, miningAct] } });
+
+    // First ore after bank trip: count = 1, which is below last sample value (10).
+    // The monotonic check should clear stale samples so a bad rate isn't used.
+    vi.setSystemTime(180_000);
+    sendServerUpdate({ me: { lootBag: { ironOre: [1] } } });
+
+    const status = __test.buildStatus();
+    // Only 1 post-reset sample → rate warmup not met → cycle-fallback, not rate model
+    expect(status.goalStatus.eta.rateBased).toBeFalsy();
+  });
+
+  it('uses warmed observed consumption rate for material runout ETA', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'make-soft-clay': {
+          durationMs: 16000,
+          inventoryChanges: { clay: -1, softClay: 1 },
+        },
+      },
+      state: {
+        me: {
+          activity: { skill: 'crafting', activity: 'make-soft-clay', remaining: 1 },
+          inventory: { clay: 100 },
+          lootBag: {},
+        },
+      },
+    });
+
+    vi.setSystemTime(1_000);
+    sendServerUpdate({ me: { inventory: { clay: [100, 99] } } });
+    vi.setSystemTime(121_000);
+    sendServerUpdate({ me: { inventory: { clay: [99, 89] } } });
+
+    expect(__test.buildStatus().runoutStatus).toMatchObject({
+      itemId: 'clay',
+      totalMaterial: 89,
+      rateBased: true,
+      runoutSampleCount: 2,
+      bankTrips: 3,
+      bankOverheadMs: 150_000,
+      etaMs: 1_218_000,
+    });
+  });
+
+  it('uses warmed observed XP rate for skill ETA', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: { 'bury-bones': pietyDef },
+      state: {
+        me: {
+          activity: { skill: 'piety', activity: 'bury-bones', remaining: 1 },
+          exp: { piety: 0 },
+          inventory: { bones: 100 },
+          lootBag: {},
+        },
+      },
+    });
+
+    vi.setSystemTime(1_000);
+    sendServerUpdate({ me: { exp: { piety: [0, 10] } } });
+    vi.setSystemTime(121_000);
+    sendServerUpdate({ me: { exp: { piety: [10, 50] } } });
+
+    expect(__test.buildStatus().skillLevelStatus).toMatchObject({
+      skill: 'piety',
+      currentXp: 50,
+      observedXpPerMs: 40 / 120_000,
+    });
+    expect(__test.buildStatus().skillLevelStatus.etas[0]).toMatchObject({
+      targetLevel: 2,
+      xpNeeded: 780,
+      bankTrips: 5,
+      bankOverheadMs: 250_000,
+      etaMs: 2_590_000,
+    });
+  });
+
+  it('uses warmed observed burn rate for combat consumables and resets on refill', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'fight-rat': {
+          durationMs: 12000,
+          inventoryChanges: {},
+          dropItems: { ratTail: 1 },
+        },
+      },
+      state: {
+        me: {
+          activity: { combatSkill: 'attack', activity: 'fight-rat', mob: 'rat' },
+          inventory: { potion: 10 },
+          lootBag: {},
+        },
+      },
+    });
+
+    vi.setSystemTime(1_000);
+    sendServerUpdate({ me: { inventory: { potion: [10, 9] } } });
+    vi.setSystemTime(121_000);
+    sendServerUpdate({ me: { inventory: { potion: [9, 7] } } });
+
+    expect(__test.buildStatus().combatConsumables).toEqual([
+      { itemId: 'potion', currentCount: 7, etaMs: 420_000, sampleCount: 2 },
+    ]);
+
+    vi.setSystemTime(122_000);
+    sendServerUpdate({ me: { inventory: { potion: [7, 20] } } });
+
+    expect(__test.buildStatus().combatConsumables).toBeNull();
   });
 });

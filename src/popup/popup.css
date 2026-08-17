@@ -531,7 +531,8 @@ button:hover { filter: brightness(1.1); }
 .copy-log-btn:hover { color: var(--text); border-color: var(--accent); }
 .copy-log-btn.copied { color: var(--green); border-color: var(--green); }
 
-#tick-log-pre {
+#tick-log-pre,
+#eta-debug-log-pre {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
