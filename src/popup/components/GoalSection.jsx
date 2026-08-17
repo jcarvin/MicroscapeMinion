@@ -46,6 +46,18 @@ export default function GoalSection({ producibleItems, goalStatus }) {
     }
   }, [goalStatus?.goal?.targetCount]);
 
+  // Reset UI when the background clears the goal (e.g. activity switch)
+  const hadGoalRef = useRef(false);
+  useEffect(() => {
+    if (goalStatus) {
+      hadGoalRef.current = true;
+    } else if (hadGoalRef.current) {
+      hadGoalRef.current = false;
+      setSelectedId(null);
+      setCountValue('');
+    }
+  }, [goalStatus]);
+
   function handleSetGoal() {
     const itemId = selectedId;
     const itemName = itemId
@@ -63,6 +75,7 @@ export default function GoalSection({ producibleItems, goalStatus }) {
   }
 
   const { etaMs, bankTrips } = resolveGoalEta(goalStatus);
+  const warmupRemainingMs = goalStatus?.warmupRemainingMs ?? 0;
   const goalComplete = goalStatus
     ? (goalStatus.count ?? 0) >= goalStatus.goal.targetCount
     : false;
@@ -101,7 +114,12 @@ export default function GoalSection({ producibleItems, goalStatus }) {
           <div className="progress-label">
             <span>{goalStatus.count ?? 0} / {goalStatus.goal.targetCount}</span>
             <span className="eta-group">
-              <EtaDisplay etaMs={etaMs} bankTrips={bankTrips} complete={goalComplete} />
+              <EtaDisplay
+                etaMs={etaMs}
+                bankTrips={bankTrips}
+                complete={goalComplete}
+                warmupRemainingMs={warmupRemainingMs}
+              />
               <EtaTooltip />
             </span>
           </div>

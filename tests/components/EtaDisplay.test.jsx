@@ -58,4 +58,12 @@ describe('EtaDisplay', () => {
     render(<EtaDisplay etaMs={60000} bankTrips={2} />);
     expect(screen.getByText('ETA 1m 0s (+2 bank trips)')).toBeInTheDocument();
   });
+
+  it('shows a live calibration countdown under a positive ETA', () => {
+    render(<EtaDisplay etaMs={60000} warmupRemainingMs={300000} />);
+    expect(screen.getByText('Calibrating... 5m 0s')).toBeInTheDocument();
+
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(screen.getByText('Calibrating... 4m 59s')).toBeInTheDocument();
+  });
 });
