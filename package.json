@@ -1,6 +1,6 @@
 {
   "name": "microscape-minion",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,6 +10,7 @@
     "build:firefox": "vite build --mode firefox",
     "test": "vitest",
     "test:ui": "vitest --ui",
+    "check:release": "node scripts/check-release.js",
     "zip": "npm run zip:chrome",
     "zip:all": "npm run zip:chrome && npm run zip:firefox",
     "zip:chrome": "npm run build:chrome && (cd dist-chrome && mkdir -p ../artifacts && zip -r ../artifacts/microscape-minion-$npm_package_version-chrome.zip . -x '*.DS_Store')",

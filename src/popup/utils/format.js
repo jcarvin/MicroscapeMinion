@@ -1,5 +1,5 @@
 export const ETA_INFO_TITLE =
-  "Estimates are based on average tick rate which is variable depending on latency and updates on every tick. They may not be totally accurate.";
+  "Estimates are based on averages over time. They may not be totally accurate at first but should gain accuracy the longer it runs.";
 
 export function formatDuration(ms) {
   const s = Math.round(ms / 1000);
@@ -77,6 +77,18 @@ export function formatTickEntry(e) {
   const goal =
     e.goalEtaMs != null ? `goal=${(e.goalEtaMs / 1000).toFixed(0)}s` : "goal=?";
   const gbt = e.goalBankTrips != null ? `gbt=${e.goalBankTrips}` : "gbt=?";
+  const gr = e.goalRateBased ? "gr=Y" : "gr=N";
+  const gsm =
+    e.goalSamples != null ? `gsm=${String(e.goalSamples).padStart(2)}` : "gsm=?";
+  const gbo =
+    e.goalBankOverheadMs != null
+      ? `gbo=${(e.goalBankOverheadMs / 1000).toFixed(0)}s`
+      : "gbo=?";
+  const rr = e.runoutRateBased ? "rr=Y" : "rr=N";
+  const rsm =
+    e.runoutSamples != null
+      ? `rsm=${String(e.runoutSamples).padStart(2)}`
+      : "rsm=?";
   const pre = e.pre != null ? `${(e.pre / 1000).toFixed(0)}s` : "   ?";
   const post = e.etaMs != null ? `${(e.etaMs / 1000).toFixed(0)}s` : "   ?";
   const d =
@@ -85,5 +97,5 @@ export function formatTickEntry(e) {
         ? `+${(e.deltaMs / 1000).toFixed(1)}`
         : `${(e.deltaMs / 1000).toFixed(1)}`
       : "?";
-  return `${t}  ${ph}  ${cy}  ${rm}  ${ln}  ${oh}  ${lb}  ${gen}  ${bt}  ${sm}  ${cal}  ${pg}  ${rd}  ${dd}  ${cd}  ${od}  ${goal}  ${gbt}  ${pre}→${post}  Δ${d}s`;
+  return `${t}  ${ph}  ${cy}  ${rm}  ${ln}  ${oh}  ${lb}  ${gen}  ${bt}  ${sm}  ${cal}  ${pg}  ${rd}  ${dd}  ${cd}  ${od}  ${goal}  ${gbt}  ${gr}  ${gsm}  ${gbo}  ${rr}  ${rsm}  ${pre}→${post}  Δ${d}s`;
 }

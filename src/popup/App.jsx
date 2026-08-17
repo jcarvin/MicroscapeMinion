@@ -53,7 +53,12 @@ export default function App() {
         skillNotifyTarget={status?.skillNotifyTarget ?? null}
         onSelectedEtaChange={handleSelectedEtaChange}
       />
-      <DebugSection rawMe={status?.rawMe} tickLog={status?.tickLog ?? []} />
+      <DebugSection
+        rawMe={status?.rawMe}
+        tickLog={status?.tickLog ?? []}
+        etaDebugLog={status?.etaDebugLog}
+        etaDebugLogVersion={status?.etaDebugLogVersion}
+      />
     </>
   );
 }

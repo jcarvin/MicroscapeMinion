@@ -12,18 +12,23 @@
 //   me.activity.remaining — cycles left in batch
 //   me.activity.preparedActivity — { skill, zone, activity, ... }  (between-cycles shape)
 //   me.inventory         — { camelCaseItemId: count }  flat object
-//   me.lootBag           — { camelCaseItemId: count }  materials queued for processing
+//   me.lootBag           — { camelCaseItemId: count }  items currently filling bank-trip capacity
 //
 // Duration formula (confirmed from bundle):
 //   displayedSeconds = (activityDef.duration + 6) * 2   →  durationMs = (duration + 6) * 2000
 
 const BANK_TRIGGER_ITEM_COUNT = 25;
 const CYCLE_SAMPLE_LIMIT = 100;
-const XP_RATE_SAMPLE_LIMIT = 100;
-const DROP_RATE_SAMPLE_LIMIT = 100;
-const COMBAT_CONSUMABLE_SAMPLE_LIMIT = 100;
+const RATE_SAMPLE_LIMIT = 1000;
+const ETA_DEBUG_LOG_LIMIT = 2000;
+const ETA_DEBUG_LOG_VERSION = 1;
 const TICK_SAMPLE_LIMIT = 100;
-const ETA_CALIBRATION_CACHE_VERSION = 1;
+// Rate-based ETA: 2-minute warmup before switching from cycle-based fallback.
+// After a 5-minute gap with no samples, the window resets so idle time isn't
+// counted in the elapsed denominator.
+const RATE_WARMUP_MS = 120_000;
+const GAP_RESET_MS = 300_000;
+const ETA_CALIBRATION_CACHE_VERSION = 3;
 const ETA_CALIBRATION_CACHE_KEY = 'etaCalibrationCache';
 
 // Bank trip timing — computed dynamically from zone mapPos when ZONE_DATA is available.
@@ -91,17 +96,31 @@ let lastServerUpdateAt = 0;
 let etaCalibrationSaveTimer = null;
 
 let tickLog = []; // newest-first, capped at 40 entries
-let cycleCalibrations = {}; // activityId -> { lastCompletionAt, samples }
-let xpRateSamples = {}; // "activityId:skill" -> { lastGainAt, samples: [{ xp, ms }] }
-let dropRateSamples = {}; // "activityId:itemId" -> { lastGainAt, samples: [{ items, ms }] }
+let etaDebugLog = []; // newest-first, capped at ETA_DEBUG_LOG_LIMIT
+let cycleCalibrations = {}; // activityId -> { lastCompletionAt, samples: [ms] }
+
+// Rate trackers — all use { samples: [{ value, at, workMs }] } format.
+// Rate is derived as (newest.value - oldest.value) / active work time elapsed.
+// Persisted across sessions in etaCalibrationCache (version 3+).
+let xpRateSamples = {};           // "activityId:skill" -> { samples: [{ value, at, workMs }] }
+let dropRateSamples = {};         // "activityId:itemId" -> { samples: [{ value, at, workMs }] }
+let combatConsumableSamples = {}; // "actId:itemId" -> { samples: [{ value, at, workMs }] }
+let activeRateClocks = {};        // activityId -> cumulative active work ms
+let lastRateClockAt = null;
+
+// In-memory only — not persisted. Reset when goal/activity changes.
+let goalRateSamples = {};    // activityId -> [{ value, at, workMs }]
+let runoutRateSamples = {};  // "activityId:itemId" -> [{ value, at, workMs }]
+// Highest normalized goal count seen for the current goal. Only ever increases.
+// Used for ETA remaining so bank trips (which drain the loot bag) don't inflate ETA.
+let goalHighWaterMark = null;
+
 let lastWorkActivity = null; // Last non-travel/banking activity, used to keep ETAs visible during travel.
 
 let goal = null; // { itemName, itemId, targetCount }
 let goalNotifiedAt = null;
 let runoutNotifiedFor = null;
 let skillNotifyTarget = null; // { skill, level }
-
-let combatConsumableSamples = {}; // "actId:itemId" -> { lastConsumedAt, samples: [{ count, ms }] }
 
 chrome.storage.session.get(['goal', 'lastWorkActivity'], (res) => {
   if (res.goal) goal = res.goal;
@@ -139,6 +158,8 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
     case 'SET_GOAL':
       goal = msg.goal ?? null;
       goalNotifiedAt = null;
+      goalRateSamples = {};
+      goalHighWaterMark = goal ? (getGoalCount(goal.itemName, goal.itemId) ?? 0) : null;
       chrome.storage.session.set({ goal });
       respond({ ok: true });
       break;
@@ -146,6 +167,8 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
     case 'CLEAR_GOAL':
       goal = null;
       goalNotifiedAt = null;
+      goalRateSamples = {};
+      goalHighWaterMark = null;
       chrome.storage.session.set({ goal: null });
       respond({ ok: true });
       break;
@@ -176,11 +199,13 @@ function handleServerFrame(frame) {
   if (frame.event !== 'update' || !frame.args?.length) return;
   if (isDuplicateServerUpdate(frame.args[0])) return;
 
+  const now = Date.now();
   calibrateTick();
   const prevAct = mirroredState.me?.activity;
   const prevExp = mirroredState.me?.exp;
   const prevMe = mirroredState.me;
   const preSnap = snapshotEta();
+  advanceActiveRateClock(prevAct, now);
 
   mirroredState = applyPatch(mirroredState, frame.args[0]);
   const newAct = mirroredState.me?.activity;
@@ -188,6 +213,8 @@ function handleServerFrame(frame) {
   trackXpGain(prevAct, newAct, prevExp, mirroredState.me?.exp);
   trackDropGain(prevAct, newAct, prevMe, mirroredState.me);
   trackCombatConsumables(prevAct, newAct, prevMe, mirroredState.me);
+  trackGoalAccumulation(prevAct, newAct, prevMe, mirroredState.me);
+  trackRunoutConsumption(prevAct, newAct, prevMe, mirroredState.me);
 
   if (
     newAct?.preparedActivity &&
@@ -210,7 +237,17 @@ function handleServerFrame(frame) {
   if (prevType === 'banking' && newType !== 'banking')
     pushTickEvent('banking-end');
 
-  pushTickEntry(preSnap, snapshotEta());
+  const postSnap = snapshotEta();
+  pushTickEntry(preSnap, postSnap);
+  safelyPushEtaDebugEntry({
+    preSnap,
+    postSnap,
+    prevAct,
+    newAct,
+    prevMe,
+    newMe: mirroredState.me,
+    now,
+  });
 
   detectIdleTransition();
   detectGoalReached();
@@ -237,24 +274,10 @@ function hydrateEtaCalibrationCache(cache) {
     cleanCycleSample,
     'lastCompletionAt'
   );
-  xpRateSamples = hydrateTrackerMap(
-    cache.xpRateSamples,
-    XP_RATE_SAMPLE_LIMIT,
-    cleanRateSample('xp'),
-    'lastGainAt'
-  );
-  dropRateSamples = hydrateTrackerMap(
-    cache.dropRateSamples,
-    DROP_RATE_SAMPLE_LIMIT,
-    cleanRateSample('items'),
-    'lastGainAt'
-  );
-  combatConsumableSamples = hydrateTrackerMap(
-    cache.combatConsumableSamples,
-    COMBAT_CONSUMABLE_SAMPLE_LIMIT,
-    cleanRateSample('count'),
-    'lastConsumedAt'
-  );
+  xpRateSamples = hydrateRateTrackerMap(cache.xpRateSamples, RATE_SAMPLE_LIMIT);
+  dropRateSamples = hydrateRateTrackerMap(cache.dropRateSamples, RATE_SAMPLE_LIMIT);
+  combatConsumableSamples = hydrateRateTrackerMap(cache.combatConsumableSamples, RATE_SAMPLE_LIMIT);
+  activeRateClocks = hydrateActiveRateClocks(cache.activeRateClocks);
 }
 
 function hydrateTrackerMap(raw, limit, cleanSample, timestampKey) {
@@ -272,6 +295,20 @@ function hydrateTrackerMap(raw, limit, cleanSample, timestampKey) {
   return hydrated;
 }
 
+function hydrateRateTrackerMap(raw, limit) {
+  if (!raw || typeof raw !== 'object') return {};
+  const hydrated = {};
+  for (const [key, tracker] of Object.entries(raw)) {
+    if (!tracker || typeof tracker !== 'object') continue;
+    const samples = Array.isArray(tracker.samples)
+      ? tracker.samples.map(cleanRateSample).filter(Boolean).slice(-limit)
+      : [];
+    if (samples.length === 0) continue;
+    hydrated[key] = { samples };
+  }
+  return hydrated;
+}
+
 function cleanNumberSamples(samples, limit) {
   return Array.isArray(samples)
     ? samples.filter(isReasonableTickMs).map(Math.round).slice(-limit)
@@ -282,15 +319,25 @@ function cleanCycleSample(value) {
   return isReasonableMs(value) ? Math.round(value) : null;
 }
 
-function cleanRateSample(amountKey) {
-  return (sample) => {
-    const amount = sample?.[amountKey];
-    const ms = sample?.ms;
-    if (typeof amount !== 'number' || amount <= 0 || !isReasonableMs(ms)) {
-      return null;
+function cleanRateSample(sample) {
+  const value = sample?.value;
+  const at = sample?.at;
+  const workMs = sample?.workMs;
+  if (typeof value !== 'number' || !isFinite(value) || value < 0) return null;
+  if (typeof at !== 'number' || !isFinite(at) || at <= 0) return null;
+  if (typeof workMs !== 'number' || !isFinite(workMs) || workMs < 0) return null;
+  return { value, at, workMs };
+}
+
+function hydrateActiveRateClocks(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  const hydrated = {};
+  for (const [actId, elapsedMs] of Object.entries(raw)) {
+    if (typeof elapsedMs === 'number' && isFinite(elapsedMs) && elapsedMs >= 0) {
+      hydrated[actId] = Math.round(elapsedMs);
     }
-    return { [amountKey]: amount, ms: Math.round(ms) };
-  };
+  }
+  return hydrated;
 }
 
 function isReasonableMs(value) {
@@ -322,9 +369,10 @@ function serializeEtaCalibrationCache() {
     observedTickMs,
     tickSamples: tickSamples.slice(-TICK_SAMPLE_LIMIT),
     cycleCalibrations: stripTrackerTimestamps(cycleCalibrations),
-    xpRateSamples: stripTrackerTimestamps(xpRateSamples),
-    dropRateSamples: stripTrackerTimestamps(dropRateSamples),
-    combatConsumableSamples: stripTrackerTimestamps(combatConsumableSamples),
+    xpRateSamples: stripRateTrackers(xpRateSamples),
+    dropRateSamples: stripRateTrackers(dropRateSamples),
+    combatConsumableSamples: stripRateTrackers(combatConsumableSamples),
+    activeRateClocks: stripActiveRateClocks(activeRateClocks),
     updatedAt: Date.now(),
   };
 }
@@ -336,6 +384,25 @@ function stripTrackerTimestamps(trackers) {
       continue;
     }
     stripped[key] = { samples: tracker.samples };
+  }
+  return stripped;
+}
+
+function stripRateTrackers(trackers) {
+  const stripped = {};
+  for (const [key, tracker] of Object.entries(trackers ?? {})) {
+    if (!Array.isArray(tracker?.samples) || tracker.samples.length === 0) continue;
+    stripped[key] = { samples: tracker.samples.slice(-RATE_SAMPLE_LIMIT) };
+  }
+  return stripped;
+}
+
+function stripActiveRateClocks(clocks) {
+  const stripped = {};
+  for (const [actId, elapsedMs] of Object.entries(clocks ?? {})) {
+    if (typeof elapsedMs === 'number' && isFinite(elapsedMs) && elapsedMs >= 0) {
+      stripped[actId] = Math.round(elapsedMs);
+    }
   }
   return stripped;
 }
@@ -378,21 +445,30 @@ function snapshotEta() {
     zoneId,
     actId
   );
+  const runoutSamples = actId && info
+    ? (runoutRateSamples[`${actId}:${info.itemId}`] ?? [])
+    : [];
+  const runoutRate = (() => {
+    const r = rateFromSamples(runoutSamples);
+    return r !== null && r < 0 ? -r : null;
+  })();
   const etaMs =
     info && cycleDurMs != null
-      ? Math.max(
-          0,
-          fallbackOverheadMs +
-            info.cyclesLeft * cycleDurMs -
-            cycleProgressMs +
-            bankOverheadMs
-        )
+      ? runoutRate
+        ? Math.max(0, Math.round(info.totalMaterial / runoutRate) + bankOverheadMs)
+        : Math.max(
+            0,
+            fallbackOverheadMs +
+              info.cyclesLeft * cycleDurMs -
+              cycleProgressMs +
+              bankOverheadMs
+          )
       : null;
   const goalEta =
     goal && actId
       ? computeGoalEta(
           goal,
-          getGoalCount(goal.itemName, goal.itemId) ?? 0,
+          goalHighWaterMark ?? getGoalCount(goal.itemName, goal.itemId) ?? 0,
           actId,
           etaAct,
           etaActIsLive
@@ -420,6 +496,11 @@ function snapshotEta() {
     observedTickMs,
     goalEtaMs: goalEta?.totalMs ?? null,
     goalBankTrips: goalEta?.bankTrips ?? null,
+    goalRateBased: goalEta?.rateBased === true,
+    goalSamples: goalEta?.sampleCount ?? null,
+    goalBankOverheadMs: goalEta?.bankOverheadMs ?? null,
+    runoutRateBased: runoutRate !== null,
+    runoutSamples: runoutSamples.length,
   };
 }
 
@@ -439,6 +520,246 @@ function pushTickEntry(pre, post) {
 function pushTickEvent(type) {
   tickLog.unshift({ at: Date.now(), type });
   if (tickLog.length > 40) tickLog.pop();
+}
+
+function safelyPushEtaDebugEntry(args) {
+  try {
+    pushEtaDebugEntry(args);
+  } catch (error) {
+    etaDebugLog.unshift({
+      at: args.now,
+      error: 'eta-debug-log-failed',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : null,
+      phase: args.postSnap?.phase ?? null,
+      transition: {
+        prevActivityId: getActivityId(args.prevAct),
+        newActivityId: getActivityId(args.newAct),
+      },
+    });
+    if (etaDebugLog.length > ETA_DEBUG_LOG_LIMIT) etaDebugLog.pop();
+  }
+}
+
+function pushEtaDebugEntry({
+  preSnap,
+  postSnap,
+  prevAct,
+  newAct,
+  prevMe,
+  newMe,
+  now,
+}) {
+  const liveAct = newMe?.activity ?? null;
+  const etaAct = getEtaActivity(liveAct);
+  const actId = getActivityId(etaAct);
+  const liveActId = getActivityId(liveAct);
+  const skill = getActivitySkill(etaAct);
+  const def = actId ? ACTIVITY_DEFS[actId] : null;
+  const durationInfo = def ? cycleDurationInfo(def, actId) : null;
+  const zoneId = getActivityZone(etaAct);
+  const info = actId ? runoutInfo(actId) : null;
+  const producedPerCycle = producedItemsPerCycle(def);
+  const itemsGenerated =
+    info && def ? info.cyclesLeft * producedPerCycle : null;
+  const generatedBank = itemsGenerated != null
+    ? bankOverheadForGeneratedItems(itemsGenerated, zoneId, actId)
+    : null;
+
+  const goalCount = goal ? (getGoalCount(goal.itemName, goal.itemId) ?? 0) : null;
+  const prevGoalCount = goal ? getGoalCountForMe(prevMe, goal) : null;
+  const newGoalCount = goal ? getGoalCountForMe(newMe, goal) : null;
+  const effectiveGoalCount = goal ? (goalHighWaterMark ?? goalCount ?? 0) : null;
+  const goalEta = goal && actId
+    ? computeGoalEta(goal, effectiveGoalCount ?? 0, actId, etaAct, etaAct === liveAct)
+    : null;
+  const goalSampleInfo = goal && actId && def
+    ? goalRateDebugInfo(goal, def, actId)
+    : null;
+
+  const runoutKey = info && actId ? `${actId}:${info.itemId}` : null;
+  const runoutSamples = runoutKey ? (runoutRateSamples[runoutKey] ?? []) : [];
+  const xpKeyForDebug = actId && skill ? xpRateKey(actId, skill) : null;
+  const xpSamples = xpKeyForDebug ? (xpRateSamples[xpKeyForDebug]?.samples ?? []) : [];
+
+  const resetSignals = [];
+  if (prevGoalCount != null && newGoalCount != null && newGoalCount < prevGoalCount) {
+    resetSignals.push('goal-count-drop');
+  }
+  if (info?.itemId) {
+    const prevRunoutCount = prevMe?.inventory?.[info.itemId] ?? null;
+    const newRunoutCount = newMe?.inventory?.[info.itemId] ?? null;
+    if (prevRunoutCount != null && newRunoutCount != null && newRunoutCount > prevRunoutCount) {
+      resetSignals.push('runout-refill');
+    }
+  }
+  if (getActivityId(prevAct) !== getActivityId(newAct)) {
+    resetSignals.push('activity-change');
+  }
+  if (liveAct?.type === 'travel') resetSignals.push('travel');
+  if (liveAct?.type === 'banking') resetSignals.push('banking');
+
+  etaDebugLog.unshift({
+    at: now,
+    phase: postSnap.phase,
+    transition: {
+      prevActivityId: getActivityId(prevAct),
+      newActivityId: getActivityId(newAct),
+      liveActivityId: liveActId,
+      etaActivityId: actId,
+      prevType: prevAct?.type ?? null,
+      newType: newAct?.type ?? null,
+    },
+    activity: {
+      live: compactActivity(liveAct),
+      eta: compactActivity(etaAct),
+      lastWork: compactActivity(lastWorkActivity),
+    },
+    tick: {
+      observedTickMs,
+      sampleCount: tickSamples.length,
+      lastDeltaMs: tickSamples[tickSamples.length - 1] ?? null,
+      activeWorkMs: actId ? activeWorkMsForActivity(actId) : null,
+    },
+    cycle: {
+      durationMs: durationInfo?.durationMs ?? null,
+      observedDurationMs: durationInfo?.observedDurationMs ?? null,
+      sampleCount: durationInfo?.sampleCount ?? 0,
+      calibrated: durationInfo?.calibrated ?? false,
+      progressMs: postSnap.cycleProgressMs ?? null,
+      fallbackOverheadMs:
+        !durationInfo?.calibrated && liveAct?.preparedActivity
+          ? (liveAct.remaining ?? 0) * TICK_MS
+          : 0,
+    },
+    bank: {
+      zoneId,
+      lootBagItems: lootBagTotal(),
+      triggerItemCount: BANK_TRIGGER_ITEM_COUNT,
+      producedPerCycle,
+      projectedGeneratedItems: itemsGenerated,
+      projectedTrips: generatedBank?.bankTrips ?? null,
+      projectedOverheadMs: generatedBank?.bankOverheadMs ?? null,
+      tripMs: actId ? bankTripMs(zoneId, effectiveTickMsForActivity(actId)) : null,
+    },
+    runout: info ? {
+      itemId: info.itemId,
+      costPerCycle: info.costPerCycle,
+      totalMaterial: info.totalMaterial,
+      prevInventoryCount: prevMe?.inventory?.[info.itemId] ?? null,
+      newInventoryCount: newMe?.inventory?.[info.itemId] ?? null,
+      cyclesLeft: info.cyclesLeft,
+      etaMs: postSnap.etaMs,
+      preEtaMs: preSnap?.etaMs ?? null,
+      deltaMs:
+        preSnap?.etaMs != null && postSnap.etaMs != null
+          ? postSnap.etaMs - preSnap.etaMs
+          : null,
+      rateBased: postSnap.runoutRateBased,
+      samples: rateSampleDebug(runoutSamples),
+      bankTrips: postSnap.bankTrips,
+      bankOverheadMs: postSnap.bankOverheadMs,
+    } : null,
+    goal: goal ? {
+      itemName: goal.itemName,
+      itemId: goal.itemId,
+      targetCount: goal.targetCount,
+      currentCount: goalCount,
+      prevCount: prevGoalCount,
+      newCount: newGoalCount,
+      remaining: Math.max(0, goal.targetCount - (effectiveGoalCount ?? goalCount ?? 0)),
+      etaMs: goalEta === 0 ? 0 : (goalEta?.totalMs ?? null),
+      preEtaMs: preSnap?.goalEtaMs ?? null,
+      deltaMs:
+        preSnap?.goalEtaMs != null && goalEta?.totalMs != null
+          ? goalEta.totalMs - preSnap.goalEtaMs
+          : null,
+      model: goalEtaModel(goalEta),
+      chanceBased: goalEta?.chanceBased === true,
+      rateBased: goalEta?.rateBased === true,
+      bankTrips: goalEta?.bankTrips ?? null,
+      bankOverheadMs: goalEta?.bankOverheadMs ?? null,
+      samples: goalSampleInfo,
+    } : null,
+    xp: skill ? {
+      skill,
+      currentXp: newMe?.exp?.[skill] ?? null,
+      prevXp: prevMe?.exp?.[skill] ?? null,
+      xpDelta:
+        typeof newMe?.exp?.[skill] === 'number' && typeof prevMe?.exp?.[skill] === 'number'
+          ? newMe.exp[skill] - prevMe.exp[skill]
+          : null,
+      xpPerCycle: def?.xpPerCycle ?? null,
+      observedXpPerMs: actId ? observedXpPerMs(actId, skill) : null,
+      samples: rateSampleDebug(xpSamples),
+    } : null,
+    resetSignals,
+  });
+
+  if (etaDebugLog.length > ETA_DEBUG_LOG_LIMIT) etaDebugLog.pop();
+}
+
+function compactActivity(act) {
+  if (!act) return null;
+  return {
+    type: act.type ?? null,
+    skill: getActivitySkill(act),
+    activity: getActivityId(act),
+    zone: getActivityZone(act),
+    remaining: act.remaining ?? null,
+    length: act.length ?? null,
+    preparedActivity: act.preparedActivity
+      ? {
+          skill: getActivitySkill({ preparedActivity: act.preparedActivity }),
+          activity: getActivityId({ preparedActivity: act.preparedActivity }),
+          zone: getActivityZone({ preparedActivity: act.preparedActivity }),
+        }
+      : null,
+  };
+}
+
+function goalRateDebugInfo(g, def, actId) {
+  const dropKey = findKey(def.dropItems, g.itemName, g.itemId);
+  if (dropKey) {
+    return {
+      source: 'dropItems',
+      key: dropKey,
+      ...rateSampleDebug(dropRateSamples[dropRateKey(actId, dropKey)]?.samples ?? []),
+    };
+  }
+
+  const goalKey = findKey(def.inventoryChanges, g.itemName, g.itemId);
+  return {
+    source: goalKey ? 'inventoryChanges' : 'none',
+    key: goalKey,
+    yieldPerCycle: goalKey ? (def.inventoryChanges[goalKey] ?? 0) : null,
+    producedPerCycle: producedItemsPerCycle(def),
+    ...rateSampleDebug(goalRateSamples[actId] ?? []),
+  };
+}
+
+function rateSampleDebug(samples) {
+  const oldest = samples[0] ?? null;
+  const newest = samples[samples.length - 1] ?? null;
+  const rate = rateFromSamples(samples);
+  return {
+    count: samples.length,
+    ratePerMs: rate,
+    ratePerMinute: rate != null ? rate * 60_000 : null,
+    ratePerHour: rate != null ? rate * 3_600_000 : null,
+    wallSpanMs: oldest && newest ? newest.at - oldest.at : null,
+    workSpanMs: oldest && newest ? newest.workMs - oldest.workMs : null,
+    oldest,
+    newest,
+  };
+}
+
+function goalEtaModel(eta) {
+  if (eta === 0) return 'done';
+  if (!eta || eta.totalMs == null) return 'calibrating';
+  if (eta.chanceBased) return 'chance-rate';
+  if (eta.rateBased) return 'rate';
+  return 'cycle-fallback';
 }
 
 function handleClientFrame(frame) {
@@ -781,6 +1102,59 @@ function resetCycleAnchorOnInterruption(prevAct, newAct) {
   if (cal) cal.lastCompletionAt = null;
 }
 
+// ── Rate tracking ─────────────────────────────────────────────────────────────
+//
+// All rate trackers store { value, at, workMs } samples: cumulative value at a
+// wall-clock timestamp and cumulative active work time for the activity. Rate =
+// (newest.value - oldest.value) / (newest.workMs - oldest.workMs).
+// Samples are pushed only when the value changes in the expected direction
+// (up for accumulation, down for consumption). Banking/travel time is forecast
+// separately so the ETA includes bank trips before they happen and does not
+// absorb a whole bank trip as a delayed rate spike on the next grant.
+//
+// A 5-minute gap with no new samples resets the window; the rate clock restarts
+// from the current reading to avoid counting idle time in the denominator.
+
+function advanceActiveRateClock(prevAct, now) {
+  if (lastRateClockAt !== null) {
+    const delta = now - lastRateClockAt;
+    const actId = getActivityId(prevAct);
+    if (isWorkActivityId(actId) && delta > 0 && delta <= GAP_RESET_MS) {
+      activeRateClocks[actId] = (activeRateClocks[actId] ?? 0) + delta;
+    }
+  }
+  lastRateClockAt = now;
+}
+
+function activeWorkMsForActivity(actId) {
+  return activeRateClocks[actId] ?? 0;
+}
+
+function rateFromSamples(samples) {
+  if (samples.length < 2) return null;
+  const oldest = samples[0];
+  const newest = samples[samples.length - 1];
+  const wallElapsed = newest.at - oldest.at;
+  if (wallElapsed < RATE_WARMUP_MS) return null;
+  const elapsed = newest.workMs - oldest.workMs;
+  if (elapsed <= 0) return null;
+  const delta = newest.value - oldest.value;
+  if (delta === 0) return null;
+  return delta / elapsed; // positive for accumulation, negative for consumption
+}
+
+function pushRateSample(samples, value, now, workMs) {
+  const last = samples[samples.length - 1];
+  if (last && now - last.at > GAP_RESET_MS) {
+    // Long idle gap — discard stale window and seed fresh
+    samples.length = 0;
+    samples.push({ value, at: now, workMs });
+    return;
+  }
+  samples.push({ value, at: now, workMs });
+  if (samples.length > RATE_SAMPLE_LIMIT) samples.shift();
+}
+
 function trackXpGain(prevAct, newAct, prevExp, newExp) {
   if (!prevExp || !newExp) return;
 
@@ -792,36 +1166,13 @@ function trackXpGain(prevAct, newAct, prevExp, newExp) {
   const before = prevExp[skill];
   const after = newExp[skill];
   if (typeof before !== 'number' || typeof after !== 'number') return;
-
-  const xpGained = after - before;
-  if (xpGained <= 0) return;
+  if (after <= before) return;
 
   const key = xpRateKey(actId, skill);
-  const now = Date.now();
-  const tracker = xpRateSamples[key] ?? { lastGainAt: null, samples: [] };
-  let sampleMs = tracker.lastGainAt ? now - tracker.lastGainAt : null;
-
-  if (!sampleMs || sampleMs < 250 || sampleMs > 10 * 60_000) {
-    sampleMs =
-      activityLengthMs(act) ?? ACTIVITY_DEFS[actId]?.durationMs ?? null;
-  }
-
-  if (sampleMs && sampleMs > 0) {
-    pushCappedSample(
-      tracker.samples,
-      { xp: xpGained, ms: sampleMs },
-      XP_RATE_SAMPLE_LIMIT
-    );
-  }
-  tracker.lastGainAt = now;
+  const tracker = xpRateSamples[key] ?? { samples: [] };
+  pushRateSample(tracker.samples, after, Date.now(), activeWorkMsForActivity(actId));
   xpRateSamples[key] = tracker;
-}
-
-function activityLengthMs(act) {
-  const length = act?.length ?? act?.preparedActivity?.length;
-  return typeof length === 'number' && length > 0
-    ? length * observedTickMs
-    : null;
+  scheduleEtaCalibrationSave();
 }
 
 function xpRateKey(actId, skill) {
@@ -830,15 +1181,8 @@ function xpRateKey(actId, skill) {
 
 function observedXpPerMs(actId, skill) {
   const samples = xpRateSamples[xpRateKey(actId, skill)]?.samples ?? [];
-  const totals = samples.reduce(
-    (acc, sample) => {
-      acc.xp += sample.xp;
-      acc.ms += sample.ms;
-      return acc;
-    },
-    { xp: 0, ms: 0 }
-  );
-  return totals.xp > 0 && totals.ms > 0 ? totals.xp / totals.ms : null;
+  const rate = rateFromSamples(samples);
+  return rate !== null && rate > 0 ? rate : null;
 }
 
 function trackDropGain(prevAct, newAct, prevMe, newMe) {
@@ -851,28 +1195,34 @@ function trackDropGain(prevAct, newAct, prevMe, newMe) {
   const dropItems = ACTIVITY_DEFS[actId]?.dropItems;
   if (!dropItems || Object.keys(dropItems).length === 0) return;
 
+  const now = Date.now();
   for (const itemId of Object.keys(dropItems)) {
     const before = getMaterialCountForMe(prevMe, itemId);
     const after = getMaterialCountForMe(newMe, itemId);
-    const gained = after - before;
-    if (gained <= 0) continue;
 
     const key = dropRateKey(actId, itemId);
-    const now = Date.now();
-    const tracker = dropRateSamples[key] ?? { lastGainAt: null, samples: [] };
-    if (tracker.lastGainAt) {
-      const sampleMs = now - tracker.lastGainAt;
-      if (sampleMs >= 250 && sampleMs <= 30 * 60_000) {
-        pushCappedSample(
-          tracker.samples,
-          { items: gained, ms: sampleMs },
-          DROP_RATE_SAMPLE_LIMIT
-        );
-      }
+    if (after < before) {
+      dropRateSamples[key] = { samples: [] };
+      scheduleEtaCalibrationSave();
+      continue;
     }
-    tracker.lastGainAt = now;
+    if (after === before) continue;
+
+    const tracker = dropRateSamples[key] ?? { samples: [] };
+    pushRateSample(tracker.samples, after, now, activeWorkMsForActivity(actId));
     dropRateSamples[key] = tracker;
+    scheduleEtaCalibrationSave();
   }
+}
+
+function observedDropItemsPerMs(actId, itemId) {
+  const samples = dropRateSamples[dropRateKey(actId, itemId)]?.samples ?? [];
+  const rate = rateFromSamples(samples);
+  return rate !== null && rate > 0 ? rate : null;
+}
+
+function dropRateSampleCount(actId, itemId) {
+  return dropRateSamples[dropRateKey(actId, itemId)]?.samples.length ?? 0;
 }
 
 function trackCombatConsumables(prevAct, newAct, prevMe, newMe) {
@@ -890,23 +1240,22 @@ function trackCombatConsumables(prevAct, newAct, prevMe, newMe) {
   const allIds = new Set([...Object.keys(prevInv), ...Object.keys(newInv)]);
   for (const itemId of allIds) {
     if (itemId in dropItems) continue;
-    const consumed = (prevInv[itemId] ?? 0) - (newInv[itemId] ?? 0);
-    if (consumed <= 0) continue;
+    const before = prevInv[itemId] ?? 0;
+    const after = newInv[itemId] ?? 0;
 
     const key = `${actId}:${itemId}`;
-    const tracker = combatConsumableSamples[key] ?? { lastConsumedAt: null, samples: [] };
-    if (tracker.lastConsumedAt !== null) {
-      const sampleMs = now - tracker.lastConsumedAt;
-      if (sampleMs >= 500 && sampleMs <= 60 * 60_000) {
-        pushCappedSample(
-          tracker.samples,
-          { count: consumed, ms: sampleMs },
-          COMBAT_CONSUMABLE_SAMPLE_LIMIT
-        );
-      }
+    if (after > before) {
+      // Refill detected — reset so stale consumption data doesn't skew ETA.
+      combatConsumableSamples[key] = { samples: [] };
+      scheduleEtaCalibrationSave();
+      continue;
     }
-    tracker.lastConsumedAt = now;
+    if (after === before) continue;
+
+    const tracker = combatConsumableSamples[key] ?? { samples: [] };
+    pushRateSample(tracker.samples, after, now, activeWorkMsForActivity(actId));
     combatConsumableSamples[key] = tracker;
+    scheduleEtaCalibrationSave();
   }
 }
 
@@ -926,17 +1275,125 @@ function computeCombatConsumableStatus(act) {
     if (tracker.samples.length === 0) continue;
 
     const currentCount = inv[itemId] ?? 0;
-    const totalConsumed = tracker.samples.reduce((s, x) => s + x.count, 0);
-    const totalMs = tracker.samples.reduce((s, x) => s + x.ms, 0);
-    const ratePerMs = totalMs > 0 ? totalConsumed / totalMs : null;
-    const etaMs = ratePerMs && currentCount > 0
-      ? Math.round(currentCount / ratePerMs)
+    const rate = rateFromSamples(tracker.samples); // negative for consumption
+    const consumptionRate = rate !== null && rate < 0 ? -rate : null;
+    const etaMs = consumptionRate && currentCount > 0
+      ? Math.round(currentCount / consumptionRate)
       : null;
 
     items.push({ itemId, currentCount, etaMs, sampleCount: tracker.samples.length });
   }
 
   return items.length > 0 ? items : null;
+}
+
+function trackGoalAccumulation(prevAct, newAct, prevMe, newMe) {
+  if (!goal) return;
+
+  const newCount = getGoalCountForMe(newMe, goal);
+  if (newCount === null) return;
+
+  // Update high-water mark regardless of activity phase (captures gains during
+  // any phase including travel and banking).
+  if (goalHighWaterMark === null || newCount > goalHighWaterMark) {
+    goalHighWaterMark = newCount;
+  }
+
+  // Rate samples are only pushed during active work ticks.
+  const act = isWorkActivityId(getActivityId(newAct)) ? newAct : prevAct;
+  const actId = getActivityId(act);
+  if (!isWorkActivityId(actId)) return;
+
+  const prevCount = getGoalCountForMe(prevMe, goal);
+  if (prevCount === null) return;
+
+  if (newCount < prevCount) {
+    goalRateSamples[actId] = [];
+    return;
+  }
+  if (newCount === prevCount) return;
+
+  const samples = goalRateSamples[actId] ?? [];
+
+  // If the new value is below the last pushed sample the loot bag was drained by
+  // a banking trip that straddled non-work ticks (banking→travel transition), so
+  // the `newCount < prevCount` branch above was never reached. Clear and restart
+  // rather than anchoring the rate to a stale high-water mark.
+  const lastSample = samples[samples.length - 1];
+  if (lastSample && newCount < lastSample.value) {
+    goalRateSamples[actId] = [];
+    return;
+  }
+
+  pushRateSample(samples, newCount, Date.now(), activeWorkMsForActivity(actId));
+  goalRateSamples[actId] = samples;
+}
+
+function getGoalCountForMe(me, g) {
+  if (!me || !g) return null;
+  const inv = me.inventory ?? {};
+  const lb = me.lootBag ?? {};
+  const norm = (str) => str?.toLowerCase().replace(/[\s_-]/g, '') ?? '';
+
+  let hasInvCount = false;
+  let invCount = 0;
+  if (g.itemId && g.itemId in inv) {
+    hasInvCount = true;
+    invCount = inv[g.itemId] ?? 0;
+  } else if (g.itemName) {
+    const n = norm(g.itemName);
+    const key = Object.keys(inv).find((k) => norm(k) === n);
+    if (key) {
+      hasInvCount = true;
+      invCount = inv[key] ?? 0;
+    }
+  }
+
+  let hasLootCount = false;
+  let lbCount = 0;
+  if (g.itemId && g.itemId in lb) {
+    hasLootCount = true;
+    lbCount = lb[g.itemId] ?? 0;
+  } else if (g.itemName) {
+    const n = norm(g.itemName);
+    const key = Object.keys(lb).find((k) => norm(k) === n);
+    if (key) {
+      hasLootCount = true;
+      lbCount = lb[key] ?? 0;
+    }
+  }
+
+  if (!hasInvCount && !hasLootCount) return 0;
+  return Math.max(invCount, lbCount);
+}
+
+function trackRunoutConsumption(prevAct, newAct, prevMe, newMe) {
+  const act = isWorkActivityId(getActivityId(newAct)) ? newAct : prevAct;
+  const actId = getActivityId(act);
+  if (!isWorkActivityId(actId)) return;
+
+  const def = ACTIVITY_DEFS[actId];
+  if (!def) return;
+
+  const prevInv = prevMe?.inventory ?? {};
+  const newInv = newMe?.inventory ?? {};
+  const now = Date.now();
+
+  for (const [itemId, change] of Object.entries(def.inventoryChanges ?? {})) {
+    if (change >= 0) continue;
+    const key = `${actId}:${itemId}`;
+    const prevCount = prevInv[itemId] ?? 0;
+    const newCount = newInv[itemId] ?? 0;
+
+    if (newCount > prevCount) {
+      // Refill detected — reset so stale rate doesn't skew the ETA
+      runoutRateSamples[key] = [];
+    } else if (newCount < prevCount) {
+      const samples = runoutRateSamples[key] ?? [];
+      pushRateSample(samples, newCount, now, activeWorkMsForActivity(actId));
+      runoutRateSamples[key] = samples;
+    }
+  }
 }
 
 function getMaterialCountForMe(me, itemId) {
@@ -947,23 +1404,6 @@ function getMaterialCountForMe(me, itemId) {
 
 function dropRateKey(actId, itemId) {
   return `${actId}:${itemId}`;
-}
-
-function observedDropItemsPerMs(actId, itemId) {
-  const samples = dropRateSamples[dropRateKey(actId, itemId)]?.samples ?? [];
-  const totals = samples.reduce(
-    (acc, sample) => {
-      acc.items += sample.items;
-      acc.ms += sample.ms;
-      return acc;
-    },
-    { items: 0, ms: 0 }
-  );
-  return totals.items > 0 && totals.ms > 0 ? totals.items / totals.ms : null;
-}
-
-function dropRateSampleCount(actId, itemId) {
-  return dropRateSamples[dropRateKey(actId, itemId)]?.samples.length ?? 0;
 }
 
 function isWorkActivityId(actId) {
@@ -1021,6 +1461,22 @@ function bankOverheadForGeneratedItems(generatedItems, zoneId, actId) {
   };
 }
 
+function bankOverheadBeforeCompletion(generatedItems, zoneId, actId) {
+  const bankTrips = bankTripsBeforeGoalComplete(Math.ceil(generatedItems));
+  return {
+    bankTrips,
+    bankOverheadMs:
+      bankTrips * bankTripMs(zoneId, effectiveTickMsForActivity(actId)),
+  };
+}
+
+function estimateGeneratedItemsForActiveMs(activeMs, def, durationInfo) {
+  const perCycle = producedItemsPerCycle(def);
+  const durationMs = durationInfo?.durationMs ?? def?.durationMs ?? 0;
+  if (activeMs <= 0 || perCycle <= 0 || durationMs <= 0) return 0;
+  return Math.ceil(activeMs / durationMs) * perCycle;
+}
+
 // ── Status snapshot (for popup) ───────────────────────────────────────────────
 
 function buildStatus() {
@@ -1045,8 +1501,9 @@ function buildStatus() {
   let goalStatus = null;
   if (goal) {
     const count = getGoalCount(goal.itemName, goal.itemId) ?? 0;
+    const effectiveCount = goalHighWaterMark ?? count;
     const eta = etaActId
-      ? computeGoalEta(goal, count, etaActId, etaAct, etaActIsLive)
+      ? computeGoalEta(goal, effectiveCount, etaActId, etaAct, etaActIsLive)
       : null;
     goalStatus = { goal, count, eta, chanceBased: eta?.chanceBased === true };
   }
@@ -1057,27 +1514,45 @@ function buildStatus() {
     if (info) {
       const def = ACTIVITY_DEFS[etaActId];
       const durationInfo = cycleDurationInfo(def, etaActId);
-      const cycleProgressMs = etaActIsLive && durationInfo.calibrated
-        ? currentCycleProgressMs(etaActId, durationInfo.durationMs)
-        : 0;
-      const fallbackOverheadMs =
-        etaActIsLive && !durationInfo.calibrated && liveAct?.preparedActivity
-          ? (liveAct.remaining ?? 0) * TICK_MS
-          : 0;
-      const itemsGenerated = info.cyclesLeft * producedItemsPerCycle(def);
       const zoneId = getActivityZone(etaAct);
+
+      // Rate-based runout ETA: observed consumption rate naturally accounts for
+      // bank trips and other pauses. Falls back to cycle-based during warmup.
+      const runoutKey = `${etaActId}:${info.itemId}`;
+      const runoutSamples = runoutRateSamples[runoutKey] ?? [];
+      const consumptionRate = (() => {
+        const r = rateFromSamples(runoutSamples);
+        return r !== null && r < 0 ? -r : null;
+      })();
+
+      const itemsGenerated = info.cyclesLeft * producedItemsPerCycle(def);
       const { bankTrips, bankOverheadMs } = bankOverheadForGeneratedItems(
         itemsGenerated,
         zoneId,
         etaActId
       );
-      const etaMs = Math.max(
-        0,
-        fallbackOverheadMs +
-          info.cyclesLeft * durationInfo.durationMs -
-          cycleProgressMs +
-          bankOverheadMs
-      );
+
+      let etaMs;
+      if (consumptionRate !== null) {
+        const activeEtaMs = Math.round(info.totalMaterial / consumptionRate);
+        etaMs = Math.max(0, activeEtaMs + bankOverheadMs);
+      } else {
+        const cycleProgressMs = etaActIsLive && durationInfo.calibrated
+          ? currentCycleProgressMs(etaActId, durationInfo.durationMs)
+          : 0;
+        const fallbackOverheadMs =
+          etaActIsLive && !durationInfo.calibrated && liveAct?.preparedActivity
+            ? (liveAct.remaining ?? 0) * TICK_MS
+            : 0;
+        etaMs = Math.max(
+          0,
+          fallbackOverheadMs +
+            info.cyclesLeft * durationInfo.durationMs -
+            cycleProgressMs +
+            bankOverheadMs
+        );
+      }
+
       runoutStatus = {
         itemId: info.itemId,
         costPerCycle: info.costPerCycle,
@@ -1088,7 +1563,8 @@ function buildStatus() {
         bankOverheadMs,
         cycleDurationMs: durationInfo.durationMs,
         observedCycleDurationMs: durationInfo.observedDurationMs,
-        cycleProgressMs,
+        rateBased: consumptionRate !== null,
+        runoutSampleCount: runoutSamples.length,
         cycleSamples: durationInfo.sampleCount,
         calibrated: durationInfo.calibrated,
         etaMs,
@@ -1136,6 +1612,8 @@ function buildStatus() {
     skillNotifyTarget,
     rawMe: me ?? null,
     tickLog,
+    etaDebugLogVersion: ETA_DEBUG_LOG_VERSION,
+    etaDebugLog,
   };
 }
 
@@ -1157,9 +1635,17 @@ function computeGoalEta(
   const dropKey = findKey(def.dropItems, g.itemName, g.itemId);
   if (dropKey) {
     const observedRate = observedDropItemsPerMs(actId, dropKey);
+    const zoneId = getActivityZone(actForEta);
+    const { bankTrips, bankOverheadMs } = observedRate
+      ? bankOverheadBeforeCompletion(remaining, zoneId, actId)
+      : { bankTrips: null, bankOverheadMs: 0 };
     return {
       chanceBased: true,
-      totalMs: observedRate ? Math.ceil(remaining / observedRate) : null,
+      totalMs: observedRate
+        ? Math.ceil(remaining / observedRate) + bankOverheadMs
+        : null,
+      bankTrips,
+      bankOverheadMs,
       sampleCount: dropRateSampleCount(actId, dropKey),
     };
   }
@@ -1167,8 +1653,34 @@ function computeGoalEta(
   // Find the goal item in the activity's output (positive inventoryChanges)
   const goalKey = findKey(def.inventoryChanges, g.itemName, g.itemId);
   const yieldPerCycle = goalKey ? (def.inventoryChanges[goalKey] ?? 0) : 0;
-  if (yieldPerCycle <= 0) return null; // this activity doesn't produce the goal item
+  if (yieldPerCycle <= 0) return null;
 
+  // Rate-based: use observed accumulation rate if warmed up.
+  // Banking, skill effects, and other overhead are naturally absorbed.
+  const goalSamples = goalRateSamples[actId] ?? [];
+  const observedRate = rateFromSamples(goalSamples);
+  if (observedRate !== null && observedRate > 0) {
+    const producedPerCycle = producedItemsPerCycle(def);
+    const generatedItems =
+      producedPerCycle > 0
+        ? remaining * (producedPerCycle / yieldPerCycle)
+        : remaining;
+    const zoneId = getActivityZone(actForEta);
+    const { bankTrips, bankOverheadMs } = bankOverheadBeforeCompletion(
+      generatedItems,
+      zoneId,
+      actId
+    );
+    return {
+      totalMs: Math.ceil(remaining / observedRate) + bankOverheadMs,
+      rateBased: true,
+      bankTrips,
+      bankOverheadMs,
+      sampleCount: goalSamples.length,
+    };
+  }
+
+  // Cycle-based fallback during warmup
   const durationInfo = cycleDurationInfo(def, actId);
   const cycleProgressMs = actIsLive && durationInfo.calibrated
     ? currentCycleProgressMs(actId, durationInfo.durationMs)
@@ -1242,6 +1754,7 @@ function computeSkillLevelEtas(actId, skill, act) {
   const mayGainXp = xpPerCycle > 0 || observedRate || isCombatActivity(act);
   if (!mayGainXp || XP_TABLE.length < 3) return null;
   const durationInfo = def ? cycleDurationInfo(def, actId) : null;
+  const zoneId = getActivityZone(act);
 
   const currentXp = mirroredState.me?.exp?.[skill];
   if (typeof currentXp !== 'number' || !isFinite(currentXp)) return null;
@@ -1254,18 +1767,38 @@ function computeSkillLevelEtas(actId, skill, act) {
     if (typeof targetXp !== 'number') break;
 
     const xpNeeded = Math.max(0, targetXp - currentXp);
-    const cyclesNeeded =
-      xpPerCycle > 0 ? Math.ceil(xpNeeded / xpPerCycle) : null;
-    const etaMs =
-      xpPerCycle > 0
-        ? cyclesNeeded * durationInfo.durationMs
-        : observedRate
-          ? Math.ceil(xpNeeded / observedRate)
-          : null;
+    let etaMs = null;
+    let bankTrips = 0;
+    let bankOverheadMs = 0;
+    if (observedRate) {
+      const activeMs = Math.ceil(xpNeeded / observedRate);
+      const generatedItems = estimateGeneratedItemsForActiveMs(
+        activeMs,
+        def,
+        durationInfo
+      );
+      const overhead = bankOverheadBeforeCompletion(generatedItems, zoneId, actId);
+      bankTrips = overhead.bankTrips;
+      bankOverheadMs = overhead.bankOverheadMs;
+      etaMs = activeMs + bankOverheadMs;
+    } else if (xpPerCycle > 0 && durationInfo) {
+      const cyclesNeeded = Math.ceil(xpNeeded / xpPerCycle);
+      const activeMs = cyclesNeeded * durationInfo.durationMs;
+      const overhead = bankOverheadBeforeCompletion(
+        cyclesNeeded * producedItemsPerCycle(def),
+        zoneId,
+        actId
+      );
+      bankTrips = overhead.bankTrips;
+      bankOverheadMs = overhead.bankOverheadMs;
+      etaMs = activeMs + bankOverheadMs;
+    }
     etas.push({
       targetLevel,
       xpNeeded,
       etaMs,
+      bankTrips,
+      bankOverheadMs,
     });
   }
 
@@ -1338,7 +1871,8 @@ function getGoalCount(itemName, itemId) {
   const inv = getInventoryCount(itemName, itemId);
   const lootKey = itemId ?? findLootBagKey(itemName);
   const lb = lootKey ? getLootBagCount(lootKey) : 0;
-  return (inv ?? 0) + lb;
+  if (inv === null && !lootKey) return null;
+  return Math.max(inv ?? 0, lb);
 }
 
 function getInventoryCount(itemName, itemId) {
@@ -1505,16 +2039,26 @@ function resetTestState() {
   lastUpdateAt = null;
   lastServerUpdateSignature = null;
   lastServerUpdateAt = 0;
+  if (etaCalibrationSaveTimer !== null) {
+    clearTimeout(etaCalibrationSaveTimer);
+    etaCalibrationSaveTimer = null;
+  }
   tickLog = [];
+  etaDebugLog = [];
   cycleCalibrations = {};
   xpRateSamples = {};
   dropRateSamples = {};
+  combatConsumableSamples = {};
+  activeRateClocks = {};
+  lastRateClockAt = null;
+  goalRateSamples = {};
+  goalHighWaterMark = null;
+  runoutRateSamples = {};
   lastWorkActivity = null;
   goal = null;
   goalNotifiedAt = null;
   runoutNotifiedFor = null;
   skillNotifyTarget = null;
-  combatConsumableSamples = {};
 }
 
 function setTestState({

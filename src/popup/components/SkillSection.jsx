@@ -96,7 +96,11 @@ export default function SkillSection({ skillLevelStatus, skillNotifyTarget, onSe
       <div className="skill-xp-eta-row">
         <span>→ Lv {eta.targetLevel} ({formatNumber(eta.xpNeeded)} XP)</span>
         <span className="eta-group">
-          <EtaDisplay etaMs={eta.etaMs ?? null} doneLabel="Now" />
+          <EtaDisplay
+            etaMs={eta.etaMs ?? null}
+            bankTrips={eta.bankTrips ?? 0}
+            doneLabel="Now"
+          />
           <EtaTooltip />
         </span>
       </div>

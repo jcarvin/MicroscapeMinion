@@ -96,6 +96,48 @@ Microscape Minion will appear in your extensions list and remain installed perma
 
 ---
 
+## Release notes
+
+<details>
+<summary>Release notes</summary>
+
+### v0.1.6
+
+- Improve ETA calibration with warmed observed rates for goal accumulation, material runout, skill levels, and combat consumable depletion.
+- Reset stale ETA rate windows after long gaps or inventory refills so idle time and restocks do not skew estimates.
+- Add background tests for rate-based goal, runout, skill, and combat-consumable ETAs.
+
+### v0.1.5
+
+- Add Firefox extension support with a Firefox-specific manifest and build flow.
+- Update packaging so Chrome and Firefox artifacts are generated into `artifacts/` with browser-specific filenames.
+- Expand README installation, development, and publishing instructions for both browsers.
+
+### v0.1.4
+
+- Add a controlled ETA information tooltip with clearer estimate caveats.
+
+### v0.1.3
+
+- Add piety training material runout support.
+- Add level goal tracking for piety training.
+
+### v0.1.2
+
+- Show required materials for the selected level goal in the runout card.
+
+### v0.1.1
+
+- Ship the React and Vite popup refactor as the first explicit version bump.
+
+### v0.1.0
+
+- Establish the package-based extension build and initial `0.1.0` version metadata.
+
+</details>
+
+---
+
 ## Troubleshooting
 
 **The popup shows "Not connected"**
@@ -193,8 +235,11 @@ Include this reviewer note in the AMO submission form:
 
 ### Versioning
 
-Before publishing a new release, bump the version in all three files:
+Before publishing a new release or opening a PR, bump the version in all versioned files and add a matching entry at the top of the collapsible release notes section:
 
 - `package.json`
+- `package-lock.json`
 - `manifest.json`
 - `manifest.firefox.json`
+
+Run `npm run check:release` to verify the versions match and the README has release notes for the new version.
