@@ -355,6 +355,64 @@ describe('background activity definitions', () => {
     expect(status.goalStatus.eta.totalMs).toBeGreaterThan(185 * 32_000);            // clearly non-zero
   });
 
+  it('does not charge an extra bank trip when travel/banking is already in progress', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    __test.resetTestState();
+    const smeltAct = { skill: 'smithing', activity: 'smelt-iron', remaining: 1 };
+    __test.setTestState({
+      activityDefs: {
+        'smelt-iron': {
+          durationMs: 30_000,
+          xpPerCycle: 12,
+          inventoryChanges: { ironBar: 1 },
+        },
+      },
+      state: {
+        me: {
+          activity: smeltAct,
+          exp: { smithing: 0 },
+          inventory: { ironBar: 34 },
+          lootBag: {},
+        },
+      },
+      lastWorkAct: smeltAct,
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOAL',
+      goal: { itemName: 'Iron Bar', itemId: 'ironBar', targetCount: 55 },
+    });
+
+    // Before banking: lootBag empty, 21 bars remaining.
+    // generatedItems=21, freeSlotsBeforeFirstTrip=25 → 21≤25 → bankTrips=0
+    const etaBefore = __test.buildStatus().goalStatus.eta;
+    expect(etaBefore.bankTrips).toBe(0);
+    const totalMsBefore = etaBefore.totalMs;
+
+    // Loot bag fills with other items (not ironBar) and banking starts.
+    // The current trip is in progress — must NOT add an extra bankTripMs.
+    sendServerUpdate({
+      me: {
+        activity: [smeltAct, { type: 'banking' }],
+        lootBag: { ironOre: [0, 25] },
+      },
+    });
+    const etaDuring = __test.buildStatus().goalStatus.eta;
+    expect(etaDuring.bankTrips).toBe(0);
+    expect(etaDuring.totalMs).toBe(totalMsBefore);
+
+    // Banking completes: loot bag cleared, back to smelting.
+    sendServerUpdate({
+      me: {
+        activity: [{ type: 'banking' }, smeltAct],
+        lootBag: { ironOre: [25, 0] },
+      },
+    });
+    const etaAfter = __test.buildStatus().goalStatus.eta;
+    expect(etaAfter.bankTrips).toBe(0);
+    expect(etaAfter.totalMs).toBe(totalMsBefore);
+  });
+
   it('clears goal rate samples when banked count slips below last sample (missed banking transition)', async () => {
     const { __test } = await loadBackground();
     vi.useFakeTimers();

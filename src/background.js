@@ -641,6 +641,7 @@ function pushEtaDebugEntry({
       projectedTrips: generatedBank?.bankTrips ?? null,
       projectedOverheadMs: generatedBank?.bankOverheadMs ?? null,
       tripMs: actId ? bankTripMs(zoneId, effectiveTickMsForActivity(actId)) : null,
+      bankingPhaseActive: liveAct?.type === 'banking' || liveAct?.type === 'travel',
     },
     runout: info ? {
       itemId: info.itemId,
@@ -1438,8 +1439,15 @@ function producedItemsPerCycle(def) {
 
 function bankTripsForGeneratedItems(generatedItems) {
   if (generatedItems <= 0) return 0;
+  // During travel/banking the current trip is already in progress — treat the
+  // loot bag as empty so the in-progress trip is not double-counted.
+  const liveAct = mirroredState.me?.activity ?? null;
+  const currentLootBag =
+    liveAct?.type === 'banking' || liveAct?.type === 'travel'
+      ? 0
+      : lootBagTotal();
   return Math.floor(
-    (lootBagTotal() + generatedItems) / BANK_TRIGGER_ITEM_COUNT
+    (currentLootBag + generatedItems) / BANK_TRIGGER_ITEM_COUNT
   );
 }
 
@@ -1729,7 +1737,15 @@ function estimateGoalPlan({
 function bankTripsBeforeGoalComplete(generatedItems) {
   if (generatedItems <= 0) return 0;
 
-  const lootBagItems = lootBagTotal();
+  // During travel/banking the current trip is already in progress — treat the
+  // loot bag as empty so the in-progress trip is not charged again as a future
+  // trip. The real bank time is already counting down in wall-clock time.
+  const liveAct = mirroredState.me?.activity ?? null;
+  const lootBagItems =
+    liveAct?.type === 'banking' || liveAct?.type === 'travel'
+      ? 0
+      : lootBagTotal();
+
   const freeSlotsBeforeFirstTrip = Math.max(
     0,
     BANK_TRIGGER_ITEM_COUNT - lootBagItems
