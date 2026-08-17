@@ -9,7 +9,7 @@ function resolveGoalEta(gs) {
   if (!gs) return { etaMs: null, bankTrips: 0 };
   if (gs.chanceBased) {
     return gs.eta?.totalMs > 0
-      ? { etaMs: gs.eta.totalMs, bankTrips: 0 }
+      ? { etaMs: gs.eta.totalMs, bankTrips: gs.eta.bankTrips ?? 0 }
       : { etaMs: null, bankTrips: 0 };
   }
   if (gs.eta == null) return { etaMs: null, bankTrips: 0 };
@@ -20,7 +20,6 @@ function resolveGoalEta(gs) {
 export default function GoalSection({ producibleItems, goalStatus }) {
   const [selectedId,    setSelectedId]    = useState(null);
   const [countValue,    setCountValue]    = useState('');
-  const [isCountFocused, setIsCountFocused] = useState(false);
   const comboInputRef  = useRef(null);
   const prevItemIdsRef = useRef('');
 
@@ -40,12 +39,12 @@ export default function GoalSection({ producibleItems, goalStatus }) {
     }
   }, [goalStatus?.goal?.itemId, selectedId]);
 
-  // Keep count input synced with saved goal when not focused
+  // Keep count input synced when the background confirms a new targetCount
   useEffect(() => {
-    if (!isCountFocused && goalStatus?.goal?.targetCount != null) {
+    if (goalStatus?.goal?.targetCount != null) {
       setCountValue(String(goalStatus.goal.targetCount));
     }
-  }, [goalStatus?.goal?.targetCount, isCountFocused]);
+  }, [goalStatus?.goal?.targetCount]);
 
   function handleSetGoal() {
     const itemId = selectedId;
@@ -86,8 +85,6 @@ export default function GoalSection({ producibleItems, goalStatus }) {
           step="1"
           value={countValue}
           onChange={e => setCountValue(e.target.value)}
-          onFocus={() => setIsCountFocused(true)}
-          onBlur={() => setIsCountFocused(false)}
           onKeyDown={e => { if (e.key === 'Enter') handleSetGoal(); }}
         />
         <button onClick={handleSetGoal}>Set</button>
