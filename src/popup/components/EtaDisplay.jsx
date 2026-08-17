@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { formatDuration } from '../utils/format';
 
-export default function EtaDisplay({ etaMs, bankTrips = 0, doneLabel = 'Done!' }) {
+export default function EtaDisplay({
+  etaMs,
+  bankTrips = 0,
+  doneLabel = 'Done!',
+  complete = null,
+}) {
   const anchorRef = useRef(null);
   const [displayMs, setDisplayMs] = useState(etaMs);
 
@@ -27,7 +32,13 @@ export default function EtaDisplay({ etaMs, bankTrips = 0, doneLabel = 'Done!' }
   }, [etaMs]);
 
   if (displayMs == null) return <span className="eta-label">ETA calibrating…</span>;
-  if (displayMs <= 0)    return <span className="eta-label">{doneLabel}</span>;
+  if (displayMs <= 0) {
+    return (
+      <span className="eta-label">
+        {complete === false ? 'ETA <1s' : doneLabel}
+      </span>
+    );
+  }
 
   const tripNote = bankTrips > 0
     ? ` (+${bankTrips} bank trip${bankTrips > 1 ? 's' : ''})`

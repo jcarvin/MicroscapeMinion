@@ -63,6 +63,9 @@ export default function GoalSection({ producibleItems, goalStatus }) {
   }
 
   const { etaMs, bankTrips } = resolveGoalEta(goalStatus);
+  const goalComplete = goalStatus
+    ? (goalStatus.count ?? 0) >= goalStatus.goal.targetCount
+    : false;
   const pct = goalStatus
     ? Math.min(100, (goalStatus.count / goalStatus.goal.targetCount) * 100)
     : 0;
@@ -98,7 +101,7 @@ export default function GoalSection({ producibleItems, goalStatus }) {
           <div className="progress-label">
             <span>{goalStatus.count ?? 0} / {goalStatus.goal.targetCount}</span>
             <span className="eta-group">
-              <EtaDisplay etaMs={etaMs} bankTrips={bankTrips} />
+              <EtaDisplay etaMs={etaMs} bankTrips={bankTrips} complete={goalComplete} />
               <EtaTooltip />
             </span>
           </div>

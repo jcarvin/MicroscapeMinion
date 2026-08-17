@@ -62,6 +62,35 @@ describe('GoalSection', () => {
     expect(bar.style.width).toBe('25%');
   });
 
+  it('does not show done until the actual goal count reaches the target', () => {
+    const { rerender } = render(
+      <GoalSection
+        producibleItems={singleItem}
+        goalStatus={{
+          count: 99,
+          goal: { itemId: 'woodLog', itemName: 'Wood Log', targetCount: 100 },
+          eta: 0,
+        }}
+      />
+    );
+
+    expect(screen.getByText('ETA <1s')).toBeInTheDocument();
+    expect(screen.queryByText('Done!')).not.toBeInTheDocument();
+
+    rerender(
+      <GoalSection
+        producibleItems={singleItem}
+        goalStatus={{
+          count: 100,
+          goal: { itemId: 'woodLog', itemName: 'Wood Log', targetCount: 100 },
+          eta: 0,
+        }}
+      />
+    );
+
+    expect(screen.getByText('Done!')).toBeInTheDocument();
+  });
+
   it('calls clearGoal and resets inputs on clear', async () => {
     const user = userEvent.setup();
     const goalStatus = {
