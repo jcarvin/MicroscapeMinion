@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { copyFileSync, cpSync, mkdirSync } from 'fs';
+import { copyFileSync, cpSync, mkdirSync, readdirSync } from 'fs';
 import { resolve } from 'path';
 
 function extensionPlugin(mode) {
@@ -21,9 +21,14 @@ function extensionPlugin(mode) {
 
       cpSync(resolve(__dirname, 'icons'), resolve(dist, 'icons'), { recursive: true });
 
-      mkdirSync(resolve(dist, 'src'), { recursive: true });
-      for (const f of ['background.js', 'content.js', 'injected.js', 'activity-defs.json']) {
-        copyFileSync(resolve(__dirname, 'src', f), resolve(dist, 'src', f));
+      const srcDir = resolve(__dirname, 'src');
+      const distSrcDir = resolve(dist, 'src');
+      mkdirSync(distSrcDir, { recursive: true });
+      for (const f of readdirSync(srcDir)) {
+        if (f === 'popup') continue; // bundled separately by Rollup
+        if (f.endsWith('.js') || f.endsWith('.json')) {
+          copyFileSync(resolve(srcDir, f), resolve(distSrcDir, f));
+        }
       }
     },
   };
