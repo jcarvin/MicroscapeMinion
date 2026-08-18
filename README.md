@@ -101,6 +101,11 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.8
+
+- Refactor `background.js` into 14 focused ES modules (constants, state, patch, activity utilities, inventory, runout, calibration, rate tracking, ETA calculation, notifications, debug log, and status).
+- Fix build pipeline: `vite.config.js` previously only copied four hardcoded files to dist, so the new modules were never shipped and the service worker failed to load silently.
+
 ### v0.1.7
 
 - Fix bank-trip ETA accounting so in-progress banking and travel are not charged as a future trip.
