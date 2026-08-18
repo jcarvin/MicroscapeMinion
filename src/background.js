@@ -1439,7 +1439,7 @@ function trackRunoutConsumption(prevAct, newAct, prevMe, newMe) {
 function getMaterialCountForMe(me, itemId) {
   const inv = me?.inventory?.[itemId] ?? 0;
   const lb = me?.lootBag?.[itemId] ?? 0;
-  return inv + lb;
+  return Math.max(inv, lb);
 }
 
 function dropRateKey(actId, itemId) {
@@ -1916,12 +1916,12 @@ function runoutInfo(actId) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Total material available = inventory + lootBag
+// inventory mirrors the loot bag (lb ⊆ inv), so max avoids double-counting.
 function getMaterialCount(itemId) {
   const me = mirroredState.me;
   const inv = me?.inventory?.[itemId] ?? 0;
   const lb = me?.lootBag?.[itemId] ?? 0;
-  return inv + lb;
+  return Math.max(inv, lb);
 }
 
 // Total items currently occupying the loot bag (all types combined)
