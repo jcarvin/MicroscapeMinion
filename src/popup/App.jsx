@@ -10,6 +10,7 @@ import DebugSection from './components/DebugSection';
 
 export default function App() {
   const [status, setStatus] = useState(null);
+  const [showDebug, setShowDebug] = useState(false);
   const selectedSkillEtaRef = useRef(null);
   const [selectedSkillEta, setSelectedSkillEta] = useState(null);
 
@@ -31,7 +32,11 @@ export default function App() {
 
   return (
     <>
-      <Header connected={status?.connected} idle={status?.idle} />
+      <Header
+        connected={status?.connected}
+        idle={status?.idle}
+        onToggleDebug={() => setShowDebug(v => !v)}
+      />
       <StatusSection
         connected={status?.connected}
         idle={status?.idle}
@@ -53,12 +58,14 @@ export default function App() {
         skillNotifyTarget={status?.skillNotifyTarget ?? null}
         onSelectedEtaChange={handleSelectedEtaChange}
       />
-      <DebugSection
-        rawMe={status?.rawMe}
-        tickLog={status?.tickLog ?? []}
-        etaDebugLog={status?.etaDebugLog}
-        etaDebugLogVersion={status?.etaDebugLogVersion}
-      />
+      {showDebug && (
+        <DebugSection
+          rawMe={status?.rawMe}
+          tickLog={status?.tickLog ?? []}
+          etaDebugLog={status?.etaDebugLog}
+          etaDebugLogVersion={status?.etaDebugLogVersion}
+        />
+      )}
     </>
   );
 }
