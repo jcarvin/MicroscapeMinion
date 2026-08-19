@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { computeMicroscapeXpTable } from '../src/xp.js';
 
 const pietyDef = {
   durationMs: 16000,
@@ -80,7 +81,7 @@ describe('background activity definitions', () => {
     vi.restoreAllMocks();
   });
 
-  it('merges missing seed activity definitions into an existing cache', async () => {
+  it('merges missing seed definitions and planner metadata into an existing cache', async () => {
     const { __test } = await loadBackground();
     const cached = {
       'cook-bread': {
@@ -91,6 +92,8 @@ describe('background activity definitions', () => {
     const seed = {
       'cook-bread': {
         durationMs: 1,
+        level: 1,
+        xpPerCycle: 40,
         inventoryChanges: { overwritten: 1 },
       },
       'bury-bones': pietyDef,
@@ -99,9 +102,132 @@ describe('background activity definitions', () => {
     const result = __test.mergeMissingActivityDefs(cached, seed);
 
     expect(result.added).toBe(true);
-    expect(result.defs['cook-bread']).toBe(cached['cook-bread']);
+    expect(result.defs['cook-bread']).toEqual({
+      ...cached['cook-bread'],
+      level: 1,
+      xpPerCycle: 40,
+    });
+    expect(result.defs['cook-bread'].inventoryChanges).toEqual({ dough: -1, bread: 1 });
     expect(result.defs['bury-bones']).toEqual(pietyDef);
+    expect(cached['cook-bread'].level).toBeUndefined();
     expect(cached['bury-bones']).toBeUndefined();
+  });
+
+  it('enriches cached combat definitions with missing drop routes', async () => {
+    const { __test } = await loadBackground();
+    const cached = {
+      'fight-skeleton': {
+        durationMs: 6000,
+        inventoryChanges: {},
+      },
+    };
+    const seed = {
+      'fight-skeleton': {
+        durationMs: 1,
+        inventoryChanges: {},
+        mob: 'skeleton',
+        dropItems: { bones: 1, ironArmor: 1 },
+      },
+    };
+
+    expect(__test.mergeMissingActivityDefs(cached, seed)).toEqual({
+      added: true,
+      defs: {
+        'fight-skeleton': {
+          ...cached['fight-skeleton'],
+          mob: 'skeleton',
+          dropItems: { bones: 1, ironArmor: 1 },
+        },
+      },
+    });
+  });
+
+  it('preserves live drops and backfills missing levels when startup loading finishes later', async () => {
+    vi.resetModules();
+    installChromeMock({
+      cachedDefs: {
+        'forge-iron-armor': {
+          durationMs: 72000,
+          inventoryChanges: { ironBar: -5, ironArmor: 1 },
+        },
+        'mine-gold': {
+          durationMs: 42000,
+          level: 40,
+          xpPerCycle: 66,
+          inventoryChanges: { goldOre: 1 },
+        },
+      },
+    });
+    let resolveSeed;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => {
+      resolveSeed = () => resolve({
+        json: () => Promise.resolve({
+          'forge-iron-armor': {
+            durationMs: 72000,
+            inventoryChanges: { ironBar: -5, ironArmor: 1 },
+          },
+          'mine-gold': {
+            durationMs: 42000,
+            level: 40,
+            xpPerCycle: 66,
+            inventoryChanges: { goldOre: 1 },
+          },
+        }),
+      });
+    })));
+    const { __test } = await import('../src/background.js');
+
+    sendRuntimeMessage({
+      __mm: true,
+      type: 'ACTIVITY_DEFS',
+      defs: {
+        'forge-iron-armor': {
+          durationMs: 72000,
+          inventoryChanges: { ironBar: -5, ironArmor: 1 },
+        },
+        'fight-skeleton': {
+          durationMs: 6000,
+          inventoryChanges: {},
+          mob: 'skeleton',
+          dropItems: { ironArmor: 1 },
+        },
+        'mine-gold': {
+          durationMs: 42000,
+          xpPerCycle: 66,
+          inventoryChanges: { goldOre: 1 },
+        },
+      },
+    });
+    resolveSeed();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const xpTable = computeMicroscapeXpTable();
+    __test.setTestState({
+      xpTable,
+      state: { me: { inventory: {}, lootBag: {}, exp: { mining: xpTable[37] } } },
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOALS',
+      goals: [{ id: 'gold', itemId: 'goldOre', itemName: 'Gold Ore', targetCount: 100 }],
+    });
+
+    expect(__test.buildStatus().goalItems.find(({ id }) => id === 'ironArmor'))
+      .toMatchObject({
+        craftable: true,
+        chanceDrop: true,
+        acquisitionSources: ['craft', 'drops'],
+      });
+    expect(__test.buildStatus().goalStatuses[0].planning).toMatchObject({
+      skill: 'mining',
+      requiredLevel: 40,
+      projectedLevelBefore: 37,
+      levelFeasible: false,
+      feasible: false,
+      xpGained: 0,
+    });
   });
 
   it('migrates a stored single goal to the ordered goals array', async () => {
@@ -169,6 +295,254 @@ describe('background activity definitions', () => {
       { id: 'same', itemId: 'woodLog', itemName: 'woodLog', targetCount: 10 },
       { id: 'same-2', itemId: null, itemName: 'Stone', targetCount: 20 },
     ]);
+  });
+
+  it('normalizes and retains zero only for Max goals', async () => {
+    const { __test } = await loadBackground();
+
+    expect(__test.normalizeGoals([
+      { id: 'max', itemId: 'ironBar', targetCount: 0, maxCraftable: true },
+      { id: 'manual', itemId: 'ironBar', targetCount: 0 },
+    ])).toEqual([
+      {
+        id: 'max',
+        itemId: 'ironBar',
+        itemName: 'ironBar',
+        targetCount: 0,
+        maxCraftable: true,
+        sourceMode: 'craft',
+      },
+    ]);
+  });
+
+  it('keeps valid source modes and discards invalid values', async () => {
+    const { __test } = await loadBackground();
+
+    expect(__test.normalizeGoals([
+      { id: 'any', itemId: 'arrows', targetCount: 70, sourceMode: 'any' },
+      { id: 'drops', itemId: 'arrows', targetCount: 70, sourceMode: 'drops' },
+      { id: 'invalid', itemId: 'arrows', targetCount: 70, sourceMode: 'market' },
+    ])).toEqual([
+      { id: 'any', itemId: 'arrows', itemName: 'arrows', targetCount: 70, sourceMode: 'any' },
+      { id: 'drops', itemId: 'arrows', itemName: 'arrows', targetCount: 70, sourceMode: 'drops' },
+      { id: 'invalid', itemId: 'arrows', itemName: 'arrows', targetCount: 70 },
+    ]);
+  });
+
+  it('recalculates ordered Max goals and returns planning details immediately', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'mine-iron': { inventoryChanges: { ironOre: 1 } },
+        'smelt-iron': { inventoryChanges: { ironOre: -2, ironBar: 1 } },
+        'forge-iron-armor': { inventoryChanges: { ironBar: -5, ironArmor: 1 } },
+      },
+      state: { me: { inventory: {}, lootBag: {} } },
+    });
+
+    const response = sendRuntimeMessage({
+      type: 'SET_GOALS',
+      goals: [
+        { id: 'ore', itemId: 'ironOre', itemName: 'Iron Ore', targetCount: 1000 },
+        { id: 'bar', itemId: 'ironBar', itemName: 'Iron Bar', targetCount: 0, maxCraftable: true },
+        { id: 'armor', itemId: 'ironArmor', itemName: 'Iron Armor', targetCount: 0, maxCraftable: true },
+      ],
+    });
+
+    expect(response).toHaveBeenCalledWith(expect.objectContaining({
+      goals: [
+        expect.objectContaining({ id: 'ore', targetCount: 1000 }),
+        expect.objectContaining({ id: 'bar', targetCount: 500, maxCraftable: true }),
+        expect.objectContaining({ id: 'armor', targetCount: 100, maxCraftable: true }),
+      ],
+      goalStatuses: expect.arrayContaining([
+        expect.objectContaining({
+          goal: expect.objectContaining({ id: 'armor' }),
+          planning: expect.objectContaining({ recipeId: 'forge-iron-armor', feasible: true }),
+        }),
+      ]),
+    }));
+  });
+
+  it('continuously persists changed Max targets after inventory updates', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'smelt-iron': { inventoryChanges: { ironOre: -2, ironBar: 1 } },
+      },
+      state: { me: { activity: null, inventory: { ironOre: 10 }, lootBag: {} } },
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOALS',
+      goals: [{
+        id: 'bar', itemId: 'ironBar', itemName: 'Iron Bar', targetCount: 0, maxCraftable: true,
+      }],
+    });
+    expect(__test.buildStatus().goalStatuses[0].goal.targetCount).toBe(5);
+
+    chrome.storage.local.set.mockClear();
+    sendServerUpdate({ me: { inventory: { ironOre: [10, 14] } } });
+
+    expect(__test.buildStatus().goalStatuses[0].goal.targetCount).toBe(7);
+    expect(chrome.storage.local.set).toHaveBeenCalledWith({
+      goals: [expect.objectContaining({ id: 'bar', targetCount: 7, maxCraftable: true })],
+    });
+  });
+
+  it('does not notify for an impossible zero-target Max goal', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'smelt-iron': { inventoryChanges: { ironOre: -2, ironBar: 1 } },
+      },
+      state: { me: { activity: null, inventory: {}, lootBag: {} } },
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOALS',
+      goals: [{
+        id: 'bar', itemId: 'ironBar', itemName: 'Iron Bar', targetCount: 0, maxCraftable: true,
+      }],
+    });
+
+    sendServerUpdate({ me: { inventory: { ironOre: [0] } } });
+
+    expect(chrome.notifications.create).not.toHaveBeenCalled();
+    expect(__test.buildStatus().goalStatuses[0]).toMatchObject({
+      goal: { targetCount: 0, maxCraftable: true },
+      planning: { feasible: false, limitingItemIds: ['ironOre'] },
+    });
+  });
+
+  it('projects goal XP in order and reports level-locked activities after reorder', async () => {
+    const { __test } = await loadBackground();
+    const xpTable = computeMicroscapeXpTable();
+    const coalCount = Math.ceil((xpTable[40] - xpTable[30]) / 56);
+    const coalGoal = {
+      id: 'coal', itemId: 'coalOre', itemName: 'Coal Ore', targetCount: coalCount,
+    };
+    const goldGoal = {
+      id: 'gold', itemId: 'goldOre', itemName: 'Gold Ore', targetCount: 1,
+    };
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'mine-coal': { level: 30, xpPerCycle: 56, inventoryChanges: { coalOre: 1 } },
+        'mine-gold': { level: 40, xpPerCycle: 66, inventoryChanges: { goldOre: 1 } },
+      },
+      xpTable,
+      state: { me: { inventory: {}, lootBag: {}, exp: { mining: xpTable[30] } } },
+    });
+
+    sendRuntimeMessage({ type: 'SET_GOALS', goals: [coalGoal, goldGoal] });
+    let statuses = __test.buildStatus().goalStatuses;
+    expect(statuses[0].planning).toMatchObject({
+      projectedLevelBefore: 30,
+      expectedLevel: 40,
+      levelFeasible: true,
+      xpKnown: true,
+    });
+    expect(statuses[1].planning).toMatchObject({
+      projectedLevelBefore: 40,
+      requiredLevel: 40,
+      levelFeasible: true,
+    });
+
+    sendRuntimeMessage({ type: 'SET_GOALS', goals: [goldGoal, coalGoal] });
+    statuses = __test.buildStatus().goalStatuses;
+    expect(statuses[0].planning).toMatchObject({
+      feasible: false,
+      projectedLevelBefore: 30,
+      requiredLevel: 40,
+      levelFeasible: false,
+      achievableTarget: 0,
+    });
+  });
+
+  it('does not advertise Max or XP projections for chance-based combat drops', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'fight-wolf': {
+          level: 20,
+          xpPerCycle: 999,
+          inventoryChanges: {},
+          dropItems: { wolfFang: 1 },
+        },
+      },
+      state: { me: { inventory: {}, lootBag: {}, exp: { attack: 100_000 } } },
+    });
+
+    sendRuntimeMessage({
+      type: 'SET_GOALS',
+      goals: [{ id: 'fangs', itemId: 'wolfFang', itemName: 'Wolf Fang', targetCount: 10 }],
+    });
+
+    const status = __test.buildStatus();
+    expect(status.goalItems.find(({ id }) => id === 'wolfFang')).toMatchObject({
+      craftable: false,
+      chanceDrop: true,
+      acquisitionSources: ['drops'],
+    });
+    expect(status.goalStatuses[0].planning).toMatchObject({
+      chanceBased: true,
+      sourceType: 'chanceDrop',
+      xpKnown: false,
+      xpGained: 0,
+      expectedLevel: null,
+    });
+  });
+
+  it('uses the selected source when relating an ambiguous goal to the current activity', async () => {
+    const { __test } = await loadBackground();
+    const activityDefs = {
+      'fletch-arrows': {
+        level: 1,
+        xpPerCycle: 10,
+        inventoryChanges: { headlessArrow: -15, bronzeArrowtips: -15, arrows: 15 },
+      },
+      'fight-goblin': {
+        level: 1,
+        inventoryChanges: {},
+        dropItems: { arrows: 5 },
+      },
+    };
+    const goalFor = (sourceMode) => ({
+      id: 'arrows', itemId: 'arrows', itemName: 'Arrows', targetCount: 70, sourceMode,
+    });
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs,
+      state: {
+        me: {
+          activity: { combatSkill: 'attack', activity: 'fight-goblin', mob: 'goblin' },
+          inventory: { arrows: 65 },
+          lootBag: {},
+        },
+      },
+    });
+
+    for (const [sourceMode, related] of [['any', true], ['craft', false], ['drops', true]]) {
+      sendRuntimeMessage({ type: 'SET_GOALS', goals: [goalFor(sourceMode)] });
+      expect(__test.buildStatus().goalStatuses[0].relatedToActivity).toBe(related);
+    }
+
+    __test.setTestState({
+      state: {
+        me: {
+          activity: { skill: 'fletching', activity: 'fletch-arrows', remaining: 1 },
+          inventory: { arrows: 65, headlessArrow: 15, bronzeArrowtips: 15 },
+          lootBag: {},
+        },
+      },
+    });
+    for (const [sourceMode, related] of [['any', true], ['craft', true], ['drops', false]]) {
+      sendRuntimeMessage({ type: 'SET_GOALS', goals: [goalFor(sourceMode)] });
+      expect(__test.buildStatus().goalStatuses[0].relatedToActivity).toBe(related);
+    }
   });
 
   it('writes merged seed activities back when cached definitions are stale', async () => {

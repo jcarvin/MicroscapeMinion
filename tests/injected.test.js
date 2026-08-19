@@ -40,6 +40,7 @@ describe('injected activity definition parser', () => {
 
     expect(parseActivityDefs(bundle)['bury-bones']).toEqual({
       durationMs: 16000,
+      level: 1,
       xpPerCycle: 4,
       inventoryChanges: {
         bones: -1,
@@ -57,7 +58,41 @@ describe('injected activity definition parser', () => {
 
     expect(parseActivityDefs(bundle)['bury-bones']).toMatchObject({
       durationMs: 30000,
+      level: 1,
       xpPerCycle: 99,
+    });
+  });
+
+  it('parses an item as both a smithing output and a combat drop', async () => {
+    const parseActivityDefs = await loadInjectedParser();
+    const bundle = `
+      {
+        id: \`skeleton\`,
+        name: \`skeleton\`,
+        enemyType: \`creature\`,
+        speed: 3,
+        stats: { hp: 19 },
+        drops: { bones: { quantity: 1, rarity: 0 }, ironArmor: { quantity: 1, rarity: 7 } }
+      }
+      { id: \`fight-skeleton\`, name: \`skeleton\`, mob: \`skeleton\`, level: 0 }
+      {
+        id: \`forge-iron-armor\`,
+        name: \`iron armor\`,
+        level: 23,
+        exp: 211,
+        duration: 30,
+        entity: \`anvil\`,
+        inventoryChanges: { ironBar: -5, ironArmor: 1 }
+      }
+    `;
+
+    expect(parseActivityDefs(bundle)).toMatchObject({
+      'fight-skeleton': {
+        dropItems: { bones: 1, ironArmor: 1 },
+      },
+      'forge-iron-armor': {
+        inventoryChanges: { ironBar: -5, ironArmor: 1 },
+      },
     });
   });
 });

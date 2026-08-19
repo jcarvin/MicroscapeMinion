@@ -1,0 +1,415 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildOwnedCounts,
+  getCraftableItemIds,
+  planGoals,
+} from '../src/goal-planner.js';
+import activityDefs from '../src/activity-defs.json';
+import { computeMicroscapeXpTable } from '../src/xp.js';
+
+const defs = {
+  'mine-iron': { inventoryChanges: { ironOre: 1 } },
+  'smelt-iron': { inventoryChanges: { ironOre: -2, ironBar: 1 } },
+  'forge-iron-armor': { inventoryChanges: { ironBar: -5, ironArmor: 1 } },
+  'smelt-steel': { inventoryChanges: { ironOre: -1, coalOre: -2, steelBar: 1 } },
+};
+
+function goal(id, itemId, targetCount, maxCraftable = false) {
+  return {
+    id,
+    itemId,
+    itemName: itemId,
+    targetCount,
+    ...(maxCraftable ? { maxCraftable: true } : {}),
+  };
+}
+
+describe('goal planner', () => {
+  it('plans the iron ore to bar to armor chain in row order', () => {
+    const result = planGoals({
+      goals: [
+        goal('ore', 'ironOre', 1000),
+        goal('bars', 'ironBar', 0, true),
+        goal('armor', 'ironArmor', 0, true),
+      ],
+      activityDefs: defs,
+      ownedCounts: {},
+    });
+
+    expect(result.goals.map(({ targetCount }) => targetCount)).toEqual([1000, 500, 100]);
+    expect(result.ledger).toMatchObject({ ironOre: 0, ironBar: 0, ironArmor: 100 });
+  });
+
+  it('includes owned output in the absolute Max target', () => {
+    const result = planGoals({
+      goals: [goal('bars', 'ironBar', 0, true)],
+      activityDefs: defs,
+      ownedCounts: { ironOre: 20, ironBar: 10 },
+    });
+
+    expect(result.goals[0].targetCount).toBe(20);
+  });
+
+  it('uses the lowest multi-input capacity and reports tied bottlenecks', () => {
+    const limited = planGoals({
+      goals: [goal('steel', 'steelBar', 0, true)],
+      activityDefs: defs,
+      ownedCounts: { ironOre: 10, coalOre: 12 },
+    });
+    const tied = planGoals({
+      goals: [goal('steel', 'steelBar', 0, true)],
+      activityDefs: defs,
+      ownedCounts: { ironOre: 6, coalOre: 12 },
+    });
+
+    expect(limited.goals[0].targetCount).toBe(6);
+    expect(limited.plans[0].limitingItemIds).toEqual(['coalOre']);
+    expect(tied.plans[0].limitingItemIds).toEqual(['ironOre', 'coalOre']);
+  });
+
+  it('does not count a shared input twice across later rows', () => {
+    const result = planGoals({
+      goals: [
+        goal('bars', 'ironBar', 0, true),
+        goal('steel', 'steelBar', 0, true),
+      ],
+      activityDefs: defs,
+      ownedCounts: { ironOre: 20, coalOre: 100 },
+    });
+
+    expect(result.goals.map(({ targetCount }) => targetCount)).toEqual([10, 0]);
+    expect(result.plans[1]).toMatchObject({ feasible: false, limitingItemIds: ['ironOre'] });
+  });
+
+  it('adds batch yields and co-products to the downstream ledger', () => {
+    const activityDefs = {
+      'telegrab-gold': {
+        inventoryChanges: { airRune: -1, lawRune: -1, goldBar: 2 },
+      },
+      'bury-dragon-bones': {
+        inventoryChanges: { dragonBones: -1, spiritRune: 7, sacredRune: 1 },
+      },
+    };
+    const result = planGoals({
+      goals: [
+        goal('gold', 'goldBar', 3),
+        goal('spirit', 'spiritRune', 0, true),
+        goal('sacred', 'sacredRune', 0, true),
+      ],
+      activityDefs,
+      ownedCounts: { airRune: 2, lawRune: 2, dragonBones: 2 },
+    });
+
+    expect(result.ledger.goldBar).toBe(4);
+    expect(result.goals.map(({ targetCount }) => targetCount)).toEqual([3, 14, 2]);
+  });
+
+  it('chooses the best single alternate recipe with a stable ID tie-breaker', () => {
+    const activityDefs = {
+      'cook-bread': { inventoryChanges: { dough: -1, bread: 1 } },
+      'bones-to-bread': { inventoryChanges: { bones: -3, bread: 1 } },
+    };
+    const result = planGoals({
+      goals: [goal('bread', 'bread', 0, true)],
+      activityDefs,
+      ownedCounts: { dough: 5, bones: 30 },
+    });
+
+    expect(result.goals[0].targetCount).toBe(10);
+    expect(result.plans[0].recipeId).toBe('bones-to-bread');
+    expect(result.ledger.dough).toBe(5);
+  });
+
+  it('keeps an infeasible manual target and exposes only achievable stock downstream', () => {
+    const result = planGoals({
+      goals: [
+        goal('bars', 'ironBar', 8),
+        goal('armor', 'ironArmor', 0, true),
+      ],
+      activityDefs: defs,
+      ownedCounts: { ironOre: 10 },
+    });
+
+    expect(result.goals.map(({ targetCount }) => targetCount)).toEqual([8, 1]);
+    expect(result.plans[0]).toMatchObject({ feasible: false, achievableTarget: 5 });
+  });
+
+  it('recovers a zero Max goal when its prerequisite moves above it', () => {
+    const bar = goal('bars', 'ironBar', 0, true);
+    const ore = goal('ore', 'ironOre', 10);
+
+    expect(planGoals({ goals: [bar, ore], activityDefs: defs, ownedCounts: {} })
+      .goals[0].targetCount).toBe(0);
+    expect(planGoals({ goals: [ore, bar], activityDefs: defs, ownedCounts: {} })
+      .goals[1].targetCount).toBe(5);
+  });
+
+  it('preserves Max targets until inventory data is ready', () => {
+    const result = planGoals({
+      goals: [goal('bars', 'ironBar', 42, true)],
+      activityDefs: defs,
+      ownedCounts: {},
+      ready: false,
+    });
+
+    expect(result.goals[0].targetCount).toBe(42);
+    expect(result.plans[0]).toMatchObject({ pending: true, feasible: null });
+  });
+
+  it('ignores malformed recipes instead of omitting invalid requirements', () => {
+    const result = planGoals({
+      goals: [goal('bad', 'badOutput', 9, true)],
+      activityDefs: {
+        'bad-recipe': { inventoryChanges: { material: '-1', badOutput: 1 } },
+      },
+      ownedCounts: { material: 100 },
+    });
+
+    expect(result.goals[0].targetCount).toBe(9);
+    expect(result.plans[0]).toMatchObject({ craftable: false, pending: true });
+  });
+
+  it('normalizes mirrored inventory and loot bag counts without double-counting', () => {
+    expect(buildOwnedCounts({
+      inventory: { ironOre: 10, coalOre: 2 },
+      lootBag: { ironOre: 4, coalOre: 5 },
+    })).toEqual({ ironOre: 10, coalOre: 5 });
+  });
+
+  it('projects XP from earlier goals and unlocks a later activity', () => {
+    const xpTable = computeMicroscapeXpTable();
+    const coalCycles = Math.ceil((xpTable[40] - xpTable[30]) / 56);
+    const activityDefs = {
+      'mine-coal': {
+        level: 30,
+        xpPerCycle: 56,
+        inventoryChanges: { coalOre: 1 },
+      },
+      'mine-gold': {
+        level: 40,
+        xpPerCycle: 66,
+        inventoryChanges: { goldOre: 1 },
+      },
+    };
+    const result = planGoals({
+      goals: [
+        goal('coal', 'coalOre', coalCycles),
+        goal('gold', 'goldOre', 1),
+      ],
+      activityDefs,
+      ownedCounts: {},
+      skillXp: { mining: xpTable[30] },
+      xpTable,
+    });
+
+    expect(result.plans[0]).toMatchObject({
+      skill: 'mining',
+      requiredLevel: 30,
+      projectedLevelBefore: 30,
+      expectedLevel: 40,
+      xpGained: coalCycles * 56,
+      xpKnown: true,
+      levelFeasible: true,
+    });
+    expect(result.plans[1]).toMatchObject({
+      requiredLevel: 40,
+      projectedLevelBefore: 40,
+      levelFeasible: true,
+      feasible: true,
+    });
+  });
+
+  it('blocks a level-locked goal until the XP-producing goal moves above it', () => {
+    const xpTable = computeMicroscapeXpTable();
+    const coalCycles = Math.ceil((xpTable[40] - xpTable[30]) / 56);
+    const activityDefs = {
+      'mine-coal': { level: 30, xpPerCycle: 56, inventoryChanges: { coalOre: 1 } },
+      'mine-gold': { level: 40, xpPerCycle: 66, inventoryChanges: { goldOre: 1 } },
+    };
+    const gold = goal('gold', 'goldOre', 1);
+    const coal = goal('coal', 'coalOre', coalCycles);
+    const blocked = planGoals({
+      goals: [gold, coal],
+      activityDefs,
+      ownedCounts: {},
+      skillXp: { mining: xpTable[30] },
+      xpTable,
+    });
+    const unlocked = planGoals({
+      goals: [coal, gold],
+      activityDefs,
+      ownedCounts: {},
+      skillXp: { mining: xpTable[30] },
+      xpTable,
+    });
+
+    expect(blocked.plans[0]).toMatchObject({
+      feasible: false,
+      levelFeasible: false,
+      requiredLevel: 40,
+      projectedLevelBefore: 30,
+      achievableTarget: 0,
+      xpGained: 0,
+    });
+    expect(blocked.ledger.goldOre ?? 0).toBe(0);
+    expect(unlocked.plans[1]).toMatchObject({ feasible: true, levelFeasible: true });
+    expect(unlocked.ledger.goldOre).toBe(1);
+  });
+
+  it('flags the bundled steel bar and vial recipes at the reported player levels', () => {
+    const xpTable = computeMicroscapeXpTable();
+    const result = planGoals({
+      goals: [
+        goal('steel', 'steelBar', 3),
+        goal('vial', 'vial', 1),
+      ],
+      activityDefs,
+      ownedCounts: { ironOre: 3, coalOre: 6 },
+      skillXp: {
+        smithing: xpTable[28],
+        crafting: xpTable[8],
+      },
+      xpTable,
+    });
+
+    expect(result.plans[0]).toMatchObject({
+      recipeId: 'smelt-steel',
+      skill: 'smithing',
+      requiredLevel: 30,
+      projectedLevelBefore: 28,
+      levelFeasible: false,
+      materialFeasible: true,
+      feasible: false,
+    });
+    expect(result.plans[1]).toMatchObject({
+      recipeId: 'craft-vial',
+      skill: 'crafting',
+      requiredLevel: 33,
+      projectedLevelBefore: 8,
+      levelFeasible: false,
+      materialFeasible: false,
+      feasible: false,
+    });
+  });
+
+  it('plans deterministic farming inputs and XP without exposing Max', () => {
+    const xpTable = computeMicroscapeXpTable();
+    const activityDefs = {
+      'farm-potatoes': {
+        skill: 'farming',
+        level: 10,
+        xpPerCycle: 50,
+        inventoryChanges: { potatoSeed: -1, potato: 3 },
+      },
+    };
+    const result = planGoals({
+      goals: [goal('potatoes', 'potato', 6)],
+      activityDefs,
+      ownedCounts: { potatoSeed: 2 },
+      skillXp: { farming: xpTable[10] },
+      xpTable,
+    });
+
+    expect(getCraftableItemIds(activityDefs)).not.toContain('potato');
+    expect(result.plans[0]).toMatchObject({
+      craftable: false,
+      sourceType: 'activity',
+      feasible: true,
+      skill: 'farming',
+      projectedLevelBefore: 10,
+      xpGained: 100,
+      xpKnown: true,
+    });
+    expect(result.ledger).toMatchObject({ potatoSeed: 0, potato: 6 });
+  });
+
+  it('treats combat drops as chance-based planned acquisition without Max or XP', () => {
+    const xpTable = computeMicroscapeXpTable();
+    const activityDefs = {
+      'fight-wolf': {
+        level: 20,
+        xpPerCycle: 999,
+        inventoryChanges: {},
+        dropItems: { wolfFang: 1 },
+      },
+      'craft-fang-charm': {
+        level: 1,
+        xpPerCycle: 10,
+        inventoryChanges: { wolfFang: -2, fangCharm: 1 },
+      },
+    };
+    const result = planGoals({
+      goals: [
+        goal('fangs', 'wolfFang', 4),
+        goal('charms', 'fangCharm', 0, true),
+      ],
+      activityDefs,
+      ownedCounts: {},
+      skillXp: { attack: xpTable[50], crafting: xpTable[1] },
+      xpTable,
+    });
+
+    expect(getCraftableItemIds(activityDefs)).not.toContain('wolfFang');
+    expect(result.plans[0]).toMatchObject({
+      craftable: false,
+      chanceBased: true,
+      sourceType: 'chanceDrop',
+      activityId: 'fight-wolf',
+      xpGained: 0,
+      xpKnown: false,
+      expectedLevel: null,
+    });
+    expect(result.goals[1].targetCount).toBe(2);
+    expect(result.ledger.fangCharm).toBe(2);
+  });
+
+  it('defaults craft-and-drop items to Any and only warns for an explicit Craft route', () => {
+    const activityDefs = {
+      'fletch-arrows': {
+        level: 1,
+        xpPerCycle: 10,
+        inventoryChanges: { headlessArrow: -15, bronzeArrowtips: -15, arrows: 15 },
+      },
+      'fight-goblin': {
+        level: 1,
+        inventoryChanges: {},
+        dropItems: { arrows: 5 },
+      },
+    };
+    const baseGoal = goal('arrows', 'arrows', 70);
+    const options = { activityDefs, ownedCounts: { arrows: 65 } };
+
+    const any = planGoals({ goals: [baseGoal], ...options });
+    const craft = planGoals({
+      goals: [{ ...baseGoal, sourceMode: 'craft' }],
+      ...options,
+    });
+    const drops = planGoals({
+      goals: [{ ...baseGoal, sourceMode: 'drops' }],
+      ...options,
+    });
+
+    expect(any.plans[0]).toMatchObject({
+      sourceMode: 'any',
+      sourceType: 'any',
+      sourceOptions: ['any', 'craft', 'drops'],
+      feasible: true,
+      achievableTarget: 70,
+      xpKnown: false,
+    });
+    expect(craft.plans[0]).toMatchObject({
+      sourceMode: 'craft',
+      sourceType: 'recipe',
+      feasible: false,
+      achievableTarget: 65,
+      limitingItemIds: ['headlessArrow', 'bronzeArrowtips'],
+    });
+    expect(drops.plans[0]).toMatchObject({
+      sourceMode: 'drops',
+      sourceType: 'chanceDrop',
+      chanceBased: true,
+      feasible: true,
+      xpKnown: false,
+    });
+  });
+});

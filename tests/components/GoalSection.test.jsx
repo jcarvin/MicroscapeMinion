@@ -14,6 +14,19 @@ vi.mock('../../src/popup/utils/messages', () => ({
 const items = [
   { id: 'woodLog', name: 'woodLog', count: 50, relatedToActivity: true },
   { id: 'stone', name: 'stone', count: 5, relatedToActivity: false },
+  { id: 'ironOre', name: 'ironOre', count: 10, relatedToActivity: false },
+  { id: 'ironBar', name: 'ironBar', count: 0, relatedToActivity: false, craftable: true },
+  { id: 'coalOre', name: 'coalOre', count: 0, relatedToActivity: false },
+  { id: 'goldOre', name: 'goldOre', count: 0, relatedToActivity: false },
+  {
+    id: 'arrows',
+    name: 'arrows',
+    count: 65,
+    relatedToActivity: true,
+    craftable: true,
+    chanceDrop: true,
+    acquisitionSources: ['craft', 'drops'],
+  },
 ];
 
 const woodStatus = {
@@ -30,6 +43,48 @@ const stoneStatus = {
   eta: null,
   relatedToActivity: false,
   warmupRemainingMs: 0,
+};
+
+const impossibleBarStatus = {
+  goal: {
+    id: 'bar-goal',
+    itemId: 'ironBar',
+    itemName: 'Iron Bar',
+    targetCount: 0,
+    maxCraftable: true,
+  },
+  count: 0,
+  eta: null,
+  relatedToActivity: false,
+  warmupRemainingMs: 0,
+  planning: {
+    goalId: 'bar-goal',
+    craftable: true,
+    maxCraftable: true,
+    recipeId: 'smelt-iron',
+    feasible: false,
+    achievableTarget: 0,
+    limitingItemIds: ['ironOre'],
+    pending: false,
+  },
+};
+
+const ambiguousArrowStatus = {
+  goal: { id: 'arrow-goal', itemId: 'arrows', itemName: 'Arrows', targetCount: 70 },
+  count: 65,
+  eta: { totalMs: 60_000, bankTrips: 0 },
+  relatedToActivity: true,
+  warmupRemainingMs: 0,
+  planning: {
+    goalId: 'arrow-goal',
+    craftable: true,
+    feasible: true,
+    achievableTarget: 70,
+    sourceMode: 'any',
+    sourceType: 'any',
+    sourceOptions: ['any', 'craft', 'drops'],
+    xpKnown: false,
+  },
 };
 
 describe('GoalSection', () => {
@@ -69,6 +124,230 @@ describe('GoalSection', () => {
         targetCount: 100,
       }),
     ]);
+  });
+
+  it('shows Max only for craftable items and makes its target read-only', async () => {
+    const user = userEvent.setup();
+    render(<GoalSection goalItems={items} goalStatuses={[]} />);
+
+    await user.click(screen.getByPlaceholderText('Select item'));
+    await user.click(screen.getByText('Iron Bar'));
+    const max = screen.getByRole('button', { name: 'Use maximum craftable target' });
+    expect(max).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(max);
+    expect(max).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('spinbutton', { name: 'Goal target' })).toHaveAttribute('readonly');
+    expect(setGoals).toHaveBeenLastCalledWith([
+      expect.objectContaining({ itemId: 'ironBar', targetCount: 0, maxCraftable: true }),
+    ]);
+  });
+
+  it('syncs the target from the immediate background planning response', async () => {
+    const user = userEvent.setup();
+    const manualBarStatus = {
+      ...impossibleBarStatus,
+      goal: { ...impossibleBarStatus.goal, targetCount: 10, maxCraftable: undefined },
+      planning: { ...impossibleBarStatus.planning, maxCraftable: false, feasible: true },
+    };
+    setGoals.mockResolvedValueOnce({
+      goals: [{ ...impossibleBarStatus.goal, targetCount: 5 }],
+      goalStatuses: [{
+        ...impossibleBarStatus,
+        goal: { ...impossibleBarStatus.goal, targetCount: 5 },
+        planning: { ...impossibleBarStatus.planning, feasible: true, achievableTarget: 5 },
+      }],
+    });
+    render(<GoalSection goalItems={items} goalStatuses={[manualBarStatus]} />);
+
+    await user.click(screen.getByRole('button', { name: 'Use maximum craftable target' }));
+    expect(screen.getByRole('spinbutton', { name: 'Goal target' })).toHaveValue(5);
+    expect(screen.getByText('Limited by Iron Ore')).toBeInTheDocument();
+  });
+
+  it('shows an impossible Max goal at zero with a red limiting-item warning', () => {
+    render(<GoalSection goalItems={items} goalStatuses={[impossibleBarStatus]} />);
+
+    const row = document.querySelector('[data-goal-id="bar-goal"]');
+    expect(row).toHaveClass('is-infeasible');
+    expect(screen.getByText("Can't craft · limited by Iron Ore")).toBeInTheDocument();
+    expect(screen.queryByText('0 / 0')).not.toBeInTheDocument();
+    expect(screen.queryByText('Done!')).not.toBeInTheDocument();
+  });
+
+  it('shows chance-based drop context without Max or an XP projection', () => {
+    const status = {
+      goal: { id: 'fang-goal', itemId: 'wolfFang', itemName: 'Wolf Fang', targetCount: 10 },
+      count: 0,
+      eta: null,
+      relatedToActivity: false,
+      planning: {
+        goalId: 'fang-goal',
+        feasible: true,
+        chanceBased: true,
+        sourceType: 'chanceDrop',
+        xpKnown: false,
+        xpGained: 0,
+        expectedLevel: null,
+      },
+    };
+    render(
+      <GoalSection
+        goalItems={[...items, {
+          id: 'wolfFang', name: 'wolfFang', count: 0, relatedToActivity: false, craftable: false,
+        }]}
+        goalStatuses={[status]}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: 'Use maximum craftable target' }))
+      .not.toBeInTheDocument();
+    expect(screen.getByText('Chance-based drop · XP not projected')).toBeInTheDocument();
+    expect(screen.queryByText(/Expected .* level:/)).not.toBeInTheDocument();
+  });
+
+  it('defaults ambiguous items to Any and enables Max only for Craft', async () => {
+    const user = userEvent.setup();
+    render(<GoalSection goalItems={items} goalStatuses={[ambiguousArrowStatus]} />);
+
+    expect(screen.getByRole('button', { name: /^Any source\./ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.queryByRole('button', { name: 'Use maximum craftable target' }))
+      .not.toBeInTheDocument();
+    expect(screen.getByText('Multiple sources · materials and XP not projected'))
+      .toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^Craft source\./ }));
+    expect(screen.getByRole('button', { name: 'Use maximum craftable target' }))
+      .toBeInTheDocument();
+    expect(setGoals).toHaveBeenLastCalledWith([
+      expect.objectContaining({ id: 'arrow-goal', sourceMode: 'craft', targetCount: 70 }),
+    ]);
+
+    await user.click(screen.getByRole('button', { name: /^Drops source\./ }));
+    expect(screen.queryByRole('button', { name: 'Use maximum craftable target' }))
+      .not.toBeInTheDocument();
+    expect(setGoals).toHaveBeenLastCalledWith([
+      expect.objectContaining({ id: 'arrow-goal', sourceMode: 'drops', targetCount: 70 }),
+    ]);
+  });
+
+  it('turns an impossible Max goal back into an empty manual draft', async () => {
+    const user = userEvent.setup();
+    render(<GoalSection goalItems={items} goalStatuses={[impossibleBarStatus]} />);
+
+    await user.click(screen.getByRole('button', { name: 'Use maximum craftable target' }));
+
+    expect(screen.getByRole('spinbutton', { name: 'Goal target' })).not.toHaveAttribute('readonly');
+    expect(screen.getByRole('spinbutton', { name: 'Goal target' })).toHaveValue(null);
+    expect(setGoals).toHaveBeenLastCalledWith([]);
+  });
+
+  it('keeps a manual target while warning how much is achievable', () => {
+    const status = {
+      ...impossibleBarStatus,
+      goal: { ...impossibleBarStatus.goal, targetCount: 8, maxCraftable: undefined },
+      planning: {
+        ...impossibleBarStatus.planning,
+        maxCraftable: false,
+        achievableTarget: 5,
+      },
+    };
+    render(<GoalSection goalItems={items} goalStatuses={[status]} />);
+
+    expect(screen.getByRole('spinbutton', { name: 'Goal target' })).toHaveValue(8);
+    expect(screen.getByText('Only 5 achievable · limited by Iron Ore')).toBeInTheDocument();
+  });
+
+  it('shows projected XP and expected skill level after an achievable goal', () => {
+    const status = {
+      goal: { id: 'coal-goal', itemId: 'coalOre', itemName: 'Coal Ore', targetCount: 9999 },
+      count: 0,
+      eta: null,
+      relatedToActivity: false,
+      planning: {
+        goalId: 'coal-goal',
+        feasible: true,
+        materialFeasible: true,
+        levelFeasible: true,
+        skill: 'mining',
+        requiredLevel: 30,
+        projectedLevelBefore: 30,
+        expectedLevel: 40,
+        xpGained: 559944,
+        xpKnown: true,
+        limitingItemIds: [],
+        pending: false,
+      },
+    };
+    render(<GoalSection goalItems={items} goalStatuses={[status]} />);
+
+    expect(screen.getByText('Expected Mining level: 40 · +559,944 XP')).toBeInTheDocument();
+  });
+
+  it('marks a level-locked goal red and explains the projected shortfall', () => {
+    const status = {
+      goal: { id: 'gold-goal', itemId: 'goldOre', itemName: 'Gold Ore', targetCount: 1 },
+      count: 0,
+      eta: null,
+      relatedToActivity: false,
+      planning: {
+        goalId: 'gold-goal',
+        feasible: false,
+        materialFeasible: true,
+        levelFeasible: false,
+        skill: 'mining',
+        requiredLevel: 40,
+        projectedLevelBefore: 30,
+        expectedLevel: 30,
+        xpGained: 0,
+        xpKnown: true,
+        limitingItemIds: [],
+        pending: false,
+      },
+    };
+    render(<GoalSection goalItems={items} goalStatuses={[status]} />);
+
+    expect(document.querySelector('[data-goal-id="gold-goal"]')).toHaveClass('is-infeasible');
+    expect(screen.getByText('Requires Mining Lv 40 · projected Lv 30')).toBeInTheDocument();
+    expect(screen.queryByText(/Expected Mining level/)).not.toBeInTheDocument();
+  });
+
+  it('prioritizes a level lock over a simultaneous material shortage', () => {
+    const status = {
+      goal: { id: 'vial-goal', itemId: 'vial', itemName: 'Vial', targetCount: 1 },
+      count: 0,
+      eta: null,
+      relatedToActivity: false,
+      planning: {
+        goalId: 'vial-goal',
+        feasible: false,
+        materialFeasible: false,
+        levelFeasible: false,
+        skill: 'crafting',
+        requiredLevel: 33,
+        projectedLevelBefore: 8,
+        achievableTarget: 0,
+        limitingItemIds: ['moltenGlass'],
+        pending: false,
+      },
+    };
+    render(
+      <GoalSection
+        goalItems={[
+          ...items,
+          { id: 'vial', name: 'vial', count: 0, craftable: true },
+          { id: 'moltenGlass', name: 'moltenGlass', count: 0 },
+        ]}
+        goalStatuses={[status]}
+      />
+    );
+
+    expect(screen.getByText('Requires Crafting Lv 33 · projected Lv 8')).toBeInTheDocument();
+    expect(screen.queryByText(/Only 0 achievable/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/limited by Molten Glass/)).not.toBeInTheDocument();
   });
 
   it('renders progress for every saved goal but ETA only for a related item', () => {

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { formatItemId } from '../utils/format';
+import { formatItemId, formatNumber, formatSkillName } from '../utils/format';
 import { setGoals } from '../utils/messages';
 import ItemCombobox from './ItemCombobox';
 import EtaDisplay from './EtaDisplay';
 import EtaTooltip from './EtaTooltip';
+import GoalSourceSelector from './GoalSourceSelector';
 
 let fallbackId = 0;
 
@@ -19,6 +20,10 @@ function createRow(goal = null) {
     itemId: goal?.itemId ?? goal?.itemName ?? null,
     itemName: goal?.itemName ?? '',
     targetValue: goal ? String(goal.targetCount) : '',
+    maxCraftable: goal?.maxCraftable === true,
+    sourceMode: ['any', 'craft', 'drops'].includes(goal?.sourceMode)
+      ? goal.sourceMode
+      : null,
   };
 }
 
@@ -39,41 +44,111 @@ function resolveGoalEta(status) {
   return { etaMs: status.eta.totalMs, bankTrips: status.eta.bankTrips ?? 0 };
 }
 
+function hasAcquisitionSource(item, source) {
+  if (item?.acquisitionSources?.includes(source)) return true;
+  if (source === 'craft') return item?.craftable === true;
+  if (source === 'drops') return item?.chanceDrop === true;
+  return false;
+}
+
+function hasAmbiguousSource(item) {
+  return hasAcquisitionSource(item, 'craft') && hasAcquisitionSource(item, 'drops');
+}
+
+function effectiveSourceMode(row, item) {
+  if (row.maxCraftable) return 'craft';
+  if (hasAmbiguousSource(item)) {
+    return ['any', 'craft', 'drops'].includes(row.sourceMode) ? row.sourceMode : 'any';
+  }
+  if (hasAcquisitionSource(item, 'craft')) return 'craft';
+  if (hasAcquisitionSource(item, 'drops')) return 'drops';
+  return 'any';
+}
+
 function completeGoals(rows, items, persistedGoals = []) {
   const savedGoals = new Map(persistedGoals.map((goal) => [goal.id, goal]));
   return rows.flatMap((row) => {
     const targetCount = Number(row.targetValue);
+    const maxCraftable = row.maxCraftable === true;
     const item = items.find(({ id }) => id === row.itemId);
+    const sourceMode = effectiveSourceMode(row, item);
     const itemName = row.itemName || displayItemName(item)
       || (row.itemId ? formatItemId(row.itemId) : '');
-    if (!row.itemId || !itemName || !Number.isInteger(targetCount) || targetCount < 1) {
+    const minimumTarget = maxCraftable ? 0 : 1;
+    if (!row.itemId || !itemName || !Number.isSafeInteger(targetCount) || targetCount < minimumTarget) {
       const savedGoal = savedGoals.get(row.id);
       return savedGoal ? [savedGoal] : [];
     }
-    return [{ id: row.id, itemId: row.itemId, itemName, targetCount }];
+    return [{
+      id: row.id,
+      itemId: row.itemId,
+      itemName,
+      targetCount,
+      ...(maxCraftable ? { maxCraftable: true } : {}),
+      ...(maxCraftable || hasAmbiguousSource(item) ? { sourceMode } : {}),
+    }];
   });
+}
+
+function plansFromStatuses(goalStatuses) {
+  return new Map((goalStatuses ?? []).flatMap((status) =>
+    status.planning ? [[status.goal.id, status.planning]] : []));
 }
 
 export default function GoalSection({ goalItems, goalStatuses }) {
   const [rows, setRows] = useState([]);
   const [draggedId, setDraggedId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
+  const [localPlans, setLocalPlans] = useState(new Map());
   const hydratedRef = useRef(false);
   const persistedGoalsRef = useRef([]);
+  const persistRequestRef = useRef(0);
 
   useEffect(() => {
-    if (goalStatuses === null || hydratedRef.current) return;
-    hydratedRef.current = true;
-    persistedGoalsRef.current = goalStatuses.map(({ goal }) => goal);
-    setRows(goalStatuses.length > 0
-      ? goalStatuses.map(({ goal }) => createRow(goal))
-      : [createRow()]);
+    if (goalStatuses === null) return;
+    const goals = goalStatuses.map(({ goal }) => goal);
+    persistedGoalsRef.current = goals;
+    setLocalPlans(plansFromStatuses(goalStatuses));
+    if (!hydratedRef.current) {
+      hydratedRef.current = true;
+      setRows(goalStatuses.length > 0
+        ? goalStatuses.map(({ goal }) => createRow(goal))
+        : [createRow()]);
+      return;
+    }
+    const goalsById = new Map(goals.map((goal) => [goal.id, goal]));
+    setRows((current) => current.map((row) => {
+      const goal = goalsById.get(row.id);
+      if (!goal) return row;
+      const sourceMode = goal.sourceMode ?? row.sourceMode;
+      const targetValue = goal.maxCraftable && row.maxCraftable
+        ? String(goal.targetCount)
+        : row.targetValue;
+      if (targetValue === row.targetValue && sourceMode === row.sourceMode) return row;
+      return { ...row, targetValue, sourceMode };
+    }));
   }, [goalStatuses]);
 
-  function persistGoals(nextRows) {
+  async function persistGoals(nextRows) {
     const goals = completeGoals(nextRows, goalItems, persistedGoalsRef.current);
     persistedGoalsRef.current = goals;
-    void setGoals(goals);
+    const requestId = ++persistRequestRef.current;
+    const response = await setGoals(goals);
+    if (requestId !== persistRequestRef.current || !response?.goals) return;
+    persistedGoalsRef.current = response.goals;
+    const goalsById = new Map(response.goals.map((goal) => [goal.id, goal]));
+    setRows((current) => current.map((row) => {
+      const goal = goalsById.get(row.id);
+      if (!goal) return row;
+      return {
+        ...row,
+        sourceMode: goal.sourceMode ?? row.sourceMode,
+        targetValue: goal.maxCraftable && row.maxCraftable
+          ? String(goal.targetCount)
+          : row.targetValue,
+      };
+    }));
+    setLocalPlans(plansFromStatuses(response.goalStatuses));
   }
 
   function updateRows(updater, persist = false) {
@@ -86,12 +161,69 @@ export default function GoalSection({ goalItems, goalStatuses }) {
 
   function handleSelect(rowId, itemId) {
     const item = goalItems.find(({ id }) => id === itemId);
+    const previousRow = rows.find((row) => row.id === rowId);
+    if (previousRow?.maxCraftable && !item?.craftable && Number(previousRow.targetValue) === 0) {
+      persistedGoalsRef.current = persistedGoalsRef.current.filter((goal) => goal.id !== rowId);
+    }
     updateRows(
       (current) => current.map((row) => row.id === rowId
-        ? { ...row, itemId, itemName: displayItemName(item) || (itemId ? formatItemId(itemId) : '') }
+        ? {
+            ...row,
+            itemId,
+            itemName: displayItemName(item) || (itemId ? formatItemId(itemId) : ''),
+            maxCraftable: row.maxCraftable && item?.craftable === true,
+            sourceMode: row.itemId === itemId
+              ? row.sourceMode
+              : row.maxCraftable && item?.craftable === true
+                ? 'craft'
+                : hasAmbiguousSource(item)
+                  ? 'any'
+                  : null,
+            targetValue: row.maxCraftable && !item?.craftable && Number(row.targetValue) === 0
+              ? ''
+              : row.targetValue,
+          }
         : row),
       true
     );
+  }
+
+  function handleMaxToggle(rowId) {
+    const row = rows.find((candidate) => candidate.id === rowId);
+    if (!row) return;
+    const enabling = !row.maxCraftable;
+    if (!enabling && Number(row.targetValue) === 0) {
+      persistedGoalsRef.current = persistedGoalsRef.current.filter((goal) => goal.id !== rowId);
+    }
+    updateRows((current) => current.map((candidate) => candidate.id === rowId
+      ? {
+          ...candidate,
+          maxCraftable: enabling,
+          sourceMode: 'craft',
+          targetValue: enabling
+            ? (candidate.targetValue === '' ? '0' : candidate.targetValue)
+            : (Number(candidate.targetValue) === 0 ? '' : candidate.targetValue),
+        }
+      : candidate), true);
+  }
+
+  function handleSourceChange(rowId, sourceMode) {
+    const row = rows.find((candidate) => candidate.id === rowId);
+    if (!row || !['any', 'craft', 'drops'].includes(sourceMode)) return;
+    const disablesMax = sourceMode !== 'craft' && row.maxCraftable;
+    if (disablesMax && Number(row.targetValue) === 0) {
+      persistedGoalsRef.current = persistedGoalsRef.current.filter((goal) => goal.id !== rowId);
+    }
+    updateRows((current) => current.map((candidate) => candidate.id === rowId
+      ? {
+          ...candidate,
+          sourceMode,
+          maxCraftable: sourceMode === 'craft' ? candidate.maxCraftable : false,
+          targetValue: disablesMax && Number(candidate.targetValue) === 0
+            ? ''
+            : candidate.targetValue,
+        }
+      : candidate), true);
   }
 
   function handleTargetChange(rowId, targetValue) {
@@ -149,6 +281,9 @@ export default function GoalSection({ goalItems, goalStatuses }) {
         {rows.map((row, rowIndex) => {
           const status = statusesById.get(row.id) ?? null;
           const item = goalItems.find(({ id }) => id === row.itemId);
+          const planning = localPlans.get(row.id) ?? status?.planning ?? null;
+          const sourceMode = effectiveSourceMode(row, item);
+          const ambiguousSource = hasAmbiguousSource(item);
           const targetCount = Number(row.targetValue);
           const count = status?.count ?? item?.count ?? 0;
           const isValid = Boolean(row.itemId) && Number.isInteger(targetCount) && targetCount > 0;
@@ -156,6 +291,43 @@ export default function GoalSection({ goalItems, goalStatuses }) {
           const pct = isValid ? Math.min(100, (count / targetCount) * 100) : 0;
           const relatedToActivity = status?.relatedToActivity ?? item?.relatedToActivity ?? false;
           const isCurrentActivityGoal = status?.relatedToActivity === true;
+          const isInfeasible = planning?.pending !== true && planning?.feasible === false;
+          const limitingNames = (planning?.limitingItemIds ?? []).map((itemId) => {
+            const limitingItem = goalItems.find((candidate) => candidate.id === itemId);
+            return displayItemName(limitingItem) || formatItemId(itemId);
+          });
+          const limitation = limitingNames.length > 0
+            ? `limited by ${limitingNames.join(', ')}`
+            : '';
+          const planningWarnings = [];
+          if (planning?.levelFeasible === false) {
+            planningWarnings.push(
+              `Requires ${formatSkillName(planning.skill)} Lv ${planning.requiredLevel}`
+                + ` · projected Lv ${planning.projectedLevelBefore}`
+            );
+          } else if (planning?.materialFeasible === false) {
+            planningWarnings.push(row.maxCraftable
+              ? `Can't craft${limitation ? ` · ${limitation}` : ''}`
+              : `Only ${planning.achievableTarget} achievable${limitation ? ` · ${limitation}` : ''}`);
+          } else if (
+            isInfeasible
+            && planning?.levelFeasible !== false
+            && planning?.materialFeasible === undefined
+          ) {
+            planningWarnings.push(row.maxCraftable
+              ? `Can't craft${limitation ? ` · ${limitation}` : ''}`
+              : `Only ${planning.achievableTarget} achievable${limitation ? ` · ${limitation}` : ''}`);
+          }
+          const planningNote = planningWarnings.length > 0
+            ? planningWarnings.join(' · ')
+            : planning?.chanceBased === true
+              ? 'Chance-based drop · XP not projected'
+              : planning?.sourceType === 'any'
+                ? 'Multiple sources · materials and XP not projected'
+              : (row.maxCraftable && limitation ? `Limited by ${limitingNames.join(', ')}` : null);
+          const showLevelProjection = planning?.xpKnown === true
+            && planning?.feasible === true
+            && planning.expectedLevel !== null;
           const { etaMs, bankTrips } = resolveGoalEta(status);
           const dropPosition = dragOverId === row.id && draggedIndex !== rowIndex
             ? (draggedIndex < rowIndex ? ' drop-after' : ' drop-before')
@@ -163,7 +335,7 @@ export default function GoalSection({ goalItems, goalStatuses }) {
 
           return (
             <div
-              className={`goal-row${isCurrentActivityGoal ? ' is-current-activity' : ''}${draggedId === row.id ? ' is-dragging' : ''}${dropPosition}`}
+              className={`goal-row${isCurrentActivityGoal ? ' is-current-activity' : ''}${isInfeasible ? ' is-infeasible' : ''}${draggedId === row.id ? ' is-dragging' : ''}${dropPosition}`}
               data-goal-id={row.id}
               key={row.id}
               onDragEnter={() => {
@@ -200,19 +372,35 @@ export default function GoalSection({ goalItems, goalStatuses }) {
                   selectedId={row.itemId}
                   onSelect={(itemId) => handleSelect(row.id, itemId)}
                 />
-                <input
-                  type="number"
-                  aria-label="Goal target"
-                  placeholder="Target"
-                  min="1"
-                  step="1"
-                  value={row.targetValue}
-                  onChange={(event) => handleTargetChange(row.id, event.target.value)}
-                  onBlur={persistCurrentRows}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') event.currentTarget.blur();
-                  }}
-                />
+                <div className="goal-target-control">
+                  {((item?.craftable && (!ambiguousSource || sourceMode === 'craft'))
+                    || row.maxCraftable) && (
+                    <button
+                      type="button"
+                      className="goal-max-btn"
+                      aria-label="Use maximum craftable target"
+                      aria-pressed={row.maxCraftable}
+                      title="Use maximum craftable target"
+                      onClick={() => handleMaxToggle(row.id)}
+                    >
+                      Max
+                    </button>
+                  )}
+                  <input
+                    type="number"
+                    aria-label="Goal target"
+                    placeholder="Target"
+                    min={row.maxCraftable ? '0' : '1'}
+                    step="1"
+                    value={row.targetValue}
+                    readOnly={row.maxCraftable}
+                    onChange={(event) => handleTargetChange(row.id, event.target.value)}
+                    onBlur={persistCurrentRows}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
+                  />
+                </div>
                 <button
                   type="button"
                   className="goal-remove-btn"
@@ -223,6 +411,13 @@ export default function GoalSection({ goalItems, goalStatuses }) {
                   &times;
                 </button>
               </div>
+
+              {ambiguousSource && (
+                <GoalSourceSelector
+                  value={sourceMode}
+                  onChange={(nextSourceMode) => handleSourceChange(row.id, nextSourceMode)}
+                />
+              )}
 
               {isValid && (
                 <div className="goal-status">
@@ -243,6 +438,13 @@ export default function GoalSection({ goalItems, goalStatuses }) {
                       </span>
                     )}
                   </div>
+                </div>
+              )}
+              {planningNote && <div className="goal-plan-note">{planningNote}</div>}
+              {showLevelProjection && (
+                <div className="goal-level-projection">
+                  Expected {formatSkillName(planning.skill)} level: {planning.expectedLevel}
+                  {' · '}+{formatNumber(planning.xpGained)} XP
                 </div>
               )}
             </div>
