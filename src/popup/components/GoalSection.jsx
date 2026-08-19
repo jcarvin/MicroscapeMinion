@@ -166,11 +166,11 @@ export default function GoalSection({ goalItems, goalStatuses }) {
               data-goal-id={row.id}
               key={row.id}
               onDragEnter={() => {
-                if (draggedId && draggedId !== row.id) setDragOverId(row.id);
+                if (draggedId) setDragOverId(draggedId === row.id ? null : row.id);
               }}
               onDragOver={(event) => {
                 event.preventDefault();
-                if (draggedId && draggedId !== row.id) setDragOverId(row.id);
+                if (draggedId) setDragOverId(draggedId === row.id ? null : row.id);
               }}
               onDrop={() => handleDrop(row.id)}
             >

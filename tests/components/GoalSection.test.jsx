@@ -149,6 +149,22 @@ describe('GoalSection', () => {
     expect(woodRow).toHaveClass('drop-before');
   });
 
+  it('clears a pending insertion marker when dragged back over its original row', () => {
+    render(<GoalSection goalItems={items} goalStatuses={[woodStatus, stoneStatus]} />);
+    const handles = screen.getAllByRole('button', { name: 'Drag to reorder goal' });
+    const woodRow = document.querySelector('[data-goal-id="wood-goal"]');
+    const stoneRow = document.querySelector('[data-goal-id="stone-goal"]');
+    const dataTransfer = { effectAllowed: '', setData: vi.fn() };
+
+    fireEvent.dragStart(handles[1], { dataTransfer });
+    fireEvent.dragOver(woodRow, { dataTransfer });
+    expect(woodRow).toHaveClass('drop-before');
+
+    fireEvent.dragOver(stoneRow, { dataTransfer });
+    expect(woodRow).not.toHaveClass('drop-before');
+    expect(document.querySelector('.drop-before, .drop-after')).not.toBeInTheDocument();
+  });
+
   it('shows the calibration countdown for a warming related ETA', () => {
     render(
       <GoalSection
