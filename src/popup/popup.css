@@ -108,7 +108,47 @@ body {
   padding-top: 9px;
 }
 
-.goal-row.is-dragging { opacity: .45; }
+.goal-row {
+  position: relative;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.goal-row.is-dragging {
+  opacity: .35;
+  transform: scale(.985);
+}
+
+.goal-row.drop-before { transform: translateY(2px); }
+.goal-row.drop-after { transform: translateY(-2px); }
+
+.goal-row.drop-before::before,
+.goal-row.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px rgba(91,141,238,.2), 0 0 7px rgba(91,141,238,.65);
+  animation: goal-drop-pulse 650ms ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.goal-row.drop-before::before { top: -6px; }
+.goal-row.drop-after::after { bottom: -6px; }
+
+@keyframes goal-drop-pulse {
+  from { opacity: .55; transform: scaleX(.96); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goal-row { transition: none; }
+  .goal-row.drop-before::before,
+  .goal-row.drop-after::after { animation: none; }
+}
 
 .goal-row-fields {
   display: grid;

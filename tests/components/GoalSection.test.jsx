@@ -132,6 +132,23 @@ describe('GoalSection', () => {
     expect(setGoals).toHaveBeenLastCalledWith([stoneStatus.goal, woodStatus.goal]);
   });
 
+  it('shows the insertion edge that matches the existing reorder behavior', () => {
+    render(<GoalSection goalItems={items} goalStatuses={[woodStatus, stoneStatus]} />);
+    const handles = screen.getAllByRole('button', { name: 'Drag to reorder goal' });
+    const woodRow = document.querySelector('[data-goal-id="wood-goal"]');
+    const stoneRow = document.querySelector('[data-goal-id="stone-goal"]');
+    const dataTransfer = { effectAllowed: '', setData: vi.fn() };
+
+    fireEvent.dragStart(handles[0], { dataTransfer });
+    fireEvent.dragOver(stoneRow, { dataTransfer });
+    expect(stoneRow).toHaveClass('drop-after');
+
+    fireEvent.dragEnd(handles[0], { dataTransfer });
+    fireEvent.dragStart(handles[1], { dataTransfer });
+    fireEvent.dragOver(woodRow, { dataTransfer });
+    expect(woodRow).toHaveClass('drop-before');
+  });
+
   it('shows the calibration countdown for a warming related ETA', () => {
     render(
       <GoalSection

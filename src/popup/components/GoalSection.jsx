@@ -57,6 +57,7 @@ function completeGoals(rows, items, persistedGoals = []) {
 export default function GoalSection({ goalItems, goalStatuses }) {
   const [rows, setRows] = useState([]);
   const [draggedId, setDraggedId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
   const hydratedRef = useRef(false);
   const persistedGoalsRef = useRef([]);
 
@@ -110,6 +111,7 @@ export default function GoalSection({ goalItems, goalStatuses }) {
   function handleDrop(overId) {
     if (!draggedId || draggedId === overId) {
       setDraggedId(null);
+      setDragOverId(null);
       return;
     }
     updateRows((current) => {
@@ -122,9 +124,11 @@ export default function GoalSection({ goalItems, goalStatuses }) {
       return next;
     }, true);
     setDraggedId(null);
+    setDragOverId(null);
   }
 
   const statusesById = new Map((goalStatuses ?? []).map((status) => [status.goal.id, status]));
+  const draggedIndex = rows.findIndex(({ id }) => id === draggedId);
 
   return (
     <section className="card">
@@ -142,7 +146,7 @@ export default function GoalSection({ goalItems, goalStatuses }) {
       </div>
 
       <div className="goal-list">
-        {rows.map((row) => {
+        {rows.map((row, rowIndex) => {
           const status = statusesById.get(row.id) ?? null;
           const item = goalItems.find(({ id }) => id === row.itemId);
           const targetCount = Number(row.targetValue);
@@ -152,13 +156,22 @@ export default function GoalSection({ goalItems, goalStatuses }) {
           const pct = isValid ? Math.min(100, (count / targetCount) * 100) : 0;
           const relatedToActivity = status?.relatedToActivity ?? item?.relatedToActivity ?? false;
           const { etaMs, bankTrips } = resolveGoalEta(status);
+          const dropPosition = dragOverId === row.id && draggedIndex !== rowIndex
+            ? (draggedIndex < rowIndex ? ' drop-after' : ' drop-before')
+            : '';
 
           return (
             <div
-              className={`goal-row${draggedId === row.id ? ' is-dragging' : ''}`}
+              className={`goal-row${draggedId === row.id ? ' is-dragging' : ''}${dropPosition}`}
               data-goal-id={row.id}
               key={row.id}
-              onDragOver={(event) => event.preventDefault()}
+              onDragEnter={() => {
+                if (draggedId && draggedId !== row.id) setDragOverId(row.id);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                if (draggedId && draggedId !== row.id) setDragOverId(row.id);
+              }}
               onDrop={() => handleDrop(row.id)}
             >
               <div className="goal-row-fields">
@@ -172,8 +185,12 @@ export default function GoalSection({ goalItems, goalStatuses }) {
                     event.dataTransfer.effectAllowed = 'move';
                     event.dataTransfer.setData('text/plain', row.id);
                     setDraggedId(row.id);
+                    setDragOverId(null);
                   }}
-                  onDragEnd={() => setDraggedId(null)}
+                  onDragEnd={() => {
+                    setDraggedId(null);
+                    setDragOverId(null);
+                  }}
                 >
                   ::
                 </button>
