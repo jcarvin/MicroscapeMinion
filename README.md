@@ -101,6 +101,12 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.10
+
+- Fix equipment and loot items (e.g. Black Armor, Black Full Helm) being falsely classified as combat consumables when transitioning from combat to banking or travel.
+- Hide depleted consumables (count = 0) from the Combat Consumables panel instead of showing "ETA calibrating...".
+- Add a per-consumable "Notify when empty" toggle that fires a browser notification and chime the first time each tracked item hits 0.
+
 ### v0.1.9
 
 - Track multiple persistent item goals with per-goal progress, ETA calibration, and completion notifications.
