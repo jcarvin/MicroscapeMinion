@@ -9,7 +9,7 @@ const pietyDef = {
   },
 };
 
-function installChromeMock({ cachedDefs = null, storageSet = vi.fn() } = {}) {
+function installChromeMock({ cachedDefs = null, storageSet = vi.fn(), sessionData = {} } = {}) {
   globalThis.chrome = {
     runtime: {
       getURL: vi.fn((path) => path),
@@ -24,7 +24,7 @@ function installChromeMock({ cachedDefs = null, storageSet = vi.fn() } = {}) {
         set: storageSet,
       },
       session: {
-        get: vi.fn((_keys, callback) => callback({})),
+        get: vi.fn((_keys, callback) => callback(sessionData)),
         remove: vi.fn(),
         set: vi.fn(),
       },
@@ -34,9 +34,9 @@ function installChromeMock({ cachedDefs = null, storageSet = vi.fn() } = {}) {
   };
 }
 
-async function loadBackground({ cachedDefs = null, seed = {}, storageSet } = {}) {
+async function loadBackground({ cachedDefs = null, seed = {}, storageSet, sessionData } = {}) {
   vi.resetModules();
-  installChromeMock({ cachedDefs, storageSet });
+  installChromeMock({ cachedDefs, storageSet, sessionData });
   vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
     json: () => Promise.resolve(seed),
   })));
@@ -97,6 +97,32 @@ describe('background activity definitions', () => {
     expect(result.defs['cook-bread']).toBe(cached['cook-bread']);
     expect(result.defs['bury-bones']).toEqual(pietyDef);
     expect(cached['bury-bones']).toBeUndefined();
+  });
+
+  it('migrates a stored single goal to the ordered goals array', async () => {
+    const legacyGoal = { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 200 };
+    const { __test } = await loadBackground({ sessionData: { goal: legacyGoal } });
+
+    expect(__test.buildStatus().goalStatuses[0].goal).toMatchObject(legacyGoal);
+    expect(__test.buildStatus().goalStatuses[0].goal.id).toBe('legacy-0-ironOre');
+    expect(chrome.storage.session.set).toHaveBeenCalledWith({
+      goals: [{ id: 'legacy-0-ironOre', ...legacyGoal }],
+    });
+    expect(chrome.storage.session.remove).toHaveBeenCalledWith('goal');
+  });
+
+  it('normalizes malformed goals and makes duplicate IDs unique', async () => {
+    const { __test } = await loadBackground();
+
+    expect(__test.normalizeGoals([
+      { id: 'same', itemId: 'woodLog', targetCount: '10' },
+      { id: 'same', itemName: 'Stone', targetCount: 20 },
+      { id: 'bad', itemId: 'coal', targetCount: 0 },
+      null,
+    ])).toEqual([
+      { id: 'same', itemId: 'woodLog', itemName: 'woodLog', targetCount: 10 },
+      { id: 'same-2', itemId: null, itemName: 'Stone', targetCount: 20 },
+    ]);
   });
 
   it('writes merged seed activities back when cached definitions are stale', async () => {
@@ -165,6 +191,83 @@ describe('background activity definitions', () => {
     });
   });
 
+  it('tracks multiple goals and floats current-activity items in the full catalog', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'mine-iron': {
+          durationMs: 32_000,
+          inventoryChanges: { coal: -1, ironOre: 1 },
+          dropItems: { sapphire: 1 },
+        },
+        'bake-bread': {
+          durationMs: 20_000,
+          inventoryChanges: { dough: -1, bread: 1 },
+        },
+      },
+      state: {
+        me: {
+          activity: { skill: 'mining', activity: 'mine-iron', remaining: 1 },
+          inventory: { coal: 10, ironOre: 5, bread: 2, mysteryItem: 7 },
+          lootBag: {},
+        },
+      },
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOALS',
+      goals: [
+        { id: 'ore', itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 20 },
+        { id: 'bread', itemName: 'Bread', itemId: 'bread', targetCount: 10 },
+      ],
+    });
+
+    const status = __test.buildStatus();
+    expect(status.goalStatuses).toMatchObject([
+      { goal: { id: 'ore' }, count: 5, relatedToActivity: true },
+      { goal: { id: 'bread' }, count: 2, relatedToActivity: false, eta: null },
+    ]);
+    expect(status.goalStatuses[0].eta.totalMs).toBeGreaterThan(0);
+    expect(status.goalItems.map(({ id }) => id)).toEqual(expect.arrayContaining([
+      'bread', 'coal', 'dough', 'ironOre', 'mysteryItem', 'sapphire',
+    ]));
+    const firstUnrelated = status.goalItems.findIndex(({ relatedToActivity }) => !relatedToActivity);
+    expect(firstUnrelated).toBeGreaterThan(0);
+    expect(status.goalItems.slice(0, firstUnrelated).every(({ relatedToActivity }) => relatedToActivity)).toBe(true);
+    expect(status.goalItems.slice(firstUnrelated).every(({ relatedToActivity }) => !relatedToActivity)).toBe(true);
+  });
+
+  it('notifies independently when multiple goals are reached', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+    __test.setTestState({
+      state: {
+        me: {
+          activity: { skill: 'mining', activity: 'mine-iron', remaining: 1 },
+          inventory: { ironOre: 0, coal: 0 },
+          lootBag: {},
+        },
+      },
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOALS',
+      goals: [
+        { id: 'ore', itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 1 },
+        { id: 'coal', itemName: 'Coal', itemId: 'coal', targetCount: 1 },
+      ],
+    });
+
+    sendServerUpdate({ me: { inventory: { ironOre: [0, 1], coal: [0, 1] } } });
+    expect(chrome.notifications.create).toHaveBeenCalledTimes(2);
+    expect(chrome.notifications.create.mock.calls.map(([, options]) => options.message)).toEqual([
+      'Iron Ore: 1 / 1',
+      'Coal: 1 / 1',
+    ]);
+
+    sendServerUpdate({ me: { inventory: { ironOre: [1, 2] } } });
+    expect(chrome.notifications.create).toHaveBeenCalledTimes(2);
+  });
+
   it('uses warmed observed accumulation rate for material goal ETA', async () => {
     const { __test } = await loadBackground();
     vi.useFakeTimers();
@@ -187,8 +290,8 @@ describe('background activity definitions', () => {
       },
     });
     sendRuntimeMessage({
-      type: 'SET_GOAL',
-      goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 200 },
+      type: 'SET_GOALS',
+      goals: [{ id: 'iron-goal', itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 200 }],
     });
 
     vi.setSystemTime(1_000);
@@ -196,8 +299,8 @@ describe('background activity definitions', () => {
 
     vi.setSystemTime(61_000);
     const warmingStatus = __test.buildStatus();
-    expect(warmingStatus.goalStatus.eta.rateBased).toBeFalsy();
-    expect(warmingStatus.goalStatus.warmupRemainingMs).toBe(240_000);
+    expect(warmingStatus.goalStatuses[0].eta.rateBased).toBeFalsy();
+    expect(warmingStatus.goalStatuses[0].warmupRemainingMs).toBe(240_000);
 
     vi.setSystemTime(301_000);
     sendServerUpdate({ me: { inventory: { ironOre: [1, 5] } } });
@@ -205,15 +308,15 @@ describe('background activity definitions', () => {
     const status = __test.buildStatus();
 
     expect(status.etaDebugLogVersion).toBe(1);
-    expect(status.goalStatus.count).toBe(5);
-    expect(status.goalStatus.eta).toMatchObject({
+    expect(status.goalStatuses[0].count).toBe(5);
+    expect(status.goalStatuses[0].eta).toMatchObject({
       rateBased: true,
       sampleCount: 2,
       bankTrips: 7,
       bankOverheadMs: 350_000,
       totalMs: 14_975_000,
     });
-    expect(status.goalStatus.warmupRemainingMs).toBe(0);
+    expect(status.goalStatuses[0].warmupRemainingMs).toBe(0);
     expect(status.etaDebugLog[0]).toMatchObject({
       phase: 'active',
       goal: {
@@ -257,8 +360,8 @@ describe('background activity definitions', () => {
       },
     });
     sendRuntimeMessage({
-      type: 'SET_GOAL',
-      goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 200 },
+      type: 'SET_GOALS',
+      goals: [{ id: 'iron-goal', itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 200 }],
     });
 
     vi.setSystemTime(1_000);
@@ -266,7 +369,7 @@ describe('background activity definitions', () => {
     vi.setSystemTime(301_000);
     sendServerUpdate({ me: { inventory: { ironOre: [1, 5] } } });
 
-    expect(__test.buildStatus().goalStatus).toMatchObject({
+    expect(__test.buildStatus().goalStatuses[0]).toMatchObject({
       warmupRemainingMs: 0,
       eta: {
         rateBased: true,
@@ -275,11 +378,11 @@ describe('background activity definitions', () => {
     });
 
     sendRuntimeMessage({
-      type: 'SET_GOAL',
-      goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 250 },
+      type: 'SET_GOALS',
+      goals: [{ id: 'iron-goal', itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 250 }],
     });
 
-    expect(__test.buildStatus().goalStatus).toMatchObject({
+    expect(__test.buildStatus().goalStatuses[0]).toMatchObject({
       goal: { targetCount: 250 },
       warmupRemainingMs: 0,
       eta: {
@@ -313,8 +416,8 @@ describe('background activity definitions', () => {
       lastWorkAct: miningAct,
     });
     sendRuntimeMessage({
-      type: 'SET_GOAL',
-      goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 20 },
+      type: 'SET_GOALS',
+      goals: [{ id: 'iron-goal', itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 20 }],
     });
 
     vi.setSystemTime(1_000);
@@ -326,7 +429,7 @@ describe('background activity definitions', () => {
     });
 
     let status = __test.buildStatus();
-    expect(status.goalStatus.count).toBe(1);
+    expect(status.goalStatuses[0].count).toBe(1);
 
     vi.setSystemTime(301_000);
     sendServerUpdate({
@@ -337,8 +440,8 @@ describe('background activity definitions', () => {
     });
 
     status = __test.buildStatus();
-    expect(status.goalStatus.count).toBe(5);
-    expect(status.goalStatus.eta.sampleCount).toBe(2);
+    expect(status.goalStatuses[0].count).toBe(5);
+    expect(status.goalStatuses[0].eta.sampleCount).toBe(2);
 
     vi.setSystemTime(335_000);
     sendServerUpdate({
@@ -349,7 +452,7 @@ describe('background activity definitions', () => {
     });
 
     status = __test.buildStatus();
-    expect(status.goalStatus.count).toBe(5);
+    expect(status.goalStatuses[0].count).toBe(5);
 
     vi.setSystemTime(360_000);
     sendServerUpdate({
@@ -361,7 +464,7 @@ describe('background activity definitions', () => {
     });
 
     status = __test.buildStatus();
-    expect(status.goalStatus.count).toBe(6);
+    expect(status.goalStatuses[0].count).toBe(6);
   });
 
   it('holds remaining stable across a bank trip (high-water mark)', async () => {
@@ -388,8 +491,8 @@ describe('background activity definitions', () => {
       lastWorkAct: miningAct,
     });
     sendRuntimeMessage({
-      type: 'SET_GOAL',
-      goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 200 },
+      type: 'SET_GOALS',
+      goals: [{ id: 'iron-goal', itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 200 }],
     });
 
     // Mine 10 ores over 5 minutes (past warmup) — activity stays mining
@@ -408,12 +511,12 @@ describe('background activity definitions', () => {
     // Remaining should use high-water mark (10), not live count (2).
     // ETA = (200 - 10) = 190 remaining, not inflated (200 - 2) = 198.
     const status = __test.buildStatus();
-    expect(status.goalStatus.count).toBe(2);  // live inventory+lootBag shown to user
+    expect(status.goalStatuses[0].count).toBe(2);  // live inventory+lootBag shown to user
     // hwm-based ETA: 190 cycles × 32000ms + 7 bank trips × 50000ms = 6,430,000ms
     // live-count ETA: 198 cycles × 32000ms + 7 bank trips × 50000ms = 6,686,000ms
     // Verify we're using hwm (190 remaining), not the inflated live count (198 remaining)
-    expect(status.goalStatus.eta.totalMs).toBeLessThan(198 * 32_000 + 7 * 50_000); // < live-count ETA
-    expect(status.goalStatus.eta.totalMs).toBeGreaterThan(185 * 32_000);            // clearly non-zero
+    expect(status.goalStatuses[0].eta.totalMs).toBeLessThan(198 * 32_000 + 7 * 50_000); // < live-count ETA
+    expect(status.goalStatuses[0].eta.totalMs).toBeGreaterThan(185 * 32_000);            // clearly non-zero
   });
 
   it('does not charge an extra bank trip when travel/banking is already in progress', async () => {
@@ -440,13 +543,13 @@ describe('background activity definitions', () => {
       lastWorkAct: smeltAct,
     });
     sendRuntimeMessage({
-      type: 'SET_GOAL',
-      goal: { itemName: 'Iron Bar', itemId: 'ironBar', targetCount: 55 },
+      type: 'SET_GOALS',
+      goals: [{ id: 'bar-goal', itemName: 'Iron Bar', itemId: 'ironBar', targetCount: 55 }],
     });
 
     // Before banking: lootBag empty, 21 bars remaining.
     // generatedItems=21, freeSlotsBeforeFirstTrip=25 → 21≤25 → bankTrips=0
-    const etaBefore = __test.buildStatus().goalStatus.eta;
+    const etaBefore = __test.buildStatus().goalStatuses[0].eta;
     expect(etaBefore.bankTrips).toBe(0);
     const totalMsBefore = etaBefore.totalMs;
 
@@ -458,7 +561,7 @@ describe('background activity definitions', () => {
         lootBag: { ironOre: [0, 25] },
       },
     });
-    const etaDuring = __test.buildStatus().goalStatus.eta;
+    const etaDuring = __test.buildStatus().goalStatuses[0].eta;
     expect(etaDuring.bankTrips).toBe(0);
     expect(etaDuring.totalMs).toBe(totalMsBefore);
 
@@ -469,12 +572,12 @@ describe('background activity definitions', () => {
         lootBag: { ironOre: [25, 0] },
       },
     });
-    const etaAfter = __test.buildStatus().goalStatus.eta;
+    const etaAfter = __test.buildStatus().goalStatuses[0].eta;
     expect(etaAfter.bankTrips).toBe(0);
     expect(etaAfter.totalMs).toBe(totalMsBefore);
   });
 
-  it('keeps the goal during banking but clears it when the work activity changes', async () => {
+  it('keeps goals across activity changes and only estimates related goals', async () => {
     const { __test } = await loadBackground();
     __test.resetTestState();
     const miningAct = { skill: 'mining', activity: 'mine-iron', remaining: 1 };
@@ -503,8 +606,8 @@ describe('background activity definitions', () => {
       lastWorkAct: miningAct,
     });
     sendRuntimeMessage({
-      type: 'SET_GOAL',
-      goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 20 },
+      type: 'SET_GOALS',
+      goals: [{ id: 'iron-goal', itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 20 }],
     });
 
     sendServerUpdate({
@@ -512,15 +615,21 @@ describe('background activity definitions', () => {
         activity: [miningAct, { type: 'banking' }],
       },
     });
-    expect(__test.buildStatus().goalStatus.goal.itemId).toBe('ironOre');
+    expect(__test.buildStatus().goalStatuses[0]).toMatchObject({
+      goal: { itemId: 'ironOre' },
+      relatedToActivity: true,
+    });
 
     sendServerUpdate({
       me: {
         activity: [{ type: 'banking' }, smeltAct],
       },
     });
-    expect(__test.buildStatus().goalStatus).toBeNull();
-    expect(chrome.storage.session.set).toHaveBeenCalledWith({ goal: null });
+    expect(__test.buildStatus().goalStatuses[0]).toMatchObject({
+      goal: { itemId: 'ironOre' },
+      relatedToActivity: false,
+      eta: null,
+    });
   });
 
   it('clears goal rate samples when banked count slips below last sample (missed banking transition)', async () => {
@@ -547,8 +656,8 @@ describe('background activity definitions', () => {
       lastWorkAct: miningAct,
     });
     sendRuntimeMessage({
-      type: 'SET_GOAL',
-      goal: { itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 200 },
+      type: 'SET_GOALS',
+      goals: [{ id: 'iron-goal', itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 200 }],
     });
 
     // Mine 10 ores past warmup → 2 samples pushed with values 5 and 10
@@ -575,7 +684,7 @@ describe('background activity definitions', () => {
 
     const status = __test.buildStatus();
     // Only 1 post-reset sample → rate warmup not met → cycle-fallback, not rate model
-    expect(status.goalStatus.eta.rateBased).toBeFalsy();
+    expect(status.goalStatuses[0].eta.rateBased).toBeFalsy();
   });
 
   it('uses warmed observed consumption rate for material runout ETA', async () => {

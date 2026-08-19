@@ -44,8 +44,8 @@ export default function App() {
         tickMs={status?.tickMs}
       />
       <GoalSection
-        producibleItems={status?.producibleItems ?? []}
-        goalStatus={status?.goalStatus ?? null}
+        goalItems={status?.goalItems ?? []}
+        goalStatuses={status && status.goalsLoaded !== false ? status.goalStatuses : null}
       />
       <MaterialSection
         runoutStatus={status?.runoutStatus ?? null}

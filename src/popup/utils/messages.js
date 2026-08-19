@@ -8,7 +8,6 @@ function send(msg) {
 }
 
 export const getStatus      = ()             => send({ type: 'GET_STATUS' });
-export const setGoal        = (goal)         => send({ type: 'SET_GOAL', goal });
-export const clearGoal      = ()             => send({ type: 'CLEAR_GOAL' });
+export const setGoals       = (goals)        => send({ type: 'SET_GOALS', goals });
 export const setSkillNotify = (skill, level) => send({ type: 'SET_SKILL_NOTIFY', skill, level });
 export const clearSkillNotify = ()           => send({ type: 'CLEAR_SKILL_NOTIFY' });

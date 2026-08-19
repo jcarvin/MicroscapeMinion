@@ -87,13 +87,34 @@ body {
   color: var(--muted);
 }
 
-/* ── Goal form ───────────────────────────────────────── */
+/* ── Goal tracker ────────────────────────────────────── */
 
-.goal-form {
-  display: grid;
-  grid-template-columns: 1fr 72px auto;
-  gap: 5px;
+.goal-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 6px;
+}
+
+.goal-heading .card-label { margin-bottom: 0; }
+
+.goal-list {
+  display: grid;
+  gap: 9px;
+}
+
+.goal-row + .goal-row {
+  border-top: 1px solid var(--border);
+  padding-top: 9px;
+}
+
+.goal-row.is-dragging { opacity: .45; }
+
+.goal-row-fields {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 62px 20px;
+  align-items: center;
+  gap: 4px;
 }
 
 input[type="text"],
@@ -124,15 +145,39 @@ button {
 }
 button:hover { filter: brightness(1.1); }
 
-.clear-btn {
+.goal-add-btn,
+.goal-drag-btn,
+.goal-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  line-height: 1;
+}
+
+.goal-add-btn {
+  font-size: 17px;
+}
+
+.goal-drag-btn,
+.goal-remove-btn {
   background: transparent;
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 400;
-  padding: 3px 0 0;
-  text-decoration: underline;
 }
-.clear-btn:hover { color: var(--text); }
+
+.goal-drag-btn {
+  width: 18px;
+  cursor: grab;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+.goal-drag-btn:active { cursor: grabbing; }
+
+.goal-remove-btn { font-size: 18px; }
+.goal-drag-btn:hover,
+.goal-remove-btn:hover { color: var(--text); }
 
 /* ── Goal item combobox ──────────────────────────────── */
 
@@ -191,7 +236,7 @@ button:hover { filter: brightness(1.1); }
 
 /* ── Goal progress ───────────────────────────────────── */
 
-.goal-status { margin-top: 4px; }
+.goal-status { margin: 5px 24px 0 22px; }
 
 .progress-bar-wrap {
   height: 5px;
@@ -212,16 +257,22 @@ button:hover { filter: brightness(1.1); }
 .progress-label {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+  gap: 6px;
   font-size: 11px;
   color: var(--muted);
 }
+
+.progress-label > span:first-child { flex-shrink: 0; }
 
 .eta-label { color: var(--muted); }
 
 .eta-group {
   display: inline-flex;
   align-items: flex-start;
+  justify-content: flex-end;
   gap: 4px;
+  min-width: 0;
 }
 
 .eta-stack {
@@ -229,6 +280,7 @@ button:hover { filter: brightness(1.1); }
   flex-direction: column;
   align-items: flex-end;
   line-height: 1.2;
+  text-align: right;
 }
 
 .calibrating-note {

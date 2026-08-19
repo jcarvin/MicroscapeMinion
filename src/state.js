@@ -31,17 +31,18 @@ export const state = {
   activeRateClocks: {},        // activityId -> cumulative active work ms
   lastRateClockAt: null,
 
-  // In-memory only — not persisted. Reset when goal/activity changes.
-  goalRateSamples: {},    // activityId -> [{ value, at, workMs }]
+  // In-memory only — not persisted. Reset when the corresponding goal changes.
+  goalRateSamples: {},    // "activityId:goalId" -> [{ value, at, workMs }]
   runoutRateSamples: {},  // "activityId:itemId" -> [{ value, at, workMs }]
-  // Highest normalized goal count seen for the current goal. Only ever increases.
+  // Highest normalized goal count per goal. Only ever increases.
   // Used for ETA remaining so bank trips (which drain the loot bag) don't inflate ETA.
-  goalHighWaterMark: null,
+  goalHighWaterMark: {},  // goalId -> count
 
   lastWorkActivity: null,
 
-  goal: null,
-  goalNotifiedAt: null,
+  goals: [],
+  goalsLoaded: false,
+  goalNotifiedAt: {},     // goalId -> timestamp
   runoutNotifiedFor: null,
   skillNotifyTarget: null,
 };

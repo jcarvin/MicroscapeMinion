@@ -20,7 +20,6 @@ import {
   getActivityId,
   getActivitySkill,
   isWorkActivityId,
-  getEtaActivity,
   rememberWorkActivity,
 } from './activity-utils.js';
 import { getGoalCount, sameGoalItem } from './inventory.js';
@@ -69,9 +68,25 @@ chrome.storage.local.get(
   }
 );
 
-chrome.storage.session.get(['goal', 'lastWorkActivity'], (res) => {
-  if (res.goal) state.goal = res.goal;
+chrome.storage.session.get(['goals', 'goal', 'lastWorkActivity'], (res) => {
+  const storedGoals = Array.isArray(res.goals)
+    ? res.goals
+    : res.goal
+      ? [res.goal]
+      : [];
+  state.goals = normalizeGoals(storedGoals);
+  for (const goal of state.goals) {
+    state.goalHighWaterMark[goal.id] = getGoalCount(goal.itemName, goal.itemId) ?? 0;
+    state.goalNotifiedAt[goal.id] = null;
+  }
+  if (JSON.stringify(storedGoals) !== JSON.stringify(state.goals) || (!Array.isArray(res.goals) && res.goal)) {
+    chrome.storage.session.set({ goals: state.goals });
+  }
+  if (!Array.isArray(res.goals) && res.goal) {
+    chrome.storage.session.remove('goal');
+  }
   if (res.lastWorkActivity) state.lastWorkActivity = res.lastWorkActivity;
+  state.goalsLoaded = true;
 });
 
 // ── Message router ────────────────────────────────────────────────────────────
@@ -102,34 +117,42 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   }
 
   switch (msg?.type) {
-    case 'SET_GOAL': {
-      const nextGoal = msg.goal ?? null;
-      const preserveGoalCalibration = sameGoalItem(state.goal, nextGoal);
-      const currentCount = nextGoal
-        ? (getGoalCount(nextGoal.itemName, nextGoal.itemId) ?? 0)
-        : null;
+    case 'SET_GOALS': {
+      const nextGoals = normalizeGoals(msg.goals);
+      const prevGoalsMap = new Map(state.goals.map(g => [g.id, g]));
+      const nextIds = new Set(nextGoals.map(g => g.id));
 
-      state.goal = nextGoal;
-      if (!preserveGoalCalibration) state.goalRateSamples = {};
-      state.goalHighWaterMark = state.goal
-        ? preserveGoalCalibration
-          ? Math.max(state.goalHighWaterMark ?? currentCount ?? 0, currentCount ?? 0)
-          : currentCount
-        : null;
-      state.goalNotifiedAt = null;
-      chrome.storage.session.set({ goal: state.goal });
-      respond({ ok: true });
+      for (const g of nextGoals) {
+        const prev = prevGoalsMap.get(g.id);
+        if (!prev) {
+          state.goalHighWaterMark[g.id] = getGoalCount(g.itemName, g.itemId) ?? 0;
+          state.goalNotifiedAt[g.id] = null;
+        } else if (!sameGoalItem(prev, g)) {
+          for (const key of Object.keys(state.goalRateSamples)) {
+            if (key.endsWith(`:${g.id}`)) delete state.goalRateSamples[key];
+          }
+          state.goalHighWaterMark[g.id] = getGoalCount(g.itemName, g.itemId) ?? 0;
+          state.goalNotifiedAt[g.id] = null;
+        } else if (prev.targetCount !== g.targetCount) {
+          state.goalNotifiedAt[g.id] = null;
+        }
+      }
+
+      for (const prevGoal of state.goals) {
+        if (!nextIds.has(prevGoal.id)) {
+          delete state.goalHighWaterMark[prevGoal.id];
+          delete state.goalNotifiedAt[prevGoal.id];
+          for (const key of Object.keys(state.goalRateSamples)) {
+            if (key.endsWith(`:${prevGoal.id}`)) delete state.goalRateSamples[key];
+          }
+        }
+      }
+
+      state.goals = nextGoals;
+      chrome.storage.session.set({ goals: state.goals });
+      respond({ ok: true, goals: state.goals });
       break;
     }
-
-    case 'CLEAR_GOAL':
-      state.goal = null;
-      state.goalNotifiedAt = null;
-      state.goalRateSamples = {};
-      state.goalHighWaterMark = null;
-      chrome.storage.session.set({ goal: null });
-      respond({ ok: true });
-      break;
 
     case 'GET_STATUS':
       respond(buildStatus());
@@ -168,17 +191,7 @@ function handleServerFrame(frame) {
   state.mirroredState = applyPatch(state.mirroredState, frame.args[0]);
   const newAct = state.mirroredState.me?.activity;
   // Snapshot the previous work activity ID before rememberWorkActivity updates it
-  const prevWorkActId = getActivityId(state.lastWorkActivity);
   rememberWorkActivity(newAct);
-  // Clear goal when the user switches to a different work activity
-  const newWorkActId = getActivityId(getEtaActivity(newAct));
-  if (state.goal && prevWorkActId !== null && newWorkActId !== null && newWorkActId !== prevWorkActId) {
-    state.goal = null;
-    state.goalNotifiedAt = null;
-    state.goalRateSamples = {};
-    state.goalHighWaterMark = null;
-    chrome.storage.session.set({ goal: null });
-  }
   trackXpGain(prevAct, newAct, prevExp, state.mirroredState.me?.exp);
   trackDropGain(prevAct, newAct, prevMe, state.mirroredState.me);
   trackCombatConsumables(prevAct, newAct, prevMe, state.mirroredState.me);
@@ -249,17 +262,18 @@ function detectIdleTransition() {
 }
 
 function detectGoalReached() {
-  if (!state.goal) return;
-  const count = getGoalCount(state.goal.itemName, state.goal.itemId);
-  if (count === null || count < state.goal.targetCount) return;
-  if (state.goalNotifiedAt) return;
-  state.goalNotifiedAt = Date.now();
-  fireNotification(
-    'goal',
-    'Microscape: Goal reached!',
-    `${state.goal.itemName}: ${count} / ${state.goal.targetCount}`
-  );
-  sendChime('default');
+  for (const goal of state.goals) {
+    const count = getGoalCount(goal.itemName, goal.itemId);
+    if (count === null || count < goal.targetCount) continue;
+    if (state.goalNotifiedAt[goal.id]) continue;
+    state.goalNotifiedAt[goal.id] = Date.now();
+    fireNotification(
+      'goal',
+      'Microscape: Goal reached!',
+      `${goal.itemName}: ${count} / ${goal.targetCount}`
+    );
+    sendChime('default');
+  }
 }
 
 function detectMaterialRunout() {
@@ -332,6 +346,35 @@ function mergeMissingActivityDefs(cachedDefs, seedDefs) {
   return { defs, added };
 }
 
+function normalizeGoals(goals) {
+  if (!Array.isArray(goals)) return [];
+
+  const ids = new Set();
+  return goals.flatMap((goal, index) => {
+    if (!goal || typeof goal !== 'object') return [];
+    const itemId = typeof goal.itemId === 'string' && goal.itemId.trim()
+      ? goal.itemId.trim()
+      : null;
+    const itemName = typeof goal.itemName === 'string' && goal.itemName.trim()
+      ? goal.itemName.trim()
+      : itemId;
+    const targetCount = Number(goal.targetCount);
+    if (!itemName || !Number.isInteger(targetCount) || targetCount < 1) return [];
+
+    const baseId = typeof goal.id === 'string' && goal.id.trim()
+      ? goal.id.trim()
+      : `legacy-${index}-${itemId ?? itemName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    let id = baseId;
+    let suffix = 2;
+    while (ids.has(id)) {
+      id = `${baseId}-${suffix}`;
+      suffix += 1;
+    }
+    ids.add(id);
+    return [{ id, itemId, itemName, targetCount }];
+  });
+}
+
 function resetTestState() {
   state.ACTIVITY_DEFS = {};
   state.ZONE_DATA = {};
@@ -358,11 +401,12 @@ function resetTestState() {
   state.activeRateClocks = {};
   state.lastRateClockAt = null;
   state.goalRateSamples = {};
-  state.goalHighWaterMark = null;
+  state.goalHighWaterMark = {};
   state.runoutRateSamples = {};
   state.lastWorkActivity = null;
-  state.goal = null;
-  state.goalNotifiedAt = null;
+  state.goals = [];
+  state.goalsLoaded = true;
+  state.goalNotifiedAt = {};
   state.runoutNotifiedFor = null;
   state.skillNotifyTarget = null;
 }
@@ -380,6 +424,7 @@ export const __test = {
   buildStatus,
   computeSkillLevelEtas,
   mergeMissingActivityDefs,
+  normalizeGoals,
   resetTestState,
   runoutInfo,
   setTestState,
