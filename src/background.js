@@ -68,25 +68,43 @@ chrome.storage.local.get(
   }
 );
 
-chrome.storage.session.get(['goals', 'goal', 'lastWorkActivity'], (res) => {
-  const storedGoals = Array.isArray(res.goals)
-    ? res.goals
-    : res.goal
-      ? [res.goal]
-      : [];
-  state.goals = normalizeGoals(storedGoals);
-  for (const goal of state.goals) {
-    state.goalHighWaterMark[goal.id] = getGoalCount(goal.itemName, goal.itemId) ?? 0;
-    state.goalNotifiedAt[goal.id] = null;
-  }
-  if (JSON.stringify(storedGoals) !== JSON.stringify(state.goals) || (!Array.isArray(res.goals) && res.goal)) {
-    chrome.storage.session.set({ goals: state.goals });
-  }
-  if (!Array.isArray(res.goals) && res.goal) {
-    chrome.storage.session.remove('goal');
-  }
-  if (res.lastWorkActivity) state.lastWorkActivity = res.lastWorkActivity;
-  state.goalsLoaded = true;
+chrome.storage.local.get(['goals', 'goal'], (localRes) => {
+  chrome.storage.session.get(['goals', 'goal', 'lastWorkActivity'], (sessionRes) => {
+    const hasLocalGoals = Array.isArray(localRes.goals);
+    const hasLocalLegacyGoal = !hasLocalGoals && Boolean(localRes.goal);
+    const storedGoals = hasLocalGoals
+      ? localRes.goals
+      : hasLocalLegacyGoal
+        ? [localRes.goal]
+        : Array.isArray(sessionRes.goals)
+          ? sessionRes.goals
+          : sessionRes.goal
+            ? [sessionRes.goal]
+            : [];
+
+    state.goals = normalizeGoals(storedGoals);
+    for (const goal of state.goals) {
+      state.goalHighWaterMark[goal.id] = getGoalCount(goal.itemName, goal.itemId) ?? 0;
+      state.goalNotifiedAt[goal.id] = null;
+    }
+
+    if (
+      !hasLocalGoals ||
+      hasLocalLegacyGoal ||
+      JSON.stringify(storedGoals) !== JSON.stringify(state.goals)
+    ) {
+      chrome.storage.local.set({ goals: state.goals });
+    }
+    if (hasLocalLegacyGoal) chrome.storage.local.remove('goal');
+
+    // Goals used to live in session storage. Remove both old shapes after
+    // importing them so an intentionally empty durable list cannot resurrect
+    // stale goals on a later service-worker restart.
+    chrome.storage.session.remove(['goals', 'goal']);
+
+    if (sessionRes.lastWorkActivity) state.lastWorkActivity = sessionRes.lastWorkActivity;
+    state.goalsLoaded = true;
+  });
 });
 
 // ── Message router ────────────────────────────────────────────────────────────
@@ -149,7 +167,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       }
 
       state.goals = nextGoals;
-      chrome.storage.session.set({ goals: state.goals });
+      chrome.storage.local.set({ goals: state.goals });
       respond({ ok: true, goals: state.goals });
       break;
     }

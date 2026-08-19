@@ -110,7 +110,13 @@ body {
 
 .goal-row {
   position: relative;
-  transition: opacity 140ms ease, transform 140ms ease;
+  border-radius: var(--radius);
+  transition: background 140ms ease, box-shadow 140ms ease, opacity 140ms ease, transform 140ms ease;
+}
+
+.goal-row.is-current-activity {
+  background: rgba(91, 141, 238, .06);
+  box-shadow: 0 0 0 4px rgba(91, 141, 238, .06);
 }
 
 .goal-row.is-dragging {

@@ -155,6 +155,7 @@ export default function GoalSection({ goalItems, goalStatuses }) {
           const complete = isValid && count >= targetCount;
           const pct = isValid ? Math.min(100, (count / targetCount) * 100) : 0;
           const relatedToActivity = status?.relatedToActivity ?? item?.relatedToActivity ?? false;
+          const isCurrentActivityGoal = status?.relatedToActivity === true;
           const { etaMs, bankTrips } = resolveGoalEta(status);
           const dropPosition = dragOverId === row.id && draggedIndex !== rowIndex
             ? (draggedIndex < rowIndex ? ' drop-after' : ' drop-before')
@@ -162,7 +163,7 @@ export default function GoalSection({ goalItems, goalStatuses }) {
 
           return (
             <div
-              className={`goal-row${draggedId === row.id ? ' is-dragging' : ''}${dropPosition}`}
+              className={`goal-row${isCurrentActivityGoal ? ' is-current-activity' : ''}${draggedId === row.id ? ' is-dragging' : ''}${dropPosition}`}
               data-goal-id={row.id}
               key={row.id}
               onDragEnter={() => {

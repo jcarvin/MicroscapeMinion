@@ -81,6 +81,15 @@ describe('GoalSection', () => {
     expect(document.querySelectorAll('.progress-bar')).toHaveLength(2);
   });
 
+  it('highlights only goals related to the current activity', () => {
+    render(<GoalSection goalItems={items} goalStatuses={[woodStatus, stoneStatus]} />);
+
+    expect(document.querySelector('[data-goal-id="wood-goal"]'))
+      .toHaveClass('is-current-activity');
+    expect(document.querySelector('[data-goal-id="stone-goal"]'))
+      .not.toHaveClass('is-current-activity');
+  });
+
   it('does not show done until the actual count reaches the target', () => {
     const { rerender } = render(
       <GoalSection

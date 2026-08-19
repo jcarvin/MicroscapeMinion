@@ -9,7 +9,7 @@ const pietyDef = {
   },
 };
 
-function installChromeMock({ cachedDefs = null, storageSet = vi.fn(), sessionData = {} } = {}) {
+function installChromeMock({ cachedDefs = null, localData = {}, storageSet = vi.fn(), sessionData = {} } = {}) {
   globalThis.chrome = {
     runtime: {
       getURL: vi.fn((path) => path),
@@ -19,7 +19,12 @@ function installChromeMock({ cachedDefs = null, storageSet = vi.fn(), sessionDat
     },
     storage: {
       local: {
-        get: vi.fn((_keys, callback) => callback(cachedDefs ? { activityDefs: cachedDefs } : {})),
+        get: vi.fn((keys, callback) => {
+          const stored = cachedDefs ? { ...localData, activityDefs: cachedDefs } : localData;
+          callback(Object.fromEntries(keys.flatMap((key) => (
+            Object.hasOwn(stored, key) ? [[key, stored[key]]] : []
+          ))));
+        }),
         remove: vi.fn(),
         set: storageSet,
       },
@@ -34,9 +39,9 @@ function installChromeMock({ cachedDefs = null, storageSet = vi.fn(), sessionDat
   };
 }
 
-async function loadBackground({ cachedDefs = null, seed = {}, storageSet, sessionData } = {}) {
+async function loadBackground({ cachedDefs = null, localData, seed = {}, storageSet, sessionData } = {}) {
   vi.resetModules();
-  installChromeMock({ cachedDefs, storageSet, sessionData });
+  installChromeMock({ cachedDefs, localData, storageSet, sessionData });
   vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
     json: () => Promise.resolve(seed),
   })));
@@ -105,10 +110,51 @@ describe('background activity definitions', () => {
 
     expect(__test.buildStatus().goalStatuses[0].goal).toMatchObject(legacyGoal);
     expect(__test.buildStatus().goalStatuses[0].goal.id).toBe('legacy-0-ironOre');
-    expect(chrome.storage.session.set).toHaveBeenCalledWith({
+    expect(chrome.storage.local.set).toHaveBeenCalledWith({
       goals: [{ id: 'legacy-0-ironOre', ...legacyGoal }],
     });
-    expect(chrome.storage.session.remove).toHaveBeenCalledWith('goal');
+    expect(chrome.storage.session.remove).toHaveBeenCalledWith(['goals', 'goal']);
+  });
+
+  it('restores durable goals in their saved order', async () => {
+    const goals = [
+      { id: 'stone', itemId: 'stone', itemName: 'Stone', targetCount: 20 },
+      { id: 'wood', itemId: 'woodLog', itemName: 'Wood Log', targetCount: 100 },
+    ];
+    const { __test } = await loadBackground({
+      localData: { goals },
+      sessionData: { goals: [...goals].reverse() },
+    });
+
+    expect(__test.buildStatus().goalStatuses.map(({ goal }) => goal.id)).toEqual([
+      'stone',
+      'wood',
+    ]);
+    expect(chrome.storage.local.set).not.toHaveBeenCalledWith({ goals });
+  });
+
+  it('keeps an empty durable goal list instead of reviving stale session goals', async () => {
+    const { __test } = await loadBackground({
+      localData: { goals: [] },
+      sessionData: {
+        goals: [{ id: 'stale', itemName: 'Coal', itemId: 'coal', targetCount: 50 }],
+      },
+    });
+
+    expect(__test.buildStatus().goalStatuses).toEqual([]);
+  });
+
+  it('writes goal changes to durable storage in their submitted order', async () => {
+    const goals = [
+      { id: 'wood', itemName: 'Wood Log', itemId: 'woodLog', targetCount: 100 },
+      { id: 'stone', itemName: 'Stone', itemId: 'stone', targetCount: 20 },
+    ];
+    await loadBackground({ localData: { goals: [] } });
+
+    sendRuntimeMessage({ type: 'SET_GOALS', goals });
+
+    expect(chrome.storage.local.set).toHaveBeenLastCalledWith({ goals });
+    expect(chrome.storage.session.set).not.toHaveBeenCalledWith({ goals });
   });
 
   it('normalizes malformed goals and makes duplicate IDs unique', async () => {
