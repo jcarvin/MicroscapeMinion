@@ -111,15 +111,16 @@
     const defs = {};
     // Matches activity defs in the (non-minified) game bundle. Optional string
     // fields like customActionText/customPrepText may appear between name and level.
-    // Groups: 1=id, 2=exp (xpPerCycle), 3=duration, 4=inventoryChanges body
-    const re = /\{\s*id:\s*`([^`]+)`(?:,\s*\w+:\s*`[^`]*`)*,\s*level:\s*\d+,\s*exp:\s*(\d+),\s*duration:\s*(\d+),\s*entity:\s*`[^`]+`,\s*inventoryChanges:\s*\{([^}]+)\}/g;
+    // Groups: 1=id, 2=required level, 3=exp, 4=duration, 5=inventoryChanges body
+    const re = /\{\s*id:\s*`([^`]+)`(?:,\s*\w+:\s*`[^`]*`)*,\s*level:\s*(\d+),\s*exp:\s*(\d+),\s*duration:\s*(\d+),\s*entity:\s*`[^`]+`,\s*inventoryChanges:\s*\{([^}]+)\}/g;
     let m;
     while ((m = re.exec(bundle)) !== null) {
       const id = m[1];
-      const xpPerCycle = parseInt(m[2], 10);
-      const durationMs = (parseInt(m[3], 10) + 6) * 2000;
+      const level = parseInt(m[2], 10);
+      const xpPerCycle = parseInt(m[3], 10);
+      const durationMs = (parseInt(m[4], 10) + 6) * 2000;
       const changes = {};
-      for (const part of m[4].split(',')) {
+      for (const part of m[5].split(',')) {
         const colon = part.indexOf(':');
         if (colon < 0) continue;
         const k = part.slice(0, colon).trim();
@@ -128,18 +129,19 @@
         const n = parseInt(v, 10);
         if (!isNaN(n)) changes[k] = n;
       }
-      defs[id] = { durationMs, xpPerCycle, inventoryChanges: changes };
+      defs[id] = { durationMs, level, xpPerCycle, inventoryChanges: changes };
     }
 
     // Piety skill activities (bury-bones etc.) have entity before exp/duration/level
-    const pietyRe = /\{\s*id:\s*`([^`]+)`,(?:\s*\w+:\s*`[^`]*`,)*\s*entity:\s*`[^`]+`,\s*exp:\s*(\d+),\s*duration:\s*(\d+),\s*level:\s*\d+,\s*inventoryChanges:\s*\{([^}]+)\}/g;
+    const pietyRe = /\{\s*id:\s*`([^`]+)`,(?:\s*\w+:\s*`[^`]*`,)*\s*entity:\s*`[^`]+`,\s*exp:\s*(\d+),\s*duration:\s*(\d+),\s*level:\s*(\d+),\s*inventoryChanges:\s*\{([^}]+)\}/g;
     while ((m = pietyRe.exec(bundle)) !== null) {
       const id = m[1];
       if (id in defs) continue;
       const xpPerCycle = parseInt(m[2], 10);
       const durationMs = (parseInt(m[3], 10) + 6) * 2000;
+      const level = parseInt(m[4], 10);
       const changes = {};
-      for (const part of m[4].split(',')) {
+      for (const part of m[5].split(',')) {
         const colon = part.indexOf(':');
         if (colon < 0) continue;
         const k = part.slice(0, colon).trim();
@@ -148,18 +150,20 @@
         const n = parseInt(v, 10);
         if (!isNaN(n)) changes[k] = n;
       }
-      defs[id] = { durationMs, xpPerCycle, inventoryChanges: changes };
+      defs[id] = { durationMs, level, xpPerCycle, inventoryChanges: changes };
     }
 
     const mobs = parseMobDefs(bundle);
-    const combatRe = /\{\s*id:\s*`(fight-[^`]+)`(?:,\s*\w+:\s*`[^`]*`)*,\s*mob:\s*`([^`]+)`\s*,\s*level:\s*\d+/g;
+    const combatRe = /\{\s*id:\s*`(fight-[^`]+)`(?:,\s*\w+:\s*`[^`]*`)*,\s*mob:\s*`([^`]+)`\s*,\s*level:\s*(\d+)/g;
     while ((m = combatRe.exec(bundle)) !== null) {
       const id = m[1];
       const mobId = m[2];
+      const level = parseInt(m[3], 10);
       const mob = mobs[mobId];
       defs[id] = {
         durationMs: mob?.speed ? mob.speed * 2000 : 0,
         xpPerCycle: 0,
+        level,
         inventoryChanges: {},
         mob: mobId,
         dropItems: mob?.drops ?? {},

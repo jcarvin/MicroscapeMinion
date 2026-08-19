@@ -8,6 +8,11 @@ import {
   isCombatActivity,
 } from './activity-utils.js';
 import { getMaterialCount, getGoalCount, findKey } from './inventory.js';
+import {
+  getChanceDropItemIds,
+  getCraftableItemIds,
+  isMaxCraftActivity,
+} from './goal-planner.js';
 import { runoutInfo } from './runout.js';
 import { TICK_MS } from './constants.js';
 import {
@@ -45,13 +50,22 @@ export function buildStatus() {
           : (liveActId ?? liveActSkill ?? null);
 
   const activityDef = etaActId ? state.ACTIVITY_DEFS[etaActId] : null;
+  const plansById = new Map(state.goalPlans.map((plan) => [plan.goalId, plan]));
   const goalStatuses = state.goals.map((goal) => {
+    const planning = plansById.get(goal.id) ?? null;
     const count = getGoalCount(goal.itemName, goal.itemId) ?? 0;
     const effectiveCount = state.goalHighWaterMark[goal.id] ?? count;
     const inventoryKey = findKey(activityDef?.inventoryChanges, goal.itemName, goal.itemId);
     const dropKey = findKey(activityDef?.dropItems, goal.itemName, goal.itemId);
-    const relatedToActivity =
-      (inventoryKey && activityDef.inventoryChanges[inventoryKey] > 0) || Boolean(dropKey);
+    const producedByActivity = Boolean(
+      inventoryKey && activityDef.inventoryChanges[inventoryKey] > 0
+    );
+    const droppedByActivity = Boolean(dropKey);
+    const relatedToActivity = planning?.sourceMode === 'craft'
+      ? producedByActivity && isMaxCraftActivity(etaActId, activityDef)
+      : planning?.sourceMode === 'drops'
+        ? droppedByActivity
+        : producedByActivity || droppedByActivity;
     const eta = etaActId && relatedToActivity
       ? computeGoalEta(goal, effectiveCount, etaActId, etaAct, etaActIsLive, goal.id)
       : null;
@@ -62,6 +76,7 @@ export function buildStatus() {
       : [];
     return {
       goal,
+      planning,
       count,
       eta,
       relatedToActivity,
@@ -154,6 +169,8 @@ export function buildStatus() {
   // Definitions provide the known game catalog; live state and saved goals cover
   // newly introduced or otherwise unknown items until their definitions arrive.
   const itemNames = new Map();
+  const craftableItemIds = getCraftableItemIds(state.ACTIVITY_DEFS);
+  const chanceDropItemIds = getChanceDropItemIds(state.ACTIVITY_DEFS);
   for (const def of Object.values(state.ACTIVITY_DEFS)) {
     for (const id of Object.keys(def.inventoryChanges ?? {})) itemNames.set(id, id);
     for (const id of Object.keys(def.dropItems ?? {})) itemNames.set(id, id);
@@ -164,13 +181,22 @@ export function buildStatus() {
     itemNames.set(goal.itemId ?? goal.itemName, goal.itemName);
   }
 
-  const goalItems = [...itemNames].map(([id, name]) => ({
-    id,
-    name,
-    count: goalStatuses.find(({ goal }) => (goal.itemId ?? goal.itemName) === id)?.count
-      ?? getMaterialCount(id),
-    relatedToActivity: relatedItemIds.has(id),
-  }));
+  const goalItems = [...itemNames].map(([id, name]) => {
+    const acquisitionSources = [
+      ...(craftableItemIds.has(id) ? ['craft'] : []),
+      ...(chanceDropItemIds.has(id) ? ['drops'] : []),
+    ];
+    return {
+      id,
+      name,
+      count: goalStatuses.find(({ goal }) => (goal.itemId ?? goal.itemName) === id)?.count
+        ?? getMaterialCount(id),
+      relatedToActivity: relatedItemIds.has(id),
+      craftable: craftableItemIds.has(id),
+      chanceDrop: chanceDropItemIds.has(id),
+      acquisitionSources,
+    };
+  });
   goalItems.sort((a, b) =>
     Number(b.relatedToActivity) - Number(a.relatedToActivity)
       || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })

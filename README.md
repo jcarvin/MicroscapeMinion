@@ -101,6 +101,13 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.11
+
+- Add Max craftable targets with ordered material planning, batch and co-product support, and limiting-item warnings.
+- Project skill XP and expected levels across goals, including level-lock warnings at the point each activity is planned.
+- Add persistent Any, Craft, and Drops choices for items with multiple acquisition routes, with chance-drop-aware planning.
+- Keep required levels and combat drop routes accurate when bundled, cached, and live activity definitions load in different orders.
+
 ### v0.1.10
 
 - Fix equipment and loot items (e.g. Black Armor, Black Full Helm) being falsely classified as combat consumables when transitioning from combat to banking or travel.

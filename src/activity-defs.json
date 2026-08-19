@@ -1,6 +1,8 @@
 {
   "cook-shrimp": {
     "durationMs": 28000,
+    "level": 1,
+    "xpPerCycle": 10,
     "inventoryChanges": {
       "rawShrimp": -1,
       "cookedShrimp": 1
@@ -8,6 +10,8 @@
   },
   "cook-meat": {
     "durationMs": 28000,
+    "level": 1,
+    "xpPerCycle": 10,
     "inventoryChanges": {
       "rawMeat": -1,
       "cookedMeat": 1
@@ -15,6 +19,8 @@
   },
   "cook-frog": {
     "durationMs": 28000,
+    "level": 1,
+    "xpPerCycle": 10,
     "inventoryChanges": {
       "rawFrog": -1,
       "logs": -1,
@@ -23,6 +29,8 @@
   },
   "cook-chicken": {
     "durationMs": 28000,
+    "level": 1,
+    "xpPerCycle": 10,
     "inventoryChanges": {
       "rawChicken": -1,
       "cookedChicken": 1
@@ -30,6 +38,8 @@
   },
   "cook-sardine": {
     "durationMs": 28000,
+    "level": 5,
+    "xpPerCycle": 20,
     "inventoryChanges": {
       "rawSardine": -1,
       "cookedSardine": 1
@@ -37,6 +47,8 @@
   },
   "cook-bread": {
     "durationMs": 28000,
+    "level": 1,
+    "xpPerCycle": 40,
     "inventoryChanges": {
       "dough": -1,
       "bread": 1
@@ -44,6 +56,8 @@
   },
   "cook-redberry-pie": {
     "durationMs": 28000,
+    "level": 10,
+    "xpPerCycle": 60,
     "inventoryChanges": {
       "pieShell": -1,
       "redberries": -1,
@@ -52,6 +66,8 @@
   },
   "cook-trout": {
     "durationMs": 28000,
+    "level": 15,
+    "xpPerCycle": 42,
     "inventoryChanges": {
       "rawTrout": -1,
       "cookedTrout": 1
@@ -59,6 +75,8 @@
   },
   "cook-meat-pie": {
     "durationMs": 28000,
+    "level": 20,
+    "xpPerCycle": 80,
     "inventoryChanges": {
       "pieShell": -1,
       "cookedMeat": -1,
@@ -67,6 +85,8 @@
   },
   "cook-salmon": {
     "durationMs": 28000,
+    "level": 25,
+    "xpPerCycle": 54,
     "inventoryChanges": {
       "rawSalmon": -1,
       "cookedSalmon": 1
@@ -74,6 +94,8 @@
   },
   "cook-apple-pie": {
     "durationMs": 28000,
+    "level": 30,
+    "xpPerCycle": 100,
     "inventoryChanges": {
       "pieShell": -1,
       "cookingApple": -1,
@@ -82,6 +104,8 @@
   },
   "cook-lobster": {
     "durationMs": 28000,
+    "level": 40,
+    "xpPerCycle": 72,
     "inventoryChanges": {
       "rawLobster": -1,
       "cookedLobster": 1
@@ -89,6 +113,8 @@
   },
   "cook-swordfish": {
     "durationMs": 28000,
+    "level": 45,
+    "xpPerCycle": 84,
     "inventoryChanges": {
       "rawSwordfish": -1,
       "cookedSwordfish": 1
@@ -96,6 +122,8 @@
   },
   "cook-pyreshell": {
     "durationMs": 28000,
+    "level": 60,
+    "xpPerCycle": 100,
     "inventoryChanges": {
       "rawPyreshell": -1,
       "ginger": -1,
@@ -104,6 +132,8 @@
   },
   "cook-shark": {
     "durationMs": 28000,
+    "level": 80,
+    "xpPerCycle": 126,
     "inventoryChanges": {
       "rawShark": -1,
       "cookedShark": 1
@@ -111,6 +141,8 @@
   },
   "cook-manta-ray": {
     "durationMs": 28000,
+    "level": 91,
+    "xpPerCycle": 130,
     "inventoryChanges": {
       "rawMantaRay": -1,
       "cookedMantaRay": 1
@@ -118,6 +150,8 @@
   },
   "craft-pot-unfired": {
     "durationMs": 18000,
+    "level": 1,
+    "xpPerCycle": 6,
     "inventoryChanges": {
       "softClay": -1,
       "unfiredPot": 1
@@ -125,6 +159,8 @@
   },
   "fire-pot": {
     "durationMs": 18000,
+    "level": 1,
+    "xpPerCycle": 15,
     "inventoryChanges": {
       "unfiredPot": -1,
       "pot": 1
@@ -132,6 +168,8 @@
   },
   "craft-leather-gloves": {
     "durationMs": 18000,
+    "level": 1,
+    "xpPerCycle": 33,
     "inventoryChanges": {
       "leather": -1,
       "thread": -1,
@@ -140,6 +178,8 @@
   },
   "make-molten-glass": {
     "durationMs": 18000,
+    "level": 1,
+    "xpPerCycle": 20,
     "inventoryChanges": {
       "sand": -1,
       "sodaAsh": -1,
@@ -148,6 +188,8 @@
   },
   "craft-pie-dish-unfired": {
     "durationMs": 18000,
+    "level": 4,
+    "xpPerCycle": 10,
     "inventoryChanges": {
       "softClay": -1,
       "unfiredPieDish": 1
@@ -155,6 +197,8 @@
   },
   "fire-pie-dish": {
     "durationMs": 18000,
+    "level": 4,
+    "xpPerCycle": 35,
     "inventoryChanges": {
       "unfiredPieDish": -1,
       "pieDish": 1
@@ -162,6 +206,8 @@
   },
   "craft-leather-boots": {
     "durationMs": 18000,
+    "level": 7,
+    "xpPerCycle": 39,
     "inventoryChanges": {
       "leather": -1,
       "thread": -1,
@@ -170,6 +216,8 @@
   },
   "craft-unstrung-gold-amulet": {
     "durationMs": 18000,
+    "level": 8,
+    "xpPerCycle": 60,
     "inventoryChanges": {
       "goldBar": -1,
       "unstrungGoldAmulet": 1
@@ -177,6 +225,8 @@
   },
   "spin-bow-string": {
     "durationMs": 18000,
+    "level": 10,
+    "xpPerCycle": 15,
     "inventoryChanges": {
       "flax": -1,
       "bowString": 1
@@ -184,6 +234,8 @@
   },
   "craft-steel-shovel": {
     "durationMs": 18000,
+    "level": 10,
+    "xpPerCycle": 55,
     "inventoryChanges": {
       "steelShovelHead": -1,
       "willowLogs": -1,
@@ -192,6 +244,8 @@
   },
   "craft-leather-armor": {
     "durationMs": 18000,
+    "level": 14,
+    "xpPerCycle": 60,
     "inventoryChanges": {
       "leather": -1,
       "thread": -1,
@@ -200,6 +254,8 @@
   },
   "craft-unstrung-holy-amulet": {
     "durationMs": 18000,
+    "level": 16,
+    "xpPerCycle": 90,
     "inventoryChanges": {
       "silverBar": -1,
       "unstrungHolyAmulet": 1
@@ -207,6 +263,8 @@
   },
   "craft-unstrung-evil-amulet": {
     "durationMs": 18000,
+    "level": 17,
+    "xpPerCycle": 95,
     "inventoryChanges": {
       "silverBar": -1,
       "unstrungEvilAmulet": 1
@@ -214,6 +272,8 @@
   },
   "cut-sapphire": {
     "durationMs": 16000,
+    "level": 20,
+    "xpPerCycle": 120,
     "inventoryChanges": {
       "uncutSapphire": -1,
       "cutSapphire": 1
@@ -221,6 +281,8 @@
   },
   "craft-feathered-cap": {
     "durationMs": 18000,
+    "level": 22,
+    "xpPerCycle": 100,
     "inventoryChanges": {
       "leather": -1,
       "ballOfWool": -1,
@@ -230,6 +292,8 @@
   },
   "craft-unstrung-sapphire-amulet": {
     "durationMs": 18000,
+    "level": 24,
+    "xpPerCycle": 144,
     "inventoryChanges": {
       "goldBar": -1,
       "cutSapphire": -1,
@@ -238,6 +302,8 @@
   },
   "cut-emerald": {
     "durationMs": 16000,
+    "level": 27,
+    "xpPerCycle": 162,
     "inventoryChanges": {
       "uncutEmerald": -1,
       "cutEmerald": 1
@@ -245,6 +311,8 @@
   },
   "craft-unstrung-emerald-amulet": {
     "durationMs": 18000,
+    "level": 30,
+    "xpPerCycle": 168,
     "inventoryChanges": {
       "goldBar": -1,
       "cutEmerald": -1,
@@ -253,6 +321,8 @@
   },
   "craft-vial": {
     "durationMs": 14000,
+    "level": 33,
+    "xpPerCycle": 35,
     "inventoryChanges": {
       "moltenGlass": -1,
       "vial": 1
@@ -260,6 +330,8 @@
   },
   "cut-ruby": {
     "durationMs": 16000,
+    "level": 34,
+    "xpPerCycle": 204,
     "inventoryChanges": {
       "uncutRuby": -1,
       "cutRuby": 1
@@ -267,6 +339,8 @@
   },
   "craft-golden-rod": {
     "durationMs": 22000,
+    "level": 40,
+    "xpPerCycle": 110,
     "inventoryChanges": {
       "goldBar": -4,
       "yewLogs": -1,
@@ -276,6 +350,8 @@
   },
   "cut-diamond": {
     "durationMs": 16000,
+    "level": 43,
+    "xpPerCycle": 258,
     "inventoryChanges": {
       "uncutDiamond": -1,
       "cutDiamond": 1
@@ -283,6 +359,8 @@
   },
   "craft-glass-orb": {
     "durationMs": 18000,
+    "level": 46,
+    "xpPerCycle": 111,
     "inventoryChanges": {
       "moltenGlass": -1,
       "unpoweredOrb": 1
@@ -290,6 +368,8 @@
   },
   "craft-unstrung-ruby-amulet": {
     "durationMs": 18000,
+    "level": 50,
+    "xpPerCycle": 204,
     "inventoryChanges": {
       "goldBar": -1,
       "cutRuby": -1,
@@ -298,6 +378,8 @@
   },
   "craft-air-battlestaff": {
     "durationMs": 18000,
+    "level": 54,
+    "xpPerCycle": 120,
     "inventoryChanges": {
       "battlestaff": -1,
       "airOrb": -1,
@@ -306,6 +388,8 @@
   },
   "craft-fire-battlestaff": {
     "durationMs": 18000,
+    "level": 62,
+    "xpPerCycle": 129,
     "inventoryChanges": {
       "battlestaff": -1,
       "fireOrb": -1,
@@ -314,6 +398,8 @@
   },
   "craft-unstrung-diamond-amulet": {
     "durationMs": 18000,
+    "level": 70,
+    "xpPerCycle": 240,
     "inventoryChanges": {
       "goldBar": -1,
       "cutDiamond": -1,
@@ -322,6 +408,8 @@
   },
   "craft-unstrung-dragonstone-amulet": {
     "durationMs": 18000,
+    "level": 80,
+    "xpPerCycle": 360,
     "inventoryChanges": {
       "goldBar": -1,
       "cutDragonstone": -1,
@@ -330,6 +418,8 @@
   },
   "burn-logs": {
     "durationMs": 20000,
+    "level": 1,
+    "xpPerCycle": 12,
     "inventoryChanges": {
       "logs": -1,
       "ashes": 1
@@ -337,6 +427,8 @@
   },
   "burn-oak-logs": {
     "durationMs": 28000,
+    "level": 15,
+    "xpPerCycle": 30,
     "inventoryChanges": {
       "oakLogs": -1,
       "ashes": 1
@@ -344,6 +436,8 @@
   },
   "burn-willow-logs": {
     "durationMs": 28000,
+    "level": 30,
+    "xpPerCycle": 50,
     "inventoryChanges": {
       "willowLogs": -1,
       "ashes": 1
@@ -351,6 +445,8 @@
   },
   "burn-maple-logs": {
     "durationMs": 32000,
+    "level": 45,
+    "xpPerCycle": 100,
     "inventoryChanges": {
       "mapleLogs": -1,
       "ashes": 1
@@ -358,6 +454,8 @@
   },
   "burn-yew-logs": {
     "durationMs": 42000,
+    "level": 60,
+    "xpPerCycle": 175,
     "inventoryChanges": {
       "yewLogs": -1,
       "ashes": 1
@@ -365,6 +463,8 @@
   },
   "burn-magic-logs": {
     "durationMs": 52000,
+    "level": 75,
+    "xpPerCycle": 250,
     "inventoryChanges": {
       "magicLogs": -1,
       "ashes": 1
@@ -372,12 +472,16 @@
   },
   "catch-shrimp": {
     "durationMs": 32000,
+    "level": 1,
+    "xpPerCycle": 40,
     "inventoryChanges": {
       "rawShrimp": 1
     }
   },
   "catch-sardine": {
     "durationMs": 32000,
+    "level": 10,
+    "xpPerCycle": 50,
     "inventoryChanges": {
       "rawShrimp": -1,
       "rawSardine": 1
@@ -385,6 +489,8 @@
   },
   "catch-trout": {
     "durationMs": 32000,
+    "level": 20,
+    "xpPerCycle": 55,
     "inventoryChanges": {
       "feather": -1,
       "rawTrout": 1
@@ -392,6 +498,8 @@
   },
   "catch-salmon": {
     "durationMs": 32000,
+    "level": 30,
+    "xpPerCycle": 70,
     "inventoryChanges": {
       "feather": -1,
       "rawSalmon": 1
@@ -399,30 +507,40 @@
   },
   "catch-lobster": {
     "durationMs": 32000,
+    "level": 40,
+    "xpPerCycle": 83,
     "inventoryChanges": {
       "rawLobster": 1
     }
   },
   "catch-swordfish": {
     "durationMs": 32000,
+    "level": 50,
+    "xpPerCycle": 89,
     "inventoryChanges": {
       "rawSwordfish": 1
     }
   },
   "catch-shark": {
     "durationMs": 32000,
+    "level": 76,
+    "xpPerCycle": 110,
     "inventoryChanges": {
       "rawShark": 1
     }
   },
   "catch-manta-ray": {
     "durationMs": 32000,
+    "level": 81,
+    "xpPerCycle": 115,
     "inventoryChanges": {
       "rawMantaRay": 1
     }
   },
   "fletch-shortbow": {
     "durationMs": 20000,
+    "level": 5,
+    "xpPerCycle": 5,
     "inventoryChanges": {
       "logs": -1,
       "shortbowU": 1
@@ -430,6 +548,8 @@
   },
   "fletch-oak-bow": {
     "durationMs": 32000,
+    "level": 20,
+    "xpPerCycle": 19,
     "inventoryChanges": {
       "oakLogs": -1,
       "oakBowU": 1
@@ -437,6 +557,8 @@
   },
   "fletch-willow-bow": {
     "durationMs": 38000,
+    "level": 35,
+    "xpPerCycle": 46,
     "inventoryChanges": {
       "willowLogs": -1,
       "willowBowU": 1
@@ -444,6 +566,8 @@
   },
   "fletch-maple-bow": {
     "durationMs": 42000,
+    "level": 50,
+    "xpPerCycle": 80,
     "inventoryChanges": {
       "mapleLogs": -1,
       "mapleBowU": 1
@@ -451,6 +575,8 @@
   },
   "fletch-yew-bow": {
     "durationMs": 46000,
+    "level": 65,
+    "xpPerCycle": 119,
     "inventoryChanges": {
       "yewLogs": -1,
       "yewBowU": 1
@@ -458,6 +584,8 @@
   },
   "fletch-magic-bow": {
     "durationMs": 52000,
+    "level": 80,
+    "xpPerCycle": 166,
     "inventoryChanges": {
       "magicLogs": -1,
       "magicBowU": 1
@@ -465,6 +593,7 @@
   },
   "bury-bones": {
     "durationMs": 16000,
+    "level": 1,
     "xpPerCycle": 4,
     "inventoryChanges": {
       "bones": -1,
@@ -473,6 +602,7 @@
   },
   "bury-big-bones": {
     "durationMs": 16000,
+    "level": 1,
     "xpPerCycle": 12,
     "inventoryChanges": {
       "bigBones": -1,
@@ -481,6 +611,7 @@
   },
   "bury-dragon-bones": {
     "durationMs": 16000,
+    "level": 1,
     "xpPerCycle": 60,
     "inventoryChanges": {
       "dragonBones": -1,
@@ -490,6 +621,8 @@
   },
   "bones-to-bread": {
     "durationMs": 42000,
+    "level": 5,
+    "xpPerCycle": 25,
     "inventoryChanges": {
       "bones": -3,
       "bread": 1
@@ -497,6 +630,8 @@
   },
   "enchant-sapphire-amulet": {
     "durationMs": 28000,
+    "level": 10,
+    "xpPerCycle": 35,
     "inventoryChanges": {
       "sapphireAmulet": -1,
       "airRune": -1,
@@ -506,6 +641,8 @@
   },
   "enchant-emerald-amulet": {
     "durationMs": 32000,
+    "level": 20,
+    "xpPerCycle": 55,
     "inventoryChanges": {
       "emeraldAmulet": -1,
       "airRune": -3,
@@ -515,6 +652,8 @@
   },
   "telegrab-nature-runes": {
     "durationMs": 72000,
+    "level": 33,
+    "xpPerCycle": 80,
     "inventoryChanges": {
       "airRune": -1,
       "lawRune": -1,
@@ -523,6 +662,8 @@
   },
   "telegrab-gold-bar": {
     "durationMs": 52000,
+    "level": 33,
+    "xpPerCycle": 80,
     "inventoryChanges": {
       "airRune": -1,
       "lawRune": -1,
@@ -531,6 +672,8 @@
   },
   "practice-teleport": {
     "durationMs": 32000,
+    "level": 45,
+    "xpPerCycle": 130,
     "inventoryChanges": {
       "airRune": -5,
       "lawRune": -1
@@ -538,6 +681,8 @@
   },
   "enchant-ruby-amulet": {
     "durationMs": 36000,
+    "level": 49,
+    "xpPerCycle": 150,
     "inventoryChanges": {
       "rubyAmulet": -1,
       "fireRune": -5,
@@ -547,6 +692,8 @@
   },
   "enchant-diamond-amulet": {
     "durationMs": 42000,
+    "level": 57,
+    "xpPerCycle": 200,
     "inventoryChanges": {
       "diamondAmulet": -1,
       "airRune": -10,
@@ -556,6 +703,8 @@
   },
   "enchant-dragonstone-amulet": {
     "durationMs": 42000,
+    "level": 68,
+    "xpPerCycle": 290,
     "inventoryChanges": {
       "dragonstoneAmulet": -1,
       "airRune": -15,
@@ -565,6 +714,8 @@
   },
   "charge-air-orb": {
     "durationMs": 22000,
+    "level": 63,
+    "xpPerCycle": 240,
     "inventoryChanges": {
       "unpoweredOrb": -1,
       "cosmicRune": -3,
@@ -574,6 +725,8 @@
   },
   "charge-fire-orb": {
     "durationMs": 22000,
+    "level": 66,
+    "xpPerCycle": 300,
     "inventoryChanges": {
       "unpoweredOrb": -1,
       "cosmicRune": -3,
@@ -583,6 +736,8 @@
   },
   "brew-defense-potion": {
     "durationMs": 396000,
+    "level": 1,
+    "xpPerCycle": 384,
     "inventoryChanges": {
       "vialOfWater": -1,
       "eyeOfNewt": -1,
@@ -591,6 +746,8 @@
   },
   "brew-fishing-potion": {
     "durationMs": 396000,
+    "level": 2,
+    "xpPerCycle": 453,
     "inventoryChanges": {
       "vialOfWater": -1,
       "fellroot": -1,
@@ -599,6 +756,8 @@
   },
   "brew-attack-potion": {
     "durationMs": 396000,
+    "level": 4,
+    "xpPerCycle": 525,
     "inventoryChanges": {
       "vialOfWater": -1,
       "impweed": -1,
@@ -607,6 +766,8 @@
   },
   "brew-woodcutting-potion": {
     "durationMs": 396000,
+    "level": 7,
+    "xpPerCycle": 594,
     "inventoryChanges": {
       "vialOfWater": -1,
       "elmwort": -1,
@@ -615,6 +776,8 @@
   },
   "brew-mining-potion": {
     "durationMs": 396000,
+    "level": 10,
+    "xpPerCycle": 666,
     "inventoryChanges": {
       "vialOfWater": -1,
       "dwellberries": -1,
@@ -623,6 +786,8 @@
   },
   "brew-strength-potion": {
     "durationMs": 396000,
+    "level": 13,
+    "xpPerCycle": 735,
     "inventoryChanges": {
       "vialOfWater": -1,
       "limpwurtRoot": -1,
@@ -631,6 +796,8 @@
   },
   "brew-cooking-potion": {
     "durationMs": 396000,
+    "level": 16,
+    "xpPerCycle": 807,
     "inventoryChanges": {
       "vialOfWater": -1,
       "chocolateDust": -1,
@@ -639,6 +806,8 @@
   },
   "brew-herblaw-potion": {
     "durationMs": 396000,
+    "level": 18,
+    "xpPerCycle": 876,
     "inventoryChanges": {
       "vialOfWater": -1,
       "marshcap": -1,
@@ -647,6 +816,8 @@
   },
   "brew-firemaking-potion": {
     "durationMs": 396000,
+    "level": 21,
+    "xpPerCycle": 948,
     "inventoryChanges": {
       "vialOfWater": -1,
       "ashes": -32,
@@ -655,6 +826,8 @@
   },
   "brew-fletching-potion": {
     "durationMs": 396000,
+    "level": 24,
+    "xpPerCycle": 1017,
     "inventoryChanges": {
       "vialOfWater": -1,
       "featheredSeed": -1,
@@ -663,6 +836,8 @@
   },
   "brew-good-magic-potion": {
     "durationMs": 396000,
+    "level": 27,
+    "xpPerCycle": 1089,
     "inventoryChanges": {
       "vialOfWater": -1,
       "havenfrond": -1,
@@ -671,6 +846,8 @@
   },
   "brew-crafting-potion": {
     "durationMs": 396000,
+    "level": 30,
+    "xpPerCycle": 1158,
     "inventoryChanges": {
       "vialOfWater": -1,
       "spiderSilk": -1,
@@ -679,6 +856,8 @@
   },
   "brew-ranged-potion": {
     "durationMs": 396000,
+    "level": 32,
+    "xpPerCycle": 1230,
     "inventoryChanges": {
       "vialOfWater": -1,
       "snailShell": -1,
@@ -687,6 +866,8 @@
   },
   "brew-evil-magic-potion": {
     "durationMs": 396000,
+    "level": 35,
+    "xpPerCycle": 1299,
     "inventoryChanges": {
       "vialOfWater": -1,
       "gloomroot": -1,
@@ -695,6 +876,8 @@
   },
   "brew-smithing-potion": {
     "durationMs": 396000,
+    "level": 38,
+    "xpPerCycle": 1371,
     "inventoryChanges": {
       "vialOfWater": -1,
       "coalTar": -1,
@@ -703,6 +886,8 @@
   },
   "brew-piety-potion": {
     "durationMs": 396000,
+    "level": 41,
+    "xpPerCycle": 1440,
     "inventoryChanges": {
       "vialOfWater": -1,
       "knightveil": -1,
@@ -711,6 +896,8 @@
   },
   "brew-super-defense-potion": {
     "durationMs": 396000,
+    "level": 44,
+    "xpPerCycle": 1920,
     "inventoryChanges": {
       "vialOfWater": -1,
       "eyeOfNewt": -1,
@@ -720,6 +907,8 @@
   },
   "brew-super-fishing-potion": {
     "durationMs": 396000,
+    "level": 46,
+    "xpPerCycle": 2004,
     "inventoryChanges": {
       "vialOfWater": -1,
       "fellroot": -1,
@@ -729,6 +918,8 @@
   },
   "brew-super-attack-potion": {
     "durationMs": 396000,
+    "level": 49,
+    "xpPerCycle": 2085,
     "inventoryChanges": {
       "vialOfWater": -1,
       "impweed": -1,
@@ -738,6 +929,8 @@
   },
   "brew-super-woodcutting-potion": {
     "durationMs": 396000,
+    "level": 52,
+    "xpPerCycle": 2169,
     "inventoryChanges": {
       "vialOfWater": -1,
       "elmwort": -1,
@@ -747,6 +940,8 @@
   },
   "brew-super-mining-potion": {
     "durationMs": 396000,
+    "level": 55,
+    "xpPerCycle": 2253,
     "inventoryChanges": {
       "vialOfWater": -1,
       "dwellberries": -1,
@@ -756,6 +951,8 @@
   },
   "brew-super-strength-potion": {
     "durationMs": 396000,
+    "level": 58,
+    "xpPerCycle": 2337,
     "inventoryChanges": {
       "vialOfWater": -1,
       "limpwurtRoot": -1,
@@ -765,6 +962,8 @@
   },
   "brew-super-cooking-potion": {
     "durationMs": 396000,
+    "level": 60,
+    "xpPerCycle": 2418,
     "inventoryChanges": {
       "vialOfWater": -1,
       "chocolateDust": -1,
@@ -774,6 +973,8 @@
   },
   "brew-super-herblaw-potion": {
     "durationMs": 396000,
+    "level": 63,
+    "xpPerCycle": 2502,
     "inventoryChanges": {
       "vialOfWater": -1,
       "marshcap": -1,
@@ -783,6 +984,8 @@
   },
   "brew-super-firemaking-potion": {
     "durationMs": 396000,
+    "level": 66,
+    "xpPerCycle": 2586,
     "inventoryChanges": {
       "vialOfWater": -1,
       "ashes": -32,
@@ -792,6 +995,8 @@
   },
   "brew-super-fletching-potion": {
     "durationMs": 396000,
+    "level": 69,
+    "xpPerCycle": 2670,
     "inventoryChanges": {
       "vialOfWater": -1,
       "featheredSeed": -1,
@@ -801,6 +1006,8 @@
   },
   "brew-super-good-magic-potion": {
     "durationMs": 396000,
+    "level": 72,
+    "xpPerCycle": 2751,
     "inventoryChanges": {
       "vialOfWater": -1,
       "havenfrond": -1,
@@ -810,6 +1017,8 @@
   },
   "brew-super-crafting-potion": {
     "durationMs": 396000,
+    "level": 74,
+    "xpPerCycle": 2835,
     "inventoryChanges": {
       "vialOfWater": -1,
       "spiderSilk": -1,
@@ -819,6 +1028,8 @@
   },
   "brew-super-ranged-potion": {
     "durationMs": 396000,
+    "level": 77,
+    "xpPerCycle": 2919,
     "inventoryChanges": {
       "vialOfWater": -1,
       "snailShell": -1,
@@ -828,6 +1039,8 @@
   },
   "brew-super-evil-magic-potion": {
     "durationMs": 396000,
+    "level": 80,
+    "xpPerCycle": 3003,
     "inventoryChanges": {
       "vialOfWater": -1,
       "gloomroot": -1,
@@ -837,6 +1050,8 @@
   },
   "brew-super-smithing-potion": {
     "durationMs": 396000,
+    "level": 83,
+    "xpPerCycle": 3084,
     "inventoryChanges": {
       "vialOfWater": -1,
       "coalTar": -1,
@@ -846,6 +1061,8 @@
   },
   "brew-super-piety-potion": {
     "durationMs": 396000,
+    "level": 85,
+    "xpPerCycle": 3168,
     "inventoryChanges": {
       "vialOfWater": -1,
       "knightveil": -1,
@@ -855,60 +1072,80 @@
   },
   "mine-copper": {
     "durationMs": 28000,
+    "level": 1,
+    "xpPerCycle": 15,
     "inventoryChanges": {
       "copperOre": 1
     }
   },
   "mine-tin": {
     "durationMs": 28000,
+    "level": 1,
+    "xpPerCycle": 15,
     "inventoryChanges": {
       "tinOre": 1
     }
   },
   "mine-iron": {
     "durationMs": 32000,
+    "level": 15,
+    "xpPerCycle": 35,
     "inventoryChanges": {
       "ironOre": 1
     }
   },
   "mine-silver": {
     "durationMs": 36000,
+    "level": 20,
+    "xpPerCycle": 40,
     "inventoryChanges": {
       "silverOre": 1
     }
   },
   "mine-coal": {
     "durationMs": 40000,
+    "level": 30,
+    "xpPerCycle": 56,
     "inventoryChanges": {
       "coalOre": 1
     }
   },
   "mine-gold": {
     "durationMs": 42000,
+    "level": 40,
+    "xpPerCycle": 66,
     "inventoryChanges": {
       "goldOre": 1
     }
   },
   "mine-mithril": {
     "durationMs": 48000,
+    "level": 55,
+    "xpPerCycle": 91,
     "inventoryChanges": {
       "mithrilOre": 1
     }
   },
   "mine-adamantite": {
     "durationMs": 62000,
+    "level": 70,
+    "xpPerCycle": 95,
     "inventoryChanges": {
       "adamantiteOre": 1
     }
   },
   "mine-prog": {
     "durationMs": 92000,
+    "level": 85,
+    "xpPerCycle": 125,
     "inventoryChanges": {
       "progriteOre": 1
     }
   },
   "smelt-bronze": {
     "durationMs": 20000,
+    "level": 1,
+    "xpPerCycle": 6,
     "inventoryChanges": {
       "copperOre": -1,
       "tinOre": -1,
@@ -917,6 +1154,8 @@
   },
   "forge-bronze-dagger": {
     "durationMs": 18000,
+    "level": 1,
+    "xpPerCycle": 18,
     "inventoryChanges": {
       "bronzeBar": -1,
       "bronzeDagger": 1
@@ -924,6 +1163,8 @@
   },
   "forge-bronze-axe": {
     "durationMs": 18000,
+    "level": 2,
+    "xpPerCycle": 18,
     "inventoryChanges": {
       "bronzeBar": -1,
       "bronzeAxe": 1
@@ -931,6 +1172,8 @@
   },
   "forge-bronze-pickaxe": {
     "durationMs": 18000,
+    "level": 2,
+    "xpPerCycle": 18,
     "inventoryChanges": {
       "bronzeBar": -1,
       "bronzePickaxe": 1
@@ -938,6 +1181,8 @@
   },
   "forge-bronze-medium-helm": {
     "durationMs": 18000,
+    "level": 3,
+    "xpPerCycle": 18,
     "inventoryChanges": {
       "bronzeBar": -1,
       "bronzeMedHelm": 1
@@ -945,6 +1190,8 @@
   },
   "forge-bronze-scimitar": {
     "durationMs": 24000,
+    "level": 5,
+    "xpPerCycle": 36,
     "inventoryChanges": {
       "bronzeBar": -2,
       "bronzeScimitar": 1
@@ -952,6 +1199,8 @@
   },
   "forge-bronze-sq-shield": {
     "durationMs": 24000,
+    "level": 7,
+    "xpPerCycle": 36,
     "inventoryChanges": {
       "bronzeBar": -2,
       "bronzeSqShield": 1
@@ -959,6 +1208,8 @@
   },
   "forge-bronze-armor": {
     "durationMs": 42000,
+    "level": 9,
+    "xpPerCycle": 91,
     "inventoryChanges": {
       "bronzeBar": -5,
       "bronzeArmor": 1
@@ -966,6 +1217,8 @@
   },
   "smelt-iron": {
     "durationMs": 28000,
+    "level": 15,
+    "xpPerCycle": 12,
     "inventoryChanges": {
       "ironOre": -2,
       "ironBar": 1
@@ -973,6 +1226,8 @@
   },
   "forge-iron-dagger": {
     "durationMs": 24000,
+    "level": 15,
+    "xpPerCycle": 40,
     "inventoryChanges": {
       "ironBar": -1,
       "ironDagger": 1
@@ -980,6 +1235,8 @@
   },
   "forge-iron-shears": {
     "durationMs": 24000,
+    "level": 15,
+    "xpPerCycle": 40,
     "inventoryChanges": {
       "ironBar": -1,
       "ironShears": 1
@@ -987,6 +1244,8 @@
   },
   "forge-iron-medium-helm": {
     "durationMs": 24000,
+    "level": 17,
+    "xpPerCycle": 40,
     "inventoryChanges": {
       "ironBar": -1,
       "ironMedHelm": 1
@@ -994,6 +1253,8 @@
   },
   "forge-iron-pickaxe": {
     "durationMs": 24000,
+    "level": 17,
+    "xpPerCycle": 40,
     "inventoryChanges": {
       "ironBar": -1,
       "ironPickaxe": 1
@@ -1001,6 +1262,8 @@
   },
   "forge-iron-scimitar": {
     "durationMs": 36000,
+    "level": 19,
+    "xpPerCycle": 84,
     "inventoryChanges": {
       "ironBar": -2,
       "ironScimitar": 1
@@ -1008,6 +1271,8 @@
   },
   "smelt-silver": {
     "durationMs": 28000,
+    "level": 20,
+    "xpPerCycle": 13,
     "inventoryChanges": {
       "silverOre": -1,
       "silverBar": 1
@@ -1015,6 +1280,8 @@
   },
   "forge-iron-sq-shield": {
     "durationMs": 36000,
+    "level": 21,
+    "xpPerCycle": 84,
     "inventoryChanges": {
       "ironBar": -2,
       "ironSqShield": 1
@@ -1022,6 +1289,8 @@
   },
   "forge-iron-armor": {
     "durationMs": 72000,
+    "level": 23,
+    "xpPerCycle": 211,
     "inventoryChanges": {
       "ironBar": -5,
       "ironArmor": 1
@@ -1029,6 +1298,8 @@
   },
   "smelt-steel": {
     "durationMs": 36000,
+    "level": 30,
+    "xpPerCycle": 17,
     "inventoryChanges": {
       "ironOre": -1,
       "coalOre": -2,
@@ -1037,6 +1308,8 @@
   },
   "forge-steel-dagger": {
     "durationMs": 28000,
+    "level": 30,
+    "xpPerCycle": 59,
     "inventoryChanges": {
       "steelBar": -1,
       "steelDagger": 1
@@ -1044,6 +1317,8 @@
   },
   "forge-steel-shovel-head": {
     "durationMs": 28000,
+    "level": 30,
+    "xpPerCycle": 59,
     "inventoryChanges": {
       "steelBar": -1,
       "steelShovelHead": 1
@@ -1051,6 +1326,8 @@
   },
   "forge-steel-medium-helm": {
     "durationMs": 28000,
+    "level": 32,
+    "xpPerCycle": 59,
     "inventoryChanges": {
       "steelBar": -1,
       "steelMedHelm": 1
@@ -1058,6 +1335,8 @@
   },
   "forge-steel-scimitar": {
     "durationMs": 44000,
+    "level": 34,
+    "xpPerCycle": 124,
     "inventoryChanges": {
       "steelBar": -2,
       "steelScimitar": 1
@@ -1065,6 +1344,8 @@
   },
   "forge-steel-sq-shield": {
     "durationMs": 44000,
+    "level": 36,
+    "xpPerCycle": 124,
     "inventoryChanges": {
       "steelBar": -2,
       "steelSqShield": 1
@@ -1072,6 +1353,8 @@
   },
   "forge-steel-armor": {
     "durationMs": 92000,
+    "level": 38,
+    "xpPerCycle": 311,
     "inventoryChanges": {
       "steelBar": -5,
       "steelArmor": 1
@@ -1079,6 +1362,8 @@
   },
   "smelt-gold": {
     "durationMs": 32000,
+    "level": 40,
+    "xpPerCycle": 22,
     "inventoryChanges": {
       "goldOre": -1,
       "goldBar": 1
@@ -1086,6 +1371,8 @@
   },
   "smelt-mithril": {
     "durationMs": 48000,
+    "level": 50,
+    "xpPerCycle": 37,
     "inventoryChanges": {
       "mithrilOre": -1,
       "coalOre": -4,
@@ -1094,6 +1381,8 @@
   },
   "forge-mithril-dagger": {
     "durationMs": 32000,
+    "level": 50,
+    "xpPerCycle": 87,
     "inventoryChanges": {
       "mithrilBar": -1,
       "mithrilDagger": 1
@@ -1101,6 +1390,8 @@
   },
   "forge-mithril-medium-helm": {
     "durationMs": 32000,
+    "level": 52,
+    "xpPerCycle": 87,
     "inventoryChanges": {
       "mithrilBar": -1,
       "mithrilMedHelm": 1
@@ -1108,6 +1399,8 @@
   },
   "forge-mithril-scimitar": {
     "durationMs": 52000,
+    "level": 54,
+    "xpPerCycle": 192,
     "inventoryChanges": {
       "mithrilBar": -2,
       "mithrilScimitar": 1
@@ -1115,6 +1408,8 @@
   },
   "forge-mithril-sq-shield": {
     "durationMs": 52000,
+    "level": 56,
+    "xpPerCycle": 192,
     "inventoryChanges": {
       "mithrilBar": -2,
       "mithrilSqShield": 1
@@ -1122,6 +1417,8 @@
   },
   "forge-mithril-armor": {
     "durationMs": 112000,
+    "level": 58,
+    "xpPerCycle": 493,
     "inventoryChanges": {
       "mithrilBar": -5,
       "mithrilArmor": 1
@@ -1129,6 +1426,8 @@
   },
   "smelt-adamantite": {
     "durationMs": 56000,
+    "level": 70,
+    "xpPerCycle": 37,
     "inventoryChanges": {
       "adamantiteOre": -1,
       "coalOre": -6,
@@ -1137,6 +1436,8 @@
   },
   "forge-adamant-dagger": {
     "durationMs": 36000,
+    "level": 70,
+    "xpPerCycle": 125,
     "inventoryChanges": {
       "adamantiteBar": -1,
       "adamantDagger": 1
@@ -1144,6 +1445,8 @@
   },
   "forge-adamant-medium-helm": {
     "durationMs": 36000,
+    "level": 72,
+    "xpPerCycle": 125,
     "inventoryChanges": {
       "adamantiteBar": -1,
       "adamantMedHelm": 1
@@ -1151,6 +1454,8 @@
   },
   "forge-adamant-scimitar": {
     "durationMs": 60000,
+    "level": 74,
+    "xpPerCycle": 276,
     "inventoryChanges": {
       "adamantiteBar": -2,
       "adamantScimitar": 1
@@ -1158,6 +1463,8 @@
   },
   "forge-adamant-sq-shield": {
     "durationMs": 60000,
+    "level": 76,
+    "xpPerCycle": 276,
     "inventoryChanges": {
       "adamantiteBar": -2,
       "adamantSqShield": 1
@@ -1165,6 +1472,8 @@
   },
   "forge-adamant-armor": {
     "durationMs": 132000,
+    "level": 78,
+    "xpPerCycle": 708,
     "inventoryChanges": {
       "adamantiteBar": -5,
       "adamantArmor": 1
@@ -1172,6 +1481,8 @@
   },
   "smelt-progrite": {
     "durationMs": 68000,
+    "level": 85,
+    "xpPerCycle": 45,
     "inventoryChanges": {
       "progriteOre": -1,
       "coalOre": -8,
@@ -1180,6 +1491,8 @@
   },
   "forge-progrite-dagger": {
     "durationMs": 40000,
+    "level": 85,
+    "xpPerCycle": 163,
     "inventoryChanges": {
       "progriteBar": -1,
       "progriteDagger": 1
@@ -1187,6 +1500,8 @@
   },
   "forge-progrite-medium-helm": {
     "durationMs": 40000,
+    "level": 87,
+    "xpPerCycle": 163,
     "inventoryChanges": {
       "progriteBar": -1,
       "progriteMedHelm": 1
@@ -1194,6 +1509,8 @@
   },
   "forge-progrite-scimitar": {
     "durationMs": 68000,
+    "level": 89,
+    "xpPerCycle": 360,
     "inventoryChanges": {
       "progriteBar": -2,
       "progriteScimitar": 1
@@ -1201,6 +1518,8 @@
   },
   "forge-progrite-sq-shield": {
     "durationMs": 68000,
+    "level": 91,
+    "xpPerCycle": 360,
     "inventoryChanges": {
       "progriteBar": -2,
       "progriteSqShield": 1
@@ -1208,6 +1527,8 @@
   },
   "forge-progrite-armor": {
     "durationMs": 152000,
+    "level": 93,
+    "xpPerCycle": 935,
     "inventoryChanges": {
       "progriteBar": -5,
       "progriteArmor": 1
@@ -1215,36 +1536,48 @@
   },
   "chop-tree": {
     "durationMs": 24000,
+    "level": 1,
+    "xpPerCycle": 12,
     "inventoryChanges": {
       "logs": 1
     }
   },
   "chop-oak": {
     "durationMs": 24000,
+    "level": 15,
+    "xpPerCycle": 30,
     "inventoryChanges": {
       "oakLogs": 1
     }
   },
   "chop-willow": {
     "durationMs": 24000,
+    "level": 30,
+    "xpPerCycle": 50,
     "inventoryChanges": {
       "willowLogs": 1
     }
   },
   "chop-maple": {
     "durationMs": 28000,
+    "level": 45,
+    "xpPerCycle": 100,
     "inventoryChanges": {
       "mapleLogs": 1
     }
   },
   "chop-yew": {
     "durationMs": 30000,
+    "level": 60,
+    "xpPerCycle": 175,
     "inventoryChanges": {
       "yewLogs": 1
     }
   },
   "chop-magic": {
     "durationMs": 32000,
+    "level": 75,
+    "xpPerCycle": 250,
     "inventoryChanges": {
       "magicLogs": 1
     }

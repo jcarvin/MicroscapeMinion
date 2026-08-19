@@ -43,6 +43,7 @@ import { snapshotEta, computeSkillLevelEtas } from './eta.js';
 import { pushTickEntry, pushTickEvent, safelyPushEtaDebugEntry } from './debug-log.js';
 import { buildStatus } from './status.js';
 import { fireNotification, sendChime } from './notify.js';
+import { buildOwnedCounts, planGoals } from './goal-planner.js';
 
 // ── Startup ───────────────────────────────────────────────────────────────────
 
@@ -52,13 +53,28 @@ chrome.storage.local.get(
     fetch(chrome.runtime.getURL('src/activity-defs.json'))
       .then((r) => r.json())
       .then((seed) => {
-        const { defs, added } = mergeMissingActivityDefs(res.activityDefs, seed);
+        const storedMerge = mergeMissingActivityDefs(res.activityDefs, seed);
+        // Live bundle parsing can finish before this extension-resource fetch.
+        // Keep its routes authoritative, but backfill planner metadata when an
+        // older page/content script sent definitions without required levels.
+        const hasLiveDefs = Object.keys(state.ACTIVITY_DEFS).length > 0;
+        const liveMerge = hasLiveDefs
+          ? enrichActivityMetadata(state.ACTIVITY_DEFS, storedMerge.defs)
+          : null;
+        const defs = liveMerge?.defs ?? storedMerge.defs;
+        const added = liveMerge?.added ?? storedMerge.added;
         state.ACTIVITY_DEFS = defs;
         if (added) chrome.storage.local.set({ activityDefs: state.ACTIVITY_DEFS });
+        refreshGoalPlanning();
       })
       .catch(() => {
-        if (res.activityDefs && Object.keys(res.activityDefs).length > 0) {
+        if (
+          Object.keys(state.ACTIVITY_DEFS).length === 0
+          && res.activityDefs
+          && Object.keys(res.activityDefs).length > 0
+        ) {
           state.ACTIVITY_DEFS = res.activityDefs;
+          refreshGoalPlanning();
         }
       });
     if (res.zoneData) state.ZONE_DATA = res.zoneData;
@@ -107,6 +123,7 @@ chrome.storage.local.get(['goals', 'goal'], (localRes) => {
 
     if (sessionRes.lastWorkActivity) state.lastWorkActivity = sessionRes.lastWorkActivity;
     state.goalsLoaded = true;
+    refreshGoalPlanning();
   });
 });
 
@@ -133,13 +150,16 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         toCache.xpTable = msg.xpTable;
       }
       chrome.storage.local.set(toCache);
+      refreshGoalPlanning();
     }
     return;
   }
 
   switch (msg?.type) {
     case 'SET_GOALS': {
-      const nextGoals = normalizeGoals(msg.goals);
+      const submittedGoals = normalizeGoals(msg.goals);
+      const planning = calculateGoalPlanning(submittedGoals);
+      const nextGoals = planning.goals;
       const prevGoalsMap = new Map(state.goals.map(g => [g.id, g]));
       const nextIds = new Set(nextGoals.map(g => g.id));
 
@@ -170,12 +190,18 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       }
 
       state.goals = nextGoals;
+      state.goalPlans = planning.plans;
       chrome.storage.local.set({ goals: state.goals });
-      respond({ ok: true, goals: state.goals });
+      respond({
+        ok: true,
+        goals: state.goals,
+        goalStatuses: buildStatus().goalStatuses,
+      });
       break;
     }
 
     case 'GET_STATUS':
+      refreshGoalPlanning();
       respond(buildStatus());
       break;
 
@@ -231,6 +257,7 @@ function handleServerFrame(frame) {
   trackCombatConsumables(prevAct, newAct, prevMe, state.mirroredState.me);
   trackGoalAccumulation(prevAct, newAct, prevMe, state.mirroredState.me);
   trackRunoutConsumption(prevAct, newAct, prevMe, state.mirroredState.me);
+  refreshGoalPlanning();
 
   if (
     newAct?.preparedActivity &&
@@ -318,6 +345,7 @@ function detectIdleTransition() {
 
 function detectGoalReached() {
   for (const goal of state.goals) {
+    if (goal.maxCraftable && goal.targetCount === 0) continue;
     const count = getGoalCount(goal.itemName, goal.itemId);
     if (count === null || count < goal.targetCount) continue;
     if (state.goalNotifiedAt[goal.id]) continue;
@@ -386,6 +414,26 @@ function detectSkillLevelReached() {
 
 // ── Test surface ──────────────────────────────────────────────────────────────
 
+const PLANNER_ACTIVITY_METADATA = ['level', 'xpPerCycle', 'skill'];
+
+function enrichActivityMetadata(primaryDefs, fallbackDefs) {
+  const defs = { ...(primaryDefs ?? {}) };
+  let added = false;
+  for (const [id, current] of Object.entries(defs)) {
+    const fallback = fallbackDefs?.[id];
+    if (!fallback) continue;
+    const missingMetadata = Object.fromEntries(
+      PLANNER_ACTIVITY_METADATA
+        .filter((key) => current?.[key] === undefined && fallback[key] !== undefined)
+        .map((key) => [key, fallback[key]])
+    );
+    if (Object.keys(missingMetadata).length === 0) continue;
+    defs[id] = { ...current, ...missingMetadata };
+    added = true;
+  }
+  return { defs, added };
+}
+
 function mergeMissingActivityDefs(cachedDefs, seedDefs) {
   if (!cachedDefs || Object.keys(cachedDefs).length === 0) {
     return { defs: seedDefs ?? {}, added: false };
@@ -396,6 +444,28 @@ function mergeMissingActivityDefs(cachedDefs, seedDefs) {
     if (!(id in defs)) {
       defs[id] = def;
       added = true;
+      continue;
+    }
+
+    // Keep the cached recipe data, which may be newer than the bundled seed,
+    // while enriching older caches with planner metadata introduced later.
+    const missingMetadata = Object.fromEntries(
+      [...PLANNER_ACTIVITY_METADATA, 'mob']
+        .filter((key) => defs[id]?.[key] === undefined && def?.[key] !== undefined)
+        .map((key) => [key, def[key]])
+    );
+    if (Object.keys(missingMetadata).length > 0) {
+      defs[id] = { ...defs[id], ...missingMetadata };
+      added = true;
+    }
+
+    const fallbackDrops = def?.dropItems;
+    if (fallbackDrops && typeof fallbackDrops === 'object') {
+      const mergedDrops = { ...fallbackDrops, ...(defs[id].dropItems ?? {}) };
+      if (JSON.stringify(mergedDrops) !== JSON.stringify(defs[id].dropItems ?? {})) {
+        defs[id] = { ...defs[id], dropItems: mergedDrops };
+        added = true;
+      }
     }
   }
   return { defs, added };
@@ -414,7 +484,14 @@ function normalizeGoals(goals) {
       ? goal.itemName.trim()
       : itemId;
     const targetCount = Number(goal.targetCount);
-    if (!itemName || !Number.isInteger(targetCount) || targetCount < 1) return [];
+    const maxCraftable = goal.maxCraftable === true;
+    const sourceMode = maxCraftable
+      ? 'craft'
+      : ['any', 'craft', 'drops'].includes(goal.sourceMode)
+        ? goal.sourceMode
+        : null;
+    const minimumTarget = maxCraftable ? 0 : 1;
+    if (!itemName || !Number.isSafeInteger(targetCount) || targetCount < minimumTarget) return [];
 
     const baseId = typeof goal.id === 'string' && goal.id.trim()
       ? goal.id.trim()
@@ -426,8 +503,49 @@ function normalizeGoals(goals) {
       suffix += 1;
     }
     ids.add(id);
-    return [{ id, itemId, itemName, targetCount }];
+    return [{
+      id,
+      itemId,
+      itemName,
+      targetCount,
+      ...(maxCraftable ? { maxCraftable: true } : {}),
+      ...(sourceMode ? { sourceMode } : {}),
+    }];
   });
+}
+
+function goalPlanningReady() {
+  return state.goalsLoaded
+    && Object.keys(state.ACTIVITY_DEFS).length > 0
+    && state.mirroredState.me?.inventory
+    && typeof state.mirroredState.me.inventory === 'object';
+}
+
+function calculateGoalPlanning(goals = state.goals) {
+  return planGoals({
+    goals,
+    activityDefs: state.ACTIVITY_DEFS,
+    ownedCounts: buildOwnedCounts(state.mirroredState.me),
+    skillXp: state.mirroredState.me?.exp,
+    xpTable: state.XP_TABLE,
+    ready: goalPlanningReady(),
+  });
+}
+
+function refreshGoalPlanning() {
+  if (!state.goalsLoaded) return;
+  const planning = calculateGoalPlanning();
+  state.goalPlans = planning.plans;
+  if (JSON.stringify(planning.goals) === JSON.stringify(state.goals)) return;
+
+  const previous = new Map(state.goals.map((goal) => [goal.id, goal]));
+  state.goals = planning.goals;
+  for (const goal of state.goals) {
+    if (previous.get(goal.id)?.targetCount !== goal.targetCount) {
+      state.goalNotifiedAt[goal.id] = null;
+    }
+  }
+  chrome.storage.local.set({ goals: state.goals });
 }
 
 function resetTestState() {
@@ -463,6 +581,7 @@ function resetTestState() {
   state.lastWorkActivity = null;
   state.goals = [];
   state.goalsLoaded = true;
+  state.goalPlans = [];
   state.goalNotifiedAt = {};
   state.runoutNotifiedFor = null;
   state.skillNotifyTarget = null;
@@ -482,6 +601,7 @@ export const __test = {
   computeSkillLevelEtas,
   mergeMissingActivityDefs,
   normalizeGoals,
+  planGoals,
   resetTestState,
   runoutInfo,
   setTestState,
