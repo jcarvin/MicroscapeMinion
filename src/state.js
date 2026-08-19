@@ -45,4 +45,7 @@ export const state = {
   goalNotifiedAt: {},     // goalId -> timestamp
   runoutNotifiedFor: null,
   skillNotifyTarget: null,
+
+  consumableNotifyItems: new Set(),  // itemIds the user wants alerted on depletion
+  consumableNotifiedFor: new Set(),  // itemIds already notified this depletion cycle
 };

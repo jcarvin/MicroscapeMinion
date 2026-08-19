@@ -839,4 +839,108 @@ describe('background activity definitions', () => {
 
     expect(__test.buildStatus().combatConsumables).toBeNull();
   });
+
+  it('does not track inventory drops on the combat-to-banking transition as consumables', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    __test.resetTestState();
+    const combatAct = { combatSkill: 'attack', activity: 'fight-rat', mob: 'rat' };
+    __test.setTestState({
+      activityDefs: {
+        'fight-rat': {
+          durationMs: 12000,
+          inventoryChanges: {},
+          dropItems: {},
+        },
+      },
+      state: {
+        me: {
+          activity: combatAct,
+          inventory: { armor: 1 },
+          lootBag: {},
+        },
+      },
+    });
+
+    // Transition to banking — armor is deposited (inventory drops). This should
+    // NOT be recorded as consumable use because the drop is a bank deposit.
+    vi.setSystemTime(1_000);
+    sendServerUpdate({
+      me: {
+        activity: [combatAct, { type: 'banking' }],
+        inventory: { armor: [1, 0] },
+      },
+    });
+
+    expect(__test.buildStatus().combatConsumables).toBeNull();
+  });
+
+  it('fires a runout notification when a watched consumable hits 0', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'fight-rat': {
+          durationMs: 12000,
+          inventoryChanges: {},
+          dropItems: { ratTail: 1 },
+        },
+      },
+      state: {
+        me: {
+          activity: { combatSkill: 'attack', activity: 'fight-rat', mob: 'rat' },
+          inventory: { potion: 2 },
+          lootBag: {},
+        },
+      },
+    });
+    sendRuntimeMessage({ type: 'SET_CONSUMABLE_NOTIFY', itemId: 'potion' });
+
+    const spy = vi.spyOn(chrome.notifications, 'create');
+    vi.setSystemTime(1_000);
+    sendServerUpdate({ me: { inventory: { potion: [2, 0] } } });
+
+    expect(spy).toHaveBeenCalledOnce();
+    expect(spy.mock.calls[0][1]).toMatchObject({
+      title: 'Microscape: Out of supplies!',
+      message: 'Potion ran out.',
+    });
+
+    // Should not fire again on subsequent ticks at 0
+    spy.mockClear();
+    vi.setSystemTime(3_000);
+    sendServerUpdate({ me: { inventory: { potion: [0] } } });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('hides combat consumables that are depleted (currentCount === 0)', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'fight-rat': {
+          durationMs: 12000,
+          inventoryChanges: {},
+          dropItems: { ratTail: 1 },
+        },
+      },
+      state: {
+        me: {
+          activity: { combatSkill: 'attack', activity: 'fight-rat', mob: 'rat' },
+          inventory: { potion: 2 },
+          lootBag: {},
+        },
+      },
+    });
+
+    vi.setSystemTime(1_000);
+    sendServerUpdate({ me: { inventory: { potion: [2, 1] } } });
+    vi.setSystemTime(301_000);
+    sendServerUpdate({ me: { inventory: { potion: [1, 0] } } });
+
+    // Item is at 0 — should not appear even though samples exist
+    expect(__test.buildStatus().combatConsumables).toBeNull();
+  });
 });

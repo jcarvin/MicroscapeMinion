@@ -140,6 +140,10 @@ export function trackCombatConsumables(prevAct, newAct, prevMe, newMe) {
   const act = isCombatActivity(newAct) ? newAct : isCombatActivity(prevAct) ? prevAct : null;
   if (!act) return;
 
+  // Skip the combat→banking/travel transition: inventory drops here are deposits,
+  // not consumable use, and would falsely tag equipment or loot as consumables.
+  if (newAct?.type === 'banking' || newAct?.type === 'travel') return;
+
   const actId = getActivityId(act);
   if (!isWorkActivityId(actId)) return;
 
@@ -264,6 +268,8 @@ export function computeCombatConsumableStatus(act) {
     if (tracker.samples.length === 0) continue;
 
     const currentCount = inv[itemId] ?? 0;
+    if (currentCount === 0) continue; // Depleted — nothing to show an ETA for
+
     const rate = rateFromSamples(tracker.samples); // negative for consumption
     const consumptionRate = rate !== null && rate < 0 ? -rate : null;
     const etaMs = consumptionRate && currentCount > 0

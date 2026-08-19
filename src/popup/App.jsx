@@ -52,7 +52,10 @@ export default function App() {
         selectedSkillEta={selectedSkillEta}
         xpPerCycle={status?.skillLevelStatus?.xpPerCycle ?? 0}
       />
-      <CombatConsumableSection combatConsumables={status?.combatConsumables ?? []} />
+      <CombatConsumableSection
+        combatConsumables={status?.combatConsumables ?? []}
+        consumableNotifyItems={status?.consumableNotifyItems ?? []}
+      />
       <SkillSection
         skillLevelStatus={status?.skillLevelStatus ?? null}
         skillNotifyTarget={status?.skillNotifyTarget ?? null}
