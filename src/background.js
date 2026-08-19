@@ -47,7 +47,7 @@ import { fireNotification, sendChime } from './notify.js';
 // ── Startup ───────────────────────────────────────────────────────────────────
 
 chrome.storage.local.get(
-  ['activityDefs', 'zoneData', 'xpTable', 'skillNotifyTarget', ETA_CALIBRATION_CACHE_KEY],
+  ['activityDefs', 'zoneData', 'xpTable', 'skillNotifyTarget', ETA_CALIBRATION_CACHE_KEY, 'consumableNotifyItems'],
   (res) => {
     fetch(chrome.runtime.getURL('src/activity-defs.json'))
       .then((r) => r.json())
@@ -64,6 +64,9 @@ chrome.storage.local.get(
     if (res.zoneData) state.ZONE_DATA = res.zoneData;
     if (isValidXpTable(res.xpTable)) state.XP_TABLE = res.xpTable;
     if (res.skillNotifyTarget) state.skillNotifyTarget = res.skillNotifyTarget;
+    if (Array.isArray(res.consumableNotifyItems)) {
+      state.consumableNotifyItems = new Set(res.consumableNotifyItems);
+    }
     hydrateEtaCalibrationCache(res[ETA_CALIBRATION_CACHE_KEY]);
   }
 );
@@ -187,6 +190,19 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       chrome.storage.local.remove('skillNotifyTarget');
       respond({ ok: true });
       break;
+
+    case 'SET_CONSUMABLE_NOTIFY':
+      state.consumableNotifyItems.add(msg.itemId);
+      chrome.storage.local.set({ consumableNotifyItems: [...state.consumableNotifyItems] });
+      respond({ ok: true });
+      break;
+
+    case 'CLEAR_CONSUMABLE_NOTIFY':
+      state.consumableNotifyItems.delete(msg.itemId);
+      state.consumableNotifiedFor.delete(msg.itemId);
+      chrome.storage.local.set({ consumableNotifyItems: [...state.consumableNotifyItems] });
+      respond({ ok: true });
+      break;
   }
 
   return true;
@@ -241,6 +257,7 @@ function handleServerFrame(frame) {
   detectGoalReached();
   detectMaterialRunout();
   detectSkillLevelReached();
+  detectCombatConsumableRunout(prevMe, state.mirroredState.me);
 }
 
 function handleClientFrame(frame) {
@@ -259,6 +276,26 @@ function handleClientFrame(frame) {
 }
 
 // ── Detectors ─────────────────────────────────────────────────────────────────
+
+function detectCombatConsumableRunout(prevMe, newMe) {
+  if (state.consumableNotifyItems.size === 0) return;
+  const prevInv = prevMe?.inventory ?? {};
+  const newInv = newMe?.inventory ?? {};
+  for (const itemId of state.consumableNotifyItems) {
+    const curr = newInv[itemId] ?? 0;
+    if (curr > 0) {
+      state.consumableNotifiedFor.delete(itemId);
+      continue;
+    }
+    const prev = prevInv[itemId] ?? 0;
+    if (prev > 0 && !state.consumableNotifiedFor.has(itemId)) {
+      state.consumableNotifiedFor.add(itemId);
+      const label = itemId.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+      fireNotification('consumable-runout', 'Microscape: Out of supplies!', `${label} ran out.`);
+      sendChime('runout');
+    }
+  }
+}
 
 function detectIdleTransition() {
   const me = state.mirroredState.me;
@@ -416,6 +453,8 @@ function resetTestState() {
   state.xpRateSamples = {};
   state.dropRateSamples = {};
   state.combatConsumableSamples = {};
+  state.consumableNotifyItems = new Set();
+  state.consumableNotifiedFor = new Set();
   state.activeRateClocks = {};
   state.lastRateClockAt = null;
   state.goalRateSamples = {};

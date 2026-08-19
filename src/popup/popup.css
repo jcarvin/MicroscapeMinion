@@ -431,10 +431,14 @@ button:hover { filter: brightness(1.1); }
   padding: 2px 0;
 }
 
-.consumable-row + .consumable-row {
+.consumable-item + .consumable-item {
   border-top: 1px solid var(--border);
   margin-top: 4px;
   padding-top: 6px;
+}
+
+.consumable-notify-row {
+  margin-top: 4px;
 }
 
 .consumable-name {
