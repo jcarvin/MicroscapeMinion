@@ -171,45 +171,52 @@ export function trackCombatConsumables(prevAct, newAct, prevMe, newMe) {
 }
 
 export function trackGoalAccumulation(prevAct, newAct, prevMe, newMe) {
-  if (!state.goal) return;
+  if (state.goals.length === 0) return;
 
-  const newCount = getGoalCountForMe(newMe, state.goal);
-  if (newCount === null) return;
-
-  // Update high-water mark regardless of activity phase (captures gains during
-  // any phase including travel and banking).
-  if (state.goalHighWaterMark === null || newCount > state.goalHighWaterMark) {
-    state.goalHighWaterMark = newCount;
-  }
-
-  // Rate samples are only pushed during active work ticks.
   const act = isWorkActivityId(getActivityId(newAct)) ? newAct : prevAct;
   const actId = getActivityId(act);
-  if (!isWorkActivityId(actId)) return;
+  const isWork = isWorkActivityId(actId);
+  const now = Date.now();
 
-  const prevCount = getGoalCountForMe(prevMe, state.goal);
-  if (prevCount === null) return;
+  for (const goal of state.goals) {
+    const newCount = getGoalCountForMe(newMe, goal);
+    if (newCount === null) continue;
 
-  if (newCount < prevCount) {
-    state.goalRateSamples[actId] = [];
-    return;
+    // Update high-water mark regardless of activity phase (captures gains during
+    // any phase including travel and banking).
+    const hwm = state.goalHighWaterMark[goal.id] ?? null;
+    if (hwm === null || newCount > hwm) {
+      state.goalHighWaterMark[goal.id] = newCount;
+    }
+
+    if (!isWork) continue;
+
+    const prevCount = getGoalCountForMe(prevMe, goal);
+    if (prevCount === null) continue;
+
+    const rateKey = `${actId}:${goal.id}`;
+
+    if (newCount < prevCount) {
+      state.goalRateSamples[rateKey] = [];
+      continue;
+    }
+    if (newCount === prevCount) continue;
+
+    const samples = state.goalRateSamples[rateKey] ?? [];
+
+    // If the new value is below the last pushed sample the loot bag was drained by
+    // a banking trip that straddled non-work ticks (banking→travel transition), so
+    // the `newCount < prevCount` branch above was never reached. Clear and restart
+    // rather than anchoring the rate to a stale high-water mark.
+    const lastSample = samples[samples.length - 1];
+    if (lastSample && newCount < lastSample.value) {
+      state.goalRateSamples[rateKey] = [];
+      continue;
+    }
+
+    pushRateSample(samples, newCount, now, activeWorkMsForActivity(actId));
+    state.goalRateSamples[rateKey] = samples;
   }
-  if (newCount === prevCount) return;
-
-  const samples = state.goalRateSamples[actId] ?? [];
-
-  // If the new value is below the last pushed sample the loot bag was drained by
-  // a banking trip that straddled non-work ticks (banking→travel transition), so
-  // the `newCount < prevCount` branch above was never reached. Clear and restart
-  // rather than anchoring the rate to a stale high-water mark.
-  const lastSample = samples[samples.length - 1];
-  if (lastSample && newCount < lastSample.value) {
-    state.goalRateSamples[actId] = [];
-    return;
-  }
-
-  pushRateSample(samples, newCount, Date.now(), activeWorkMsForActivity(actId));
-  state.goalRateSamples[actId] = samples;
 }
 
 export function trackRunoutConsumption(prevAct, newAct, prevMe, newMe) {

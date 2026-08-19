@@ -6,9 +6,8 @@ import {
   getActivityZone,
   getEtaActivity,
   compactActivity,
-  isWorkActivityId,
 } from './activity-utils.js';
-import { findKey } from './inventory.js';
+import { findKey, getGoalCount, getGoalCountForMe } from './inventory.js';
 import {
   xpRateKey,
   rateFromSamples,
@@ -77,15 +76,16 @@ function pushEtaDebugEntry({ preSnap, postSnap, prevAct, newAct, prevMe, newMe, 
     ? bankOverheadForGeneratedItems(itemsGenerated, zoneId, actId)
     : null;
 
-  const goalCount = state.goal ? (getGoalCount(state.goal.itemName, state.goal.itemId) ?? 0) : null;
-  const prevGoalCount = state.goal ? getGoalCountForMe(prevMe, state.goal) : null;
-  const newGoalCount = state.goal ? getGoalCountForMe(newMe, state.goal) : null;
-  const effectiveGoalCount = state.goal ? (state.goalHighWaterMark ?? goalCount ?? 0) : null;
-  const goalEta = state.goal && actId
-    ? computeGoalEta(state.goal, effectiveGoalCount ?? 0, actId, etaAct, etaAct === liveAct)
+  const goal = state.goals[0] ?? null;
+  const goalCount = goal ? (getGoalCount(goal.itemName, goal.itemId) ?? 0) : null;
+  const prevGoalCount = goal ? getGoalCountForMe(prevMe, goal) : null;
+  const newGoalCount = goal ? getGoalCountForMe(newMe, goal) : null;
+  const effectiveGoalCount = goal ? (state.goalHighWaterMark[goal.id] ?? goalCount ?? 0) : null;
+  const goalEta = goal && actId
+    ? computeGoalEta(goal, effectiveGoalCount ?? 0, actId, etaAct, etaAct === liveAct, goal.id)
     : null;
-  const goalSampleInfo = state.goal && actId && def
-    ? goalRateDebugInfo(state.goal, def, actId)
+  const goalSampleInfo = goal && actId && def
+    ? goalRateDebugInfo(goal, def, actId)
     : null;
 
   const runoutKey = info && actId ? `${actId}:${info.itemId}` : null;
@@ -170,14 +170,14 @@ function pushEtaDebugEntry({ preSnap, postSnap, prevAct, newAct, prevMe, newMe, 
       bankTrips: postSnap.bankTrips,
       bankOverheadMs: postSnap.bankOverheadMs,
     } : null,
-    goal: state.goal ? {
-      itemName: state.goal.itemName,
-      itemId: state.goal.itemId,
-      targetCount: state.goal.targetCount,
+    goal: goal ? {
+      itemName: goal.itemName,
+      itemId: goal.itemId,
+      targetCount: goal.targetCount,
       currentCount: goalCount,
       prevCount: prevGoalCount,
       newCount: newGoalCount,
-      remaining: Math.max(0, state.goal.targetCount - (effectiveGoalCount ?? goalCount ?? 0)),
+      remaining: Math.max(0, goal.targetCount - (effectiveGoalCount ?? goalCount ?? 0)),
       etaMs: goalEta === 0 ? 0 : (goalEta?.totalMs ?? null),
       preEtaMs: preSnap?.goalEtaMs ?? null,
       deltaMs:
@@ -241,7 +241,7 @@ function goalRateDebugInfo(g, def, actId) {
     key: goalKey,
     yieldPerCycle: goalKey ? (def.inventoryChanges[goalKey] ?? 0) : null,
     producedPerCycle: producedItemsPerCycle(def),
-    ...rateSampleDebug(state.goalRateSamples[actId] ?? []),
+    ...rateSampleDebug(state.goalRateSamples[`${actId}:${g.id}`] ?? []),
   };
 }
 
@@ -253,60 +253,8 @@ export function goalEtaModel(eta) {
   return 'cycle-fallback';
 }
 
-// ── Local helpers (avoid importing from inventory to keep deps clean) ─────────
-
 function observedXpPerMs(actId, skill) {
   const samples = state.xpRateSamples[xpRateKey(actId, skill)]?.samples ?? [];
   const rate = rateFromSamples(samples);
   return rate !== null && rate > 0 ? rate : null;
-}
-
-function getGoalCount(itemName, itemId) {
-  const me = state.mirroredState.me;
-  const inv = me?.inventory ?? {};
-  const lb = me?.lootBag ?? {};
-  const norm = (s) => s?.toLowerCase().replace(/[\s_-]/g, '') ?? '';
-  const findIn = (obj, name, id) => {
-    if (id && id in obj) return obj[id];
-    if (name) {
-      const n = norm(name);
-      const key = Object.keys(obj).find((k) => norm(k) === n);
-      if (key) return obj[key];
-    }
-    return null;
-  };
-  const invCount = findIn(inv, itemName, itemId);
-  const lbCount = findIn(lb, itemName, itemId);
-  if (invCount === null && lbCount === null) return null;
-  return Math.max(invCount ?? 0, lbCount ?? 0);
-}
-
-function getGoalCountForMe(me, g) {
-  if (!me || !g) return null;
-  const inv = me.inventory ?? {};
-  const lb = me.lootBag ?? {};
-  const norm = (str) => str?.toLowerCase().replace(/[\s_-]/g, '') ?? '';
-
-  let hasInvCount = false;
-  let invCount = 0;
-  if (g.itemId && g.itemId in inv) {
-    hasInvCount = true; invCount = inv[g.itemId] ?? 0;
-  } else if (g.itemName) {
-    const n = norm(g.itemName);
-    const key = Object.keys(inv).find((k) => norm(k) === n);
-    if (key) { hasInvCount = true; invCount = inv[key] ?? 0; }
-  }
-
-  let hasLootCount = false;
-  let lbCount = 0;
-  if (g.itemId && g.itemId in lb) {
-    hasLootCount = true; lbCount = lb[g.itemId] ?? 0;
-  } else if (g.itemName) {
-    const n = norm(g.itemName);
-    const key = Object.keys(lb).find((k) => norm(k) === n);
-    if (key) { hasLootCount = true; lbCount = lb[key] ?? 0; }
-  }
-
-  if (!hasInvCount && !hasLootCount) return 0;
-  return Math.max(invCount, lbCount);
 }

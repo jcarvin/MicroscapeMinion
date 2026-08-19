@@ -101,6 +101,13 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.9
+
+- Track multiple persistent item goals with per-goal progress, ETA calibration, and completion notifications.
+- Search the full known item catalog, with outputs from the current activity listed first and ETA shown only for related goals.
+- Add, remove, edit, and drag to reorder goal rows, with a subtle highlight on goals related to the current activity.
+- Persist goals and their order across browser and extension restarts while preserving existing single-goal data during migration.
+
 ### v0.1.8
 
 - Refactor `background.js` into 14 focused ES modules (constants, state, patch, activity utilities, inventory, runout, calibration, rate tracking, ETA calculation, notifications, debug log, and status).

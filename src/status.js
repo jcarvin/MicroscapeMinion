@@ -7,7 +7,7 @@ import {
   getEtaActivity,
   isCombatActivity,
 } from './activity-utils.js';
-import { getMaterialCount, getGoalCount } from './inventory.js';
+import { getMaterialCount, getGoalCount, findKey } from './inventory.js';
 import { runoutInfo } from './runout.js';
 import { TICK_MS } from './constants.js';
 import {
@@ -44,26 +44,33 @@ export function buildStatus() {
           ? `${liveActSkill} — ${liveActId}`
           : (liveActId ?? liveActSkill ?? null);
 
-  let goalStatus = null;
-  if (state.goal) {
-    const count = getGoalCount(state.goal.itemName, state.goal.itemId) ?? 0;
-    const effectiveCount = state.goalHighWaterMark ?? count;
-    const eta = etaActId
-      ? computeGoalEta(state.goal, effectiveCount, etaActId, etaAct, etaActIsLive)
+  const activityDef = etaActId ? state.ACTIVITY_DEFS[etaActId] : null;
+  const goalStatuses = state.goals.map((goal) => {
+    const count = getGoalCount(goal.itemName, goal.itemId) ?? 0;
+    const effectiveCount = state.goalHighWaterMark[goal.id] ?? count;
+    const inventoryKey = findKey(activityDef?.inventoryChanges, goal.itemName, goal.itemId);
+    const dropKey = findKey(activityDef?.dropItems, goal.itemName, goal.itemId);
+    const relatedToActivity =
+      (inventoryKey && activityDef.inventoryChanges[inventoryKey] > 0) || Boolean(dropKey);
+    const eta = etaActId && relatedToActivity
+      ? computeGoalEta(goal, effectiveCount, etaActId, etaAct, etaActIsLive, goal.id)
       : null;
     const isChanceBased = eta?.chanceBased === true;
     const isRateBased = eta?.rateBased === true;
-    const goalSamples = etaActId ? (state.goalRateSamples[etaActId] ?? []) : [];
-    goalStatus = {
-      goal: state.goal,
+    const goalSamples = etaActId
+      ? (state.goalRateSamples[`${etaActId}:${goal.id}`] ?? [])
+      : [];
+    return {
+      goal,
       count,
       eta,
+      relatedToActivity,
       chanceBased: isChanceBased,
       warmupRemainingMs: !isChanceBased && !isRateBased && eta && eta !== 0
         ? warmupRemainingMs(goalSamples, now)
         : 0,
     };
-  }
+  });
 
   let runoutStatus = null;
   if (etaActId) {
@@ -138,31 +145,48 @@ export function buildStatus() {
   const combatConsumables =
     etaAct && isCombatActivity(etaAct) ? computeCombatConsumableStatus(etaAct) : null;
 
-  // Items the current activity produces — drives the goal dropdown
-  const producibleItems = [];
-  if (etaActId && state.ACTIVITY_DEFS[etaActId]) {
-    for (const [id, change] of Object.entries(
-      state.ACTIVITY_DEFS[etaActId].inventoryChanges ?? {}
-    )) {
-      if (change > 0) producibleItems.push({ id, count: getMaterialCount(id) });
-    }
-    for (const id of Object.keys(state.ACTIVITY_DEFS[etaActId].dropItems ?? {})) {
-      if (!producibleItems.some((item) => item.id === id)) {
-        producibleItems.push({ id, count: getMaterialCount(id), chanceBased: true });
-      }
-    }
+  const relatedItemIds = new Set();
+  for (const [id, change] of Object.entries(activityDef?.inventoryChanges ?? {})) {
+    if (change > 0) relatedItemIds.add(id);
   }
+  for (const id of Object.keys(activityDef?.dropItems ?? {})) relatedItemIds.add(id);
+
+  // Definitions provide the known game catalog; live state and saved goals cover
+  // newly introduced or otherwise unknown items until their definitions arrive.
+  const itemNames = new Map();
+  for (const def of Object.values(state.ACTIVITY_DEFS)) {
+    for (const id of Object.keys(def.inventoryChanges ?? {})) itemNames.set(id, id);
+    for (const id of Object.keys(def.dropItems ?? {})) itemNames.set(id, id);
+  }
+  for (const id of Object.keys(me?.inventory ?? {})) itemNames.set(id, id);
+  for (const id of Object.keys(me?.lootBag ?? {})) itemNames.set(id, id);
+  for (const goal of state.goals) {
+    itemNames.set(goal.itemId ?? goal.itemName, goal.itemName);
+  }
+
+  const goalItems = [...itemNames].map(([id, name]) => ({
+    id,
+    name,
+    count: goalStatuses.find(({ goal }) => (goal.itemId ?? goal.itemName) === id)?.count
+      ?? getMaterialCount(id),
+    relatedToActivity: relatedItemIds.has(id),
+  }));
+  goalItems.sort((a, b) =>
+    Number(b.relatedToActivity) - Number(a.relatedToActivity)
+      || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+  );
 
   return {
     connected: state.microscopeTabId !== null,
     activity: actDisplay,
     idle: liveAct === null && state.prevActivityId !== undefined,
     tickMs: state.observedTickMs,
-    goalStatus,
+    goalsLoaded: state.goalsLoaded,
+    goalStatuses,
     runoutStatus,
     skillLevelStatus,
     combatConsumables,
-    producibleItems,
+    goalItems,
     skillNotifyTarget: state.skillNotifyTarget,
     rawMe: me ?? null,
     tickLog: state.tickLog,

@@ -5,8 +5,7 @@ import SkillSection from '../../src/popup/components/SkillSection';
 import { setSkillNotify, clearSkillNotify } from '../../src/popup/utils/messages';
 
 vi.mock('../../src/popup/utils/messages', () => ({
-  setGoal:          vi.fn().mockResolvedValue(null),
-  clearGoal:        vi.fn().mockResolvedValue(null),
+  setGoals:         vi.fn().mockResolvedValue(null),
   getStatus:        vi.fn().mockResolvedValue(null),
   setSkillNotify:   vi.fn().mockResolvedValue(null),
   clearSkillNotify: vi.fn().mockResolvedValue(null),

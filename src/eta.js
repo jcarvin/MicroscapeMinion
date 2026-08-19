@@ -176,7 +176,8 @@ export function computeGoalEta(
   currentCount,
   actId,
   actForEta = state.mirroredState.me?.activity ?? null,
-  actIsLive = true
+  actIsLive = true,
+  goalId = null
 ) {
   const remaining = g.targetCount - currentCount;
   if (remaining <= 0) return 0;
@@ -209,7 +210,8 @@ export function computeGoalEta(
 
   // Rate-based: use observed accumulation rate if warmed up.
   // Banking, skill effects, and other overhead are naturally absorbed.
-  const goalSamples = state.goalRateSamples[actId] ?? [];
+  const rateKey = goalId ? `${actId}:${goalId}` : actId;
+  const goalSamples = state.goalRateSamples[rateKey] ?? [];
   const observedRate = rateFromSamples(goalSamples);
   if (observedRate !== null && observedRate > 0) {
     const perCycle = producedItemsPerCycle(def);
@@ -393,14 +395,16 @@ export function snapshotEta() {
               bankOverheadMs
           )
       : null;
+  const firstGoal = state.goals[0] ?? null;
   const goalEta =
-    state.goal && actId
+    firstGoal && actId
       ? computeGoalEta(
-          state.goal,
-          state.goalHighWaterMark ?? getGoalCount(state.goal.itemName, state.goal.itemId) ?? 0,
+          firstGoal,
+          state.goalHighWaterMark[firstGoal.id] ?? getGoalCount(firstGoal.itemName, firstGoal.itemId) ?? 0,
           actId,
           etaAct,
-          etaActIsLive
+          etaActIsLive,
+          firstGoal.id
         )
       : null;
   return {

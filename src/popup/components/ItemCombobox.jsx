@@ -29,7 +29,13 @@ export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, i
 
   function handleKeyDown(e) {
     if (e.key === 'Escape') { setIsOpen(false); e.target.blur(); }
-    else if (e.key === 'Enter') { setIsOpen(false); onConfirm?.(); }
+    else if (e.key === 'Enter') {
+      const exact = filtered.find((item) => itemName(item).toLowerCase() === filter.trim().toLowerCase());
+      const match = exact ?? (filtered.length === 1 ? filtered[0] : null);
+      if (match) onSelect(match.id);
+      else onConfirm?.();
+      setIsOpen(false);
+    }
   }
 
   function handleOptionMouseDown(e, itemId) {
@@ -38,15 +44,18 @@ export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, i
     setIsOpen(false);
   }
 
-  const displayValue = isOpen ? filter : (selectedId ? formatItemId(selectedId) : '');
+  const selectedItem = items.find(({ id }) => id === selectedId);
+  const displayValue = isOpen
+    ? filter
+    : (selectedItem ? itemName(selectedItem) : (selectedId ? formatItemId(selectedId) : ''));
 
   const q = filter.toLowerCase().replace(/\s+/g, '');
   const filtered = q
-    ? items.filter(({ id }) => formatItemId(id).toLowerCase().replace(/\s+/g, '').includes(q))
+    ? items.filter((item) => itemName(item).toLowerCase().replace(/\s+/g, '').includes(q))
     : items;
 
   return (
-    <div className="combobox" id="item-combobox" ref={wrapRef}>
+    <div className="combobox" ref={wrapRef}>
       <input
         ref={inputRef}
         type="text"
@@ -63,7 +72,7 @@ export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, i
         <ul className="combo-options">
           {filtered.length === 0 ? (
             <li className="combo-empty">
-              {items.length === 0 ? 'No active activity' : 'No match'}
+              {items.length === 0 ? 'No items available' : 'No match'}
             </li>
           ) : (
             filtered.map(item => (
@@ -72,7 +81,7 @@ export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, i
                 className={`combo-option${item.id === selectedId ? ' is-selected' : ''}`}
                 onMouseDown={e => handleOptionMouseDown(e, item.id)}
               >
-                <span className="combo-name">{formatItemId(item.id)}</span>
+                <span className="combo-name">{itemName(item)}</span>
                 <span className="combo-count">{item.count}</span>
               </li>
             ))
@@ -81,4 +90,8 @@ export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, i
       )}
     </div>
   );
+}
+
+function itemName(item) {
+  return item.name && item.name !== item.id ? item.name : formatItemId(item.id);
 }
