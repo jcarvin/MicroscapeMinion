@@ -24,6 +24,7 @@ function createRow(goal = null) {
     sourceMode: ['any', 'craft', 'drops'].includes(goal?.sourceMode)
       ? goal.sourceMode
       : null,
+    completed: goal?.completed === true,
   };
 }
 
@@ -86,6 +87,7 @@ function completeGoals(rows, items, persistedGoals = []) {
       targetCount,
       ...(maxCraftable ? { maxCraftable: true } : {}),
       ...(maxCraftable || hasAmbiguousSource(item) ? { sourceMode } : {}),
+      ...(row.completed ? { completed: true } : {}),
     }];
   });
 }
@@ -160,8 +162,9 @@ export default function GoalSection({ goalItems, goalStatuses }) {
   }
 
   function handleSelect(rowId, itemId) {
-    const item = goalItems.find(({ id }) => id === itemId);
     const previousRow = rows.find((row) => row.id === rowId);
+    if (previousRow?.completed) return;
+    const item = goalItems.find(({ id }) => id === itemId);
     if (previousRow?.maxCraftable && !item?.craftable && Number(previousRow.targetValue) === 0) {
       persistedGoalsRef.current = persistedGoalsRef.current.filter((goal) => goal.id !== rowId);
     }
@@ -190,7 +193,7 @@ export default function GoalSection({ goalItems, goalStatuses }) {
 
   function handleMaxToggle(rowId) {
     const row = rows.find((candidate) => candidate.id === rowId);
-    if (!row) return;
+    if (!row || row.completed) return;
     const enabling = !row.maxCraftable;
     if (!enabling && Number(row.targetValue) === 0) {
       persistedGoalsRef.current = persistedGoalsRef.current.filter((goal) => goal.id !== rowId);
@@ -227,9 +230,11 @@ export default function GoalSection({ goalItems, goalStatuses }) {
   }
 
   function handleTargetChange(rowId, targetValue) {
-    updateRows((current) => current.map((row) => row.id === rowId
-      ? { ...row, targetValue }
-      : row));
+    const row = rows.find((candidate) => candidate.id === rowId);
+    if (row?.completed) return;
+    updateRows((current) => current.map((r) => r.id === rowId
+      ? { ...r, targetValue }
+      : r));
   }
 
   function persistCurrentRows() {
@@ -335,7 +340,7 @@ export default function GoalSection({ goalItems, goalStatuses }) {
 
           return (
             <div
-              className={`goal-row${isCurrentActivityGoal ? ' is-current-activity' : ''}${isInfeasible ? ' is-infeasible' : ''}${draggedId === row.id ? ' is-dragging' : ''}${dropPosition}`}
+              className={`goal-row${row.completed ? ' is-completed' : ''}${isCurrentActivityGoal ? ' is-current-activity' : ''}${isInfeasible ? ' is-infeasible' : ''}${draggedId === row.id ? ' is-dragging' : ''}${dropPosition}`}
               data-goal-id={row.id}
               key={row.id}
               onDragEnter={() => {
@@ -393,7 +398,7 @@ export default function GoalSection({ goalItems, goalStatuses }) {
                     min={row.maxCraftable ? '0' : '1'}
                     step="1"
                     value={row.targetValue}
-                    readOnly={row.maxCraftable}
+                    readOnly={row.maxCraftable || row.completed}
                     onChange={(event) => handleTargetChange(row.id, event.target.value)}
                     onBlur={persistCurrentRows}
                     onKeyDown={(event) => {

@@ -344,18 +344,27 @@ function detectIdleTransition() {
 }
 
 function detectGoalReached() {
+  const newlyCompleted = [];
   for (const goal of state.goals) {
     if (goal.maxCraftable && goal.targetCount === 0) continue;
     const count = getGoalCount(goal.itemName, goal.itemId);
     if (count === null || count < goal.targetCount) continue;
     if (state.goalNotifiedAt[goal.id]) continue;
     state.goalNotifiedAt[goal.id] = Date.now();
+    newlyCompleted.push(goal.id);
     fireNotification(
       'goal',
       'Microscape: Goal reached!',
       `${goal.itemName}: ${count} / ${goal.targetCount}`
     );
     sendChime('default');
+  }
+  if (newlyCompleted.length > 0) {
+    const completedSet = new Set(newlyCompleted);
+    state.goals = state.goals.map((g) =>
+      completedSet.has(g.id) ? { ...g, completed: true } : g
+    );
+    chrome.storage.local.set({ goals: state.goals });
   }
 }
 
@@ -510,6 +519,7 @@ function normalizeGoals(goals) {
       targetCount,
       ...(maxCraftable ? { maxCraftable: true } : {}),
       ...(sourceMode ? { sourceMode } : {}),
+      ...(goal.completed === true ? { completed: true } : {}),
     }];
   });
 }
@@ -541,6 +551,7 @@ function refreshGoalPlanning() {
   const previous = new Map(state.goals.map((goal) => [goal.id, goal]));
   state.goals = planning.goals;
   for (const goal of state.goals) {
+    if (goal.completed) continue;
     if (previous.get(goal.id)?.targetCount !== goal.targetCount) {
       state.goalNotifiedAt[goal.id] = null;
     }

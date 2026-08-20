@@ -124,6 +124,17 @@ body {
   box-shadow: 0 0 0 4px rgba(248, 113, 113, .08), 0 0 10px rgba(248, 113, 113, .12);
 }
 
+.goal-row.is-completed {
+  opacity: .45;
+}
+
+.goal-row.is-completed .goal-drag-btn,
+.goal-row.is-completed .combobox,
+.goal-row.is-completed .goal-target-control,
+.goal-row.is-completed .goal-source-selector {
+  pointer-events: none;
+}
+
 .goal-row.is-dragging {
   opacity: .35;
   transform: scale(.985);
