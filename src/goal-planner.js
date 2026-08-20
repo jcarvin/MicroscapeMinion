@@ -328,6 +328,12 @@ export function planGoals({
       materialFeasible: true,
     };
 
+    if (goal.completed) {
+      plannedGoals.push(goal);
+      plans.push({ ...basePlan, feasible: false, pending: false, completed: true });
+      continue;
+    }
+
     if (!itemId) {
       plannedGoals.push(goal);
       plans.push({ ...basePlan, feasible: false });

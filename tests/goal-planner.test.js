@@ -363,6 +363,73 @@ describe('goal planner', () => {
     expect(result.ledger.fangCharm).toBe(2);
   });
 
+  it('completed goal does not replenish ledger for a downstream max goal', () => {
+    // Regression: goal 1 (smith 500 bars) is done; each armor forged drains bars below 500.
+    // Without the fix, the planner re-smelts bars to 500 on every tick, making goal 2's
+    // max target grow by 1 per armor forged (10 forged → target 110, never reachable).
+    const result = planGoals({
+      goals: [
+        { ...goal('bars', 'ironBar', 500), completed: true },
+        goal('armor', 'ironArmor', 0, true),
+      ],
+      activityDefs: defs,
+      ownedCounts: { ironBar: 450, ironArmor: 10 },
+    });
+
+    expect(result.goals[0]).toMatchObject({ targetCount: 500, completed: true });
+    // 10 owned + floor(450/5)=90 craftable = 100 total, NOT 110 (which the old behaviour produced)
+    expect(result.goals[1].targetCount).toBe(100);
+    expect(result.plans[1].achievableTarget).toBe(100);
+    expect(result.plans[0].completed).toBe(true);
+  });
+
+  it('completed goal does not replenish its inputs for downstream goals', () => {
+    // Scenario: goal 1 was "smelt 50 bars" and was completed. Since then, 10 bars
+    // were consumed by goal 2's partial progress, leaving only 40 bars.
+    // Without the fix the planner re-simulates smelting 10 more bars (using iron ore)
+    // so downstream sees 50 bars instead of 40, inflating goal 2's max target.
+    const activityDefs = {
+      'smelt-iron': { inventoryChanges: { ironOre: -2, ironBar: 1 } },
+      'craft-sword': { inventoryChanges: { ironBar: -3, sword: 1 } },
+    };
+    const result = planGoals({
+      goals: [
+        { id: 'bars', itemId: 'ironBar', itemName: 'ironBar', targetCount: 50, completed: true },
+        goal('sword', 'sword', 0, true),
+      ],
+      activityDefs,
+      ownedCounts: { ironBar: 40, ironOre: 100 },
+    });
+
+    // WITH completed: sword sees 40 bars → floor(40/3) = 13
+    // WITHOUT completed: planner replenishes to 50 bars → floor(50/3) = 16
+    expect(result.goals[1].targetCount).toBe(Math.floor(40 / 3));
+  });
+
+  it('completed goal is a pass-through with feasible=false and completed=true on the plan', () => {
+    const result = planGoals({
+      goals: [{ ...goal('bars', 'ironBar', 500), completed: true }],
+      activityDefs: defs,
+      ownedCounts: { ironBar: 600 },
+    });
+
+    expect(result.goals[0]).toMatchObject({ targetCount: 500, completed: true });
+    expect(result.plans[0]).toMatchObject({ feasible: false, completed: true });
+    // Ledger must be untouched by the completed goal (still reflects ownedCounts seed)
+    expect(result.ledger.ironBar).toBe(600);
+  });
+
+  it('non-completed goal still behaves normally when completed flag is absent', () => {
+    const result = planGoals({
+      goals: [goal('armor', 'ironArmor', 0, true)],
+      activityDefs: defs,
+      ownedCounts: { ironBar: 500 },
+    });
+
+    expect(result.goals[0].targetCount).toBe(100);
+    expect(result.plans[0].completed).toBeUndefined();
+  });
+
   it('defaults craft-and-drop items to Any and only warns for an explicit Craft route', () => {
     const activityDefs = {
       'fletch-arrows': {
