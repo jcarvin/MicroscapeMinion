@@ -101,6 +101,11 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.12
+
+- Fix chained goals where a completed goal kept re-simulating production in the ledger, causing downstream Max targets to grow each cycle and become unreachable.
+- Completed goals are now frozen in the planner and rendered greyed-out in the UI; the × button dismisses them.
+
 ### v0.1.11
 
 - Add Max craftable targets with ordered material planning, batch and co-product support, and limiting-item warnings.
