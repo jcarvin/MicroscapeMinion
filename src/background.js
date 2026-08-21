@@ -48,7 +48,7 @@ import { buildOwnedCounts, planGoals } from './goal-planner.js';
 // ── Startup ───────────────────────────────────────────────────────────────────
 
 chrome.storage.local.get(
-  ['activityDefs', 'zoneData', 'xpTable', 'skillNotifyTarget', ETA_CALIBRATION_CACHE_KEY, 'consumableNotifyItems'],
+  ['activityDefs', 'zoneData', 'xpTable', 'skillNotifyTarget', ETA_CALIBRATION_CACHE_KEY, 'consumableNotifyItems', 'notificationsEnabled'],
   (res) => {
     fetch(chrome.runtime.getURL('src/activity-defs.json'))
       .then((r) => r.json())
@@ -82,6 +82,9 @@ chrome.storage.local.get(
     if (res.skillNotifyTarget) state.skillNotifyTarget = res.skillNotifyTarget;
     if (Array.isArray(res.consumableNotifyItems)) {
       state.consumableNotifyItems = new Set(res.consumableNotifyItems);
+    }
+    if (typeof res.notificationsEnabled === 'boolean') {
+      state.notificationsEnabled = res.notificationsEnabled;
     }
     hydrateEtaCalibrationCache(res[ETA_CALIBRATION_CACHE_KEY]);
   }
@@ -227,6 +230,12 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       state.consumableNotifyItems.delete(msg.itemId);
       state.consumableNotifiedFor.delete(msg.itemId);
       chrome.storage.local.set({ consumableNotifyItems: [...state.consumableNotifyItems] });
+      respond({ ok: true });
+      break;
+
+    case 'SET_NOTIFICATIONS_ENABLED':
+      state.notificationsEnabled = Boolean(msg.enabled);
+      chrome.storage.local.set({ notificationsEnabled: state.notificationsEnabled });
       respond({ ok: true });
       break;
   }
@@ -596,6 +605,7 @@ function resetTestState() {
   state.goalNotifiedAt = {};
   state.runoutNotifiedFor = null;
   state.skillNotifyTarget = null;
+  state.notificationsEnabled = true;
 }
 
 function setTestState({ activityDefs, zoneData, xpTable, state: gameState, lastWorkAct, tickMs } = {}) {

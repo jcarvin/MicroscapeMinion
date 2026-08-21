@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 
-export default function Header({ connected, idle, onToggleDebug }) {
+export default function Header({ connected, idle, notificationsEnabled, onToggleNotifications, onToggleDebug }) {
   let dotClass = 'dot';
   if (connected) dotClass += idle ? ' idle' : ' connected';
 
@@ -24,6 +24,15 @@ export default function Header({ connected, idle, onToggleDebug }) {
     <div className="header">
       <span className={dotClass} onClick={handleDotClick} style={{ cursor: 'pointer' }} />
       <span className="brand">Microscape Minion</span>
+      <button
+        className={`notif-toggle-btn${notificationsEnabled ? '' : ' notif-muted'}`}
+        onClick={onToggleNotifications}
+        title={notificationsEnabled ? 'Mute notifications' : 'Unmute notifications'}
+        aria-label={notificationsEnabled ? 'Mute notifications' : 'Unmute notifications'}
+        aria-pressed={!notificationsEnabled}
+      >
+        {notificationsEnabled ? '🔔' : '🔕'}
+      </button>
     </div>
   );
 }

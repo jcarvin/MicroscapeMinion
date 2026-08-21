@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.13
+
+- Add a master notifications toggle (🔔/🔕) in the extension header that mutes all browser notifications and chimes in one click, with the preference persisted across sessions.
+
 ### v0.1.12
 
 - Fix chained goals where a completed goal kept re-simulating production in the ledger, causing downstream Max targets to grow each cycle and become unreachable.

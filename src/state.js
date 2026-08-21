@@ -49,4 +49,6 @@ export const state = {
 
   consumableNotifyItems: new Set(),  // itemIds the user wants alerted on depletion
   consumableNotifiedFor: new Set(),  // itemIds already notified this depletion cycle
+
+  notificationsEnabled: true,
 };
