@@ -215,6 +215,7 @@ export function buildStatus() {
     goalItems,
     skillNotifyTarget: state.skillNotifyTarget,
     consumableNotifyItems: [...state.consumableNotifyItems],
+    notificationsEnabled: state.notificationsEnabled,
     rawMe: me ?? null,
     tickLog: state.tickLog,
     etaDebugLogVersion: ETA_DEBUG_LOG_VERSION,
