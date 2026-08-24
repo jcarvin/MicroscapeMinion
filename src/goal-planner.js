@@ -135,7 +135,7 @@ export function buildChanceDropIndex(activityDefs) {
 }
 
 export function getCraftableItemIds(activityDefs) {
-  return new Set(buildInputActivityIndex(activityDefs).keys());
+  return new Set(buildRecipeIndex(activityDefs).keys());
 }
 
 export function getChanceDropItemIds(activityDefs) {
