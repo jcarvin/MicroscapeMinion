@@ -155,11 +155,14 @@ export function bankOverheadBeforeCompletion(generatedItems, zoneId, actId) {
 
 // ── Produced items ────────────────────────────────────────────────────────────
 
+// Count loot-bag slots produced per cycle, not total item quantity.
+// Each distinct output item type occupies one slot regardless of quantity
+// (e.g. fill-water-bucket-10 produces waterBucket:10 but takes 1 loot-bag slot).
 export function producedItemsPerCycle(def) {
   if (!def?.inventoryChanges) return 0;
   return Object.values(def.inventoryChanges)
     .filter((change) => change > 0)
-    .reduce((sum, change) => sum + change, 0);
+    .length;
 }
 
 export function estimateGeneratedItemsForActiveMs(activeMs, def, durationInfo) {
@@ -241,28 +244,72 @@ export function computeGoalEta(
     actIsLive && !durationInfo.calibrated && actForEta?.preparedActivity
       ? (actForEta.remaining ?? 0) * TICK_MS
       : 0;
-  const plan = estimateGoalPlan({
-    remaining,
-    yieldPerCycle,
-    itemsGeneratedPerCycle: producedItemsPerCycle(def),
-  });
-  const gatherMs = Math.max(
-    0,
-    fallbackOverheadMs + plan.cyclesNeeded * durationInfo.durationMs - cycleProgressMs
-  );
+
+  // Use optimal mixed strategy when multiple activities produce the same item
+  // (e.g. fill-water-bucket-1 and fill-water-bucket-10).
+  const allProducers = collectGoalProducers(g.itemName, g.itemId);
+  allProducers.sort((a, b) => b.yield - a.yield || a.actId.localeCompare(b.actId));
+
+  let planGatherMs, planBankTrips;
+  if (allProducers.length > 1) {
+    const plan = estimateGoalPlanOptimal(remaining, allProducers);
+    planGatherMs = plan.gatherMs;
+    planBankTrips = plan.bankTrips;
+  } else {
+    const plan = estimateGoalPlan({
+      remaining,
+      yieldPerCycle,
+      itemsGeneratedPerCycle: producedItemsPerCycle(def),
+    });
+    planGatherMs = plan.cyclesNeeded * durationInfo.durationMs;
+    planBankTrips = plan.bankTrips;
+  }
+
+  const gatherMs = Math.max(0, fallbackOverheadMs + planGatherMs - cycleProgressMs);
   const zoneId = getActivityZone(actForEta);
-  const bankOverheadMs =
-    plan.bankTrips * bankTripMs(zoneId, effectiveTickMsForActivity(actId));
+  const bankOverheadMs = planBankTrips * bankTripMs(zoneId, effectiveTickMsForActivity(actId));
 
   return {
     totalMs: gatherMs + bankOverheadMs,
-    bankTrips: plan.bankTrips,
-    cyclesNeeded: plan.cyclesNeeded,
+    bankTrips: planBankTrips,
     cycleDurationMs: durationInfo.durationMs,
     observedCycleDurationMs: durationInfo.observedDurationMs,
     cycleSamples: durationInfo.sampleCount,
     calibrated: durationInfo.calibrated,
   };
+}
+
+export function collectGoalProducers(itemName, itemId) {
+  const result = [];
+  for (const [actId, def] of Object.entries(state.ACTIVITY_DEFS ?? {})) {
+    if (!def.inventoryChanges) continue;
+    const key = findKey(def.inventoryChanges, itemName, itemId);
+    const yield_ = key ? (def.inventoryChanges[key] ?? 0) : 0;
+    if (yield_ > 0) result.push({ actId, def, yield: yield_ });
+  }
+  return result;
+}
+
+// Greedy mixed-batch strategy: use the largest-yield activity as many times as
+// possible, then the next-largest for the remainder, and so on.
+function estimateGoalPlanOptimal(remaining, producers) {
+  let rem = remaining;
+  let gatherMs = 0;
+  let totalItemsGenerated = 0;
+
+  for (let i = 0; i < producers.length; i++) {
+    const { actId, def, yield: y } = producers[i];
+    const isLast = i === producers.length - 1;
+    const cycles = isLast ? Math.ceil(rem / y) : Math.floor(rem / y);
+    if (cycles <= 0) continue;
+    gatherMs += cycles * cycleDurationMs(def, actId);
+    totalItemsGenerated += cycles * producedItemsPerCycle(def);
+    rem -= cycles * y;
+    if (rem <= 0) break;
+  }
+
+  const bankTrips = bankTripsBeforeGoalComplete(totalItemsGenerated);
+  return { gatherMs, bankTrips };
 }
 
 function estimateGoalPlan({ remaining, yieldPerCycle, itemsGeneratedPerCycle }) {

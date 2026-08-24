@@ -120,10 +120,6 @@ body {
   gap: 9px;
 }
 
-.goal-row + .goal-row {
-  border-top: 1px solid var(--border);
-  padding-top: 9px;
-}
 
 .goal-row {
   position: relative;
@@ -187,6 +183,46 @@ body {
   .goal-row { transition: none; }
   .goal-row.drop-before::before,
   .goal-row.drop-after::after { animation: none; }
+}
+
+/* ── Insert-row divider ──────────────────────────────── */
+
+.goal-row-divider {
+  position: relative;
+  height: 1px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+
+.goal-row-divider:hover { background: transparent; }
+
+.goal-insert-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.goal-row-divider:hover .goal-insert-btn {
+  opacity: 1;
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .goal-row-fields {
@@ -453,12 +489,33 @@ button:hover { filter: brightness(1.1); }
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 6px;
+  gap: 12px;
   font-size: 11px;
   color: var(--muted);
 }
 
-.progress-label > span:first-child { flex-shrink: 0; }
+.progress-divider {
+  flex-shrink: 0;
+  width: 1px;
+  align-self: stretch;
+  position: relative;
+}
+
+.progress-divider::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10%;
+  bottom: 10%;
+  width: 1px;
+  background: var(--border);
+}
+
+.progress-counts {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
 
 .eta-label { color: var(--muted); }
 

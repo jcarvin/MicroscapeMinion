@@ -37,6 +37,10 @@ export const state = {
   // Highest normalized goal count per goal. Only ever increases.
   // Used for ETA remaining so bank trips (which drain the loot bag) don't inflate ETA.
   goalHighWaterMark: {},  // goalId -> count
+  // Cached preliminary ETAs for non-active goals — only recomputed when the recommended
+  // activityId, targetCount, or effectiveCount changes, not on every status poll.
+  goalPreliminaryEtaCache: {}, // goalId -> { activityId, targetCount, effectiveCount, eta }
+
 
   lastWorkActivity: null,
 

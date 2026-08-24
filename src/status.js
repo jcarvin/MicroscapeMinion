@@ -74,6 +74,36 @@ export function buildStatus() {
     const goalSamples = etaActId
       ? (state.goalRateSamples[`${etaActId}:${goal.id}`] ?? [])
       : [];
+    let preliminaryEta = null;
+    if (
+      !relatedToActivity &&
+      planning?.activityId &&
+      (planning.sourceType === 'recipe' || planning.sourceType === 'activity') &&
+      planning.feasible !== false &&
+      planning.pending !== true
+    ) {
+      const cached = state.goalPreliminaryEtaCache[goal.id];
+      const needsRecompute =
+        !cached ||
+        cached.activityId !== planning.activityId ||
+        cached.targetCount !== goal.targetCount ||
+        cached.effectiveCount !== effectiveCount;
+      if (needsRecompute) {
+        const computed = computeGoalEta(goal, effectiveCount, planning.activityId, null, false, goal.id);
+        const eta = (computed && computed !== 0 && computed.totalMs != null)
+          ? { totalMs: computed.totalMs, bankTrips: computed.bankTrips ?? 0 }
+          : null;
+        state.goalPreliminaryEtaCache[goal.id] = {
+          activityId: planning.activityId,
+          targetCount: goal.targetCount,
+          effectiveCount,
+          eta,
+        };
+        preliminaryEta = eta;
+      } else {
+        preliminaryEta = cached.eta;
+      }
+    }
     return {
       goal,
       planning,
@@ -84,6 +114,7 @@ export function buildStatus() {
       warmupRemainingMs: !isChanceBased && !isRateBased && eta && eta !== 0
         ? warmupRemainingMs(goalSamples, now)
         : 0,
+      preliminaryEta,
     };
   });
 

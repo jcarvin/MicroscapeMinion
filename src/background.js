@@ -47,12 +47,18 @@ import { buildOwnedCounts, planGoals } from './goal-planner.js';
 
 // ── Startup ───────────────────────────────────────────────────────────────────
 
+// Seed activity defs from the bundled JSON — saved at startup so the live
+// ACTIVITY_DEFS handler can backfill inventoryChanges for any activity the
+// game parser extracted without it (e.g. batch activities with extra fields).
+let seedActivityDefs = {};
+
 chrome.storage.local.get(
   ['activityDefs', 'zoneData', 'xpTable', 'skillNotifyTarget', ETA_CALIBRATION_CACHE_KEY, 'consumableNotifyItems', 'notificationsEnabled'],
   (res) => {
     fetch(chrome.runtime.getURL('src/activity-defs.json'))
       .then((r) => r.json())
       .then((seed) => {
+        seedActivityDefs = seed ?? {};
         const storedMerge = mergeMissingActivityDefs(res.activityDefs, seed);
         // Live bundle parsing can finish before this extension-resource fetch.
         // Keep its routes authoritative, but backfill planner metadata when an
@@ -142,7 +148,21 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       msg.defs &&
       Object.keys(msg.defs).length > 0
     ) {
-      state.ACTIVITY_DEFS = msg.defs;
+      // Backfill inventoryChanges from seed for any activity the live parser
+      // extracted without it (e.g. batch activities with extra numeric fields
+      // that the regex didn't anticipate).
+      const liveDefs = { ...msg.defs };
+      for (const [id, seedDef] of Object.entries(seedActivityDefs)) {
+        if (!seedDef?.inventoryChanges) continue;
+        if (liveDefs[id]) {
+          if (!liveDefs[id].inventoryChanges || Object.keys(liveDefs[id].inventoryChanges).length === 0) {
+            liveDefs[id] = { ...liveDefs[id], inventoryChanges: seedDef.inventoryChanges };
+          }
+        } else {
+          liveDefs[id] = seedDef;
+        }
+      }
+      state.ACTIVITY_DEFS = liveDefs;
       const toCache = { activityDefs: msg.defs };
       if (msg.zones && Object.keys(msg.zones).length > 0) {
         state.ZONE_DATA = msg.zones;
@@ -175,6 +195,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
           for (const key of Object.keys(state.goalRateSamples)) {
             if (key.endsWith(`:${g.id}`)) delete state.goalRateSamples[key];
           }
+          delete state.goalPreliminaryEtaCache[g.id];
           state.goalHighWaterMark[g.id] = getGoalCount(g.itemName, g.itemId) ?? 0;
           state.goalNotifiedAt[g.id] = null;
         } else if (prev.targetCount !== g.targetCount) {
@@ -186,6 +207,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         if (!nextIds.has(prevGoal.id)) {
           delete state.goalHighWaterMark[prevGoal.id];
           delete state.goalNotifiedAt[prevGoal.id];
+          delete state.goalPreliminaryEtaCache[prevGoal.id];
           for (const key of Object.keys(state.goalRateSamples)) {
             if (key.endsWith(`:${prevGoal.id}`)) delete state.goalRateSamples[key];
           }
@@ -207,6 +229,16 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       refreshGoalPlanning();
       respond(buildStatus());
       break;
+
+    case 'GET_ACTIVITY_DEFS': {
+      const filter = msg.filter ? String(msg.filter).toLowerCase() : null;
+      const entries = Object.entries(state.ACTIVITY_DEFS);
+      const filtered = filter
+        ? entries.filter(([k]) => k.toLowerCase().includes(filter))
+        : entries;
+      respond({ defs: Object.fromEntries(filtered) });
+      break;
+    }
 
     case 'SET_SKILL_NOTIFY':
       state.skillNotifyTarget = { skill: msg.skill, level: msg.level };
