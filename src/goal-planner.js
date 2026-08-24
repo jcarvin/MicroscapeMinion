@@ -135,7 +135,7 @@ export function buildChanceDropIndex(activityDefs) {
 }
 
 export function getCraftableItemIds(activityDefs) {
-  return new Set(buildRecipeIndex(activityDefs).keys());
+  return new Set(buildInputActivityIndex(activityDefs).keys());
 }
 
 export function getChanceDropItemIds(activityDefs) {
@@ -216,9 +216,9 @@ function selectChanceProducer(activities) {
 function resolveSourceMode(goal, { recipes, chanceProducers, inputActivities, producers }) {
   if (goal.maxCraftable === true && recipes.length > 0) return 'craft';
 
+  if (goal.sourceMode === 'any') return 'any';
   if (goal.sourceMode === 'craft' && recipes.length > 0) return 'craft';
   if (goal.sourceMode === 'drops' && chanceProducers.length > 0) return 'drops';
-  if (goal.sourceMode === 'any' && recipes.length > 0 && chanceProducers.length > 0) return 'any';
 
   if (recipes.length > 0 && chanceProducers.length > 0) return 'any';
   if (recipes.length > 0) return 'craft';

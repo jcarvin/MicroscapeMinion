@@ -109,10 +109,15 @@
 
   function parseActivityDefs(bundle) {
     const defs = {};
-    // Matches activity defs in the (non-minified) game bundle. Optional string
-    // fields like customActionText/customPrepText may appear between name and level.
+    // Matches activity defs in the (non-minified) game bundle. Optional string,
+    // numeric, or boolean fields may appear before level or between entity and
+    // inventoryChanges (e.g. stackSize, customActionText, batchSize).
     // Groups: 1=id, 2=required level, 3=exp, 4=duration, 5=inventoryChanges body
-    const re = /\{\s*id:\s*`([^`]+)`(?:,\s*\w+:\s*`[^`]*`)*,\s*level:\s*(\d+),\s*exp:\s*(\d+),\s*duration:\s*(\d+),\s*entity:\s*`[^`]+`,\s*inventoryChanges:\s*\{([^}]+)\}/g;
+    const anyField = /(?:,\s*\w+:\s*(?:`[^`]*`|\d+|true|false))/.source;
+    const re = new RegExp(
+      `\\{\\s*id:\\s*\`([^\`]+)\`${anyField}*,\\s*level:\\s*(\\d+),\\s*exp:\\s*(\\d+),\\s*duration:\\s*(\\d+),\\s*entity:\\s*\`[^\`]+\`${anyField}*,\\s*inventoryChanges:\\s*\\{([^}]+)\\}`,
+      'g'
+    );
     let m;
     while ((m = re.exec(bundle)) !== null) {
       const id = m[1];
@@ -133,7 +138,10 @@
     }
 
     // Piety skill activities (bury-bones etc.) have entity before exp/duration/level
-    const pietyRe = /\{\s*id:\s*`([^`]+)`,(?:\s*\w+:\s*`[^`]*`,)*\s*entity:\s*`[^`]+`,\s*exp:\s*(\d+),\s*duration:\s*(\d+),\s*level:\s*(\d+),\s*inventoryChanges:\s*\{([^}]+)\}/g;
+    const pietyRe = new RegExp(
+      `\\{\\s*id:\\s*\`([^\`]+)\`${anyField}*,\\s*entity:\\s*\`[^\`]+\`${anyField}*,\\s*exp:\\s*(\\d+),\\s*duration:\\s*(\\d+),\\s*level:\\s*(\\d+),\\s*inventoryChanges:\\s*\\{([^}]+)\\}`,
+      'g'
+    );
     while ((m = pietyRe.exec(bundle)) !== null) {
       const id = m[1];
       if (id in defs) continue;

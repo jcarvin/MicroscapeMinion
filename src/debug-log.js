@@ -20,6 +20,7 @@ import {
   bankTripMs,
   effectiveTickMsForActivity,
   computeGoalEta,
+  collectGoalProducers,
 } from './eta.js';
 import { runoutInfo } from './runout.js';
 
@@ -77,6 +78,14 @@ function pushEtaDebugEntry({ preSnap, postSnap, prevAct, newAct, prevMe, newMe, 
     : null;
 
   const goal = state.goals[0] ?? null;
+  const goalProducers = goal
+    ? collectGoalProducers(goal.itemName, goal.itemId).map((p) => ({
+        actId: p.actId,
+        yield: p.yield,
+        durationMs: p.def?.durationMs ?? null,
+        hasInventoryChanges: !!p.def?.inventoryChanges,
+      }))
+    : null;
   const goalCount = goal ? (getGoalCount(goal.itemName, goal.itemId) ?? 0) : null;
   const prevGoalCount = goal ? getGoalCountForMe(prevMe, goal) : null;
   const newGoalCount = goal ? getGoalCountForMe(newMe, goal) : null;
@@ -174,6 +183,7 @@ function pushEtaDebugEntry({ preSnap, postSnap, prevAct, newAct, prevMe, newMe, 
       itemName: goal.itemName,
       itemId: goal.itemId,
       targetCount: goal.targetCount,
+      producers: goalProducers,
       currentCount: goalCount,
       prevCount: prevGoalCount,
       newCount: newGoalCount,

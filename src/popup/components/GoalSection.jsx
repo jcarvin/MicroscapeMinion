@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { formatItemId, formatNumber, formatSkillName } from '../utils/format';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import { formatDuration, formatItemId, formatNumber, formatSkillName } from '../utils/format';
 import { setGoals } from '../utils/messages';
 import ItemCombobox from './ItemCombobox';
 import EtaDisplay from './EtaDisplay';
 import EtaTooltip from './EtaTooltip';
-import GoalSourceSelector from './GoalSourceSelector';
+import GoalSourceSelector, { GOAL_SOURCE_OPTIONS } from './GoalSourceSelector';
 
 let fallbackId = 0;
 
@@ -21,11 +21,25 @@ function createRow(goal = null) {
     itemName: goal?.itemName ?? '',
     targetValue: goal ? String(goal.targetCount) : '',
     maxCraftable: goal?.maxCraftable === true,
-    sourceMode: ['any', 'craft', 'drops'].includes(goal?.sourceMode)
-      ? goal.sourceMode
-      : null,
+    sourceMode: ['any', 'craft', 'drops'].includes(goal?.sourceMode) ? goal.sourceMode : null,
     completed: goal?.completed === true,
   };
+}
+
+function InsertDivider({ onInsert }) {
+  return (
+    <div className="goal-row-divider" aria-hidden="true">
+      <button
+        type="button"
+        className="goal-insert-btn"
+        aria-label="Insert goal here"
+        title="Insert goal"
+        onClick={onInsert}
+      >
+        +
+      </button>
+    </div>
+  );
 }
 
 function displayItemName(item) {
@@ -58,10 +72,9 @@ function hasAmbiguousSource(item) {
 
 function effectiveSourceMode(row, item) {
   if (row.maxCraftable) return 'craft';
-  if (hasAmbiguousSource(item)) {
-    return ['any', 'craft', 'drops'].includes(row.sourceMode) ? row.sourceMode : 'any';
-  }
-  if (hasAcquisitionSource(item, 'craft')) return 'craft';
+  if (['any', 'craft', 'drops'].includes(row.sourceMode)) return row.sourceMode;
+  if (hasAmbiguousSource(item)) return 'any';
+  if (hasAcquisitionSource(item, 'craft')) return 'any';
   if (hasAcquisitionSource(item, 'drops')) return 'drops';
   return 'any';
 }
@@ -80,13 +93,14 @@ function completeGoals(rows, items, persistedGoals = []) {
       const savedGoal = savedGoals.get(row.id);
       return savedGoal ? [savedGoal] : [];
     }
+    const hasKnownSource = item?.craftable || item?.chanceDrop;
     return [{
       id: row.id,
       itemId: row.itemId,
       itemName,
       targetCount,
       ...(maxCraftable ? { maxCraftable: true } : {}),
-      ...(maxCraftable || hasAmbiguousSource(item) ? { sourceMode } : {}),
+      ...(maxCraftable || hasKnownSource ? { sourceMode } : {}),
       ...(row.completed ? { completed: true } : {}),
     }];
   });
@@ -181,7 +195,11 @@ export default function GoalSection({ goalItems, goalStatuses }) {
                 ? 'craft'
                 : hasAmbiguousSource(item)
                   ? 'any'
-                  : null,
+                  : hasAcquisitionSource(item, 'craft')
+                    ? 'craft'
+                    : hasAcquisitionSource(item, 'drops')
+                      ? 'drops'
+                      : null,
             targetValue: row.maxCraftable && !item?.craftable && Number(row.targetValue) === 0
               ? ''
               : row.targetValue,
@@ -245,6 +263,14 @@ export default function GoalSection({ goalItems, goalStatuses }) {
     updateRows((current) => current.filter((row) => row.id !== rowId), true);
   }
 
+  function insertRowAt(index) {
+    updateRows((current) => {
+      const next = [...current];
+      next.splice(index, 0, createRow());
+      return next;
+    });
+  }
+
   function handleDrop(overId) {
     if (!draggedId || draggedId === overId) {
       setDraggedId(null);
@@ -276,7 +302,7 @@ export default function GoalSection({ goalItems, goalStatuses }) {
           className="goal-add-btn"
           aria-label="Add goal"
           title="Add goal"
-          onClick={() => updateRows((current) => [...current, createRow()])}
+          onClick={() => updateRows((current) => [createRow(), ...current])}
         >
           +
         </button>
@@ -338,11 +364,10 @@ export default function GoalSection({ goalItems, goalStatuses }) {
             ? (draggedIndex < rowIndex ? ' drop-after' : ' drop-before')
             : '';
 
-          return (
+          const goalRow = (
             <div
               className={`goal-row${row.completed ? ' is-completed' : ''}${isCurrentActivityGoal ? ' is-current-activity' : ''}${isInfeasible ? ' is-infeasible' : ''}${draggedId === row.id ? ' is-dragging' : ''}${dropPosition}`}
               data-goal-id={row.id}
-              key={row.id}
               onDragEnter={() => {
                 if (draggedId) setDragOverId(draggedId === row.id ? null : row.id);
               }}
@@ -417,9 +442,16 @@ export default function GoalSection({ goalItems, goalStatuses }) {
                 </button>
               </div>
 
-              {ambiguousSource && (
+              {item && (item.craftable || item.chanceDrop) && !row.maxCraftable && (
                 <GoalSourceSelector
                   value={sourceMode}
+                  options={
+                    ambiguousSource
+                      ? GOAL_SOURCE_OPTIONS
+                      : item.craftable
+                        ? GOAL_SOURCE_OPTIONS.filter((o) => o.id !== 'drops')
+                        : GOAL_SOURCE_OPTIONS.filter((o) => o.id !== 'craft')
+                  }
                   onChange={(nextSourceMode) => handleSourceChange(row.id, nextSourceMode)}
                 />
               )}
@@ -430,17 +462,40 @@ export default function GoalSection({ goalItems, goalStatuses }) {
                     <div className="progress-bar" style={{ width: `${pct}%` }} />
                   </div>
                   <div className="progress-label">
-                    <span>{count} / {targetCount}</span>
+                    <span className="progress-counts">
+                      <span>{formatNumber(count)} / {formatNumber(targetCount)}</span>
+                      {!complete && count < targetCount && (
+                        <span className="remaining-count">{formatNumber(targetCount - count)} remaining</span>
+                      )}
+                    </span>
                     {relatedToActivity && (
-                      <span className="eta-group">
-                        <EtaDisplay
-                          etaMs={etaMs}
-                          bankTrips={bankTrips}
-                          complete={complete}
-                          warmupRemainingMs={status?.warmupRemainingMs ?? 0}
-                        />
-                        <EtaTooltip />
-                      </span>
+                      <>
+                        <span className="progress-divider" aria-hidden="true" />
+                        <span className="eta-group">
+                          <EtaDisplay
+                            etaMs={etaMs}
+                            bankTrips={bankTrips}
+                            complete={complete}
+                            warmupRemainingMs={status?.warmupRemainingMs ?? 0}
+                          />
+                          <EtaTooltip />
+                        </span>
+                      </>
+                    )}
+                    {!relatedToActivity && !complete && status?.preliminaryEta != null
+                      && status.preliminaryEta !== 0
+                      && status.preliminaryEta?.totalMs > 0 && (
+                      <>
+                        <span className="progress-divider" aria-hidden="true" />
+                        <span className="eta-group">
+                          <span className="eta-label">
+                            {`~${formatDuration(status.preliminaryEta.totalMs)}`}
+                            {status.preliminaryEta.bankTrips > 0
+                              ? ` (+${status.preliminaryEta.bankTrips} bank trip${status.preliminaryEta.bankTrips > 1 ? 's' : ''})`
+                              : ''}
+                          </span>
+                        </span>
+                      </>
                     )}
                   </div>
                 </div>
@@ -454,7 +509,15 @@ export default function GoalSection({ goalItems, goalStatuses }) {
               )}
             </div>
           );
+          return (
+            <Fragment key={row.id}>
+              {rowIndex > 0 && <InsertDivider onInsert={() => insertRowAt(rowIndex)} />}
+              {goalRow}
+            </Fragment>
+          );
+
         })}
+        {rows.length > 0 && <InsertDivider onInsert={() => insertRowAt(rows.length)} />}
       </div>
     </section>
   );

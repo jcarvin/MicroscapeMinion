@@ -353,8 +353,8 @@ describe('GoalSection', () => {
   it('renders progress for every saved goal but ETA only for a related item', () => {
     render(<GoalSection goalItems={items} goalStatuses={[woodStatus, stoneStatus]} />);
 
-    expect(screen.getByText('50 / 100')).toBeInTheDocument();
-    expect(screen.getByText('5 / 20')).toBeInTheDocument();
+    expect(screen.getByText(/^50 \/ 100/)).toBeInTheDocument();
+    expect(screen.getByText(/^5 \/ 20/)).toBeInTheDocument();
     expect(screen.getByText(/ETA 2m 0s/)).toBeInTheDocument();
     expect(screen.getAllByLabelText('ETA estimate details')).toHaveLength(1);
     expect(document.querySelectorAll('.progress-bar')).toHaveLength(2);

@@ -101,6 +101,16 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.14
+
+- Show "X remaining" below the progress count for in-progress goals, with a vertical divider separating the count from the ETA.
+- Add an insert button between goal rows (hover the divider to reveal +), so goals can be added mid-list without drag-and-drop.
+- "Add goal" now prepends to the top of the list.
+- Show the source selector (Any / Craft / Drops) for single-source items, not just items with multiple acquisition routes.
+- Show a preliminary `~ETA` for goals whose activity is not the currently active one; the estimate is frozen until actual progress is made, so it doesn't drift down on every poll.
+- Fix goal ETA for items with multiple batch-size activities (e.g. gather-water vs gather-water-10): use the highest-yield variant first, then fill the remainder with the lower-yield variant, and count loot-bag slots per cycle rather than total item quantity.
+- Fix the game-bundle activity-def parser to accept extra numeric or boolean fields between `entity` and `inventoryChanges`, preventing batch activities from being silently dropped from the activity registry.
+
 ### v0.1.13
 
 - Add a master notifications toggle (🔔/🔕) in the extension header that mutes all browser notifications and chimes in one click, with the preference persisted across sessions.
