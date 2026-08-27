@@ -42,38 +42,40 @@ export default function App() {
         }}
         onToggleDebug={() => setShowDebug(v => !v)}
       />
-      <StatusSection
-        connected={status?.connected}
-        idle={status?.idle}
-        activity={status?.activity}
-        tickMs={status?.tickMs}
-      />
-      <GoalSection
-        goalItems={status?.goalItems ?? []}
-        goalStatuses={status && status.goalsLoaded !== false ? status.goalStatuses : null}
-      />
-      <MaterialSection
-        runoutStatus={status?.runoutStatus ?? null}
-        selectedSkillEta={selectedSkillEta}
-        xpPerCycle={status?.skillLevelStatus?.xpPerCycle ?? 0}
-      />
-      <CombatConsumableSection
-        combatConsumables={status?.combatConsumables ?? []}
-        consumableNotifyItems={status?.consumableNotifyItems ?? []}
-      />
-      <SkillSection
-        skillLevelStatus={status?.skillLevelStatus ?? null}
-        skillNotifyTarget={status?.skillNotifyTarget ?? null}
-        onSelectedEtaChange={handleSelectedEtaChange}
-      />
-      {showDebug && (
-        <DebugSection
-          rawMe={status?.rawMe}
-          tickLog={status?.tickLog ?? []}
-          etaDebugLog={status?.etaDebugLog}
-          etaDebugLogVersion={status?.etaDebugLogVersion}
+      <div className="scroll-content">
+        <StatusSection
+          connected={status?.connected}
+          idle={status?.idle}
+          activity={status?.activity}
+          tickMs={status?.tickMs}
         />
-      )}
+        <GoalSection
+          goalItems={status?.goalItems ?? []}
+          goalStatuses={status && status.goalsLoaded !== false ? status.goalStatuses : null}
+        />
+        <MaterialSection
+          runoutStatus={status?.runoutStatus ?? null}
+          selectedSkillEta={selectedSkillEta}
+          xpPerCycle={status?.skillLevelStatus?.xpPerCycle ?? 0}
+        />
+        <CombatConsumableSection
+          combatConsumables={status?.combatConsumables ?? []}
+          consumableNotifyItems={status?.consumableNotifyItems ?? []}
+        />
+        <SkillSection
+          skillLevelStatus={status?.skillLevelStatus ?? null}
+          skillNotifyTarget={status?.skillNotifyTarget ?? null}
+          onSelectedEtaChange={handleSelectedEtaChange}
+        />
+        {showDebug && (
+          <DebugSection
+            rawMe={status?.rawMe}
+            tickLog={status?.tickLog ?? []}
+            etaDebugLog={status?.etaDebugLog}
+            etaDebugLogVersion={status?.etaDebugLogVersion}
+          />
+        )}
+      </div>
       <div className="support-footer">
         <a
           className="support-link"

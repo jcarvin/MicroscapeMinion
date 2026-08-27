@@ -15,10 +15,27 @@
 
 body {
   width: 280px;
+  max-height: 600px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font: 13px/1.4 'Segoe UI', system-ui, sans-serif;
-  padding: 0 0 8px;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.scroll-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* ── Header ─────────────────────────────────────────── */
@@ -800,7 +817,8 @@ button:hover { filter: brightness(1.1); }
 .support-footer {
   display: flex;
   justify-content: flex-end;
-  padding: 6px 12px 2px;
+  padding: 6px 12px 8px;
+  flex-shrink: 0;
 }
 
 .support-link {
