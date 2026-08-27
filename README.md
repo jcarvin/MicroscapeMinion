@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.15
+
+- Add a subtle "Support the dev" link in the bottom-right corner of the popup that opens the ko-fi page in a new tab.
+
 ### v0.1.14
 
 - Show "X remaining" below the progress count for in-progress goals, with a vertical divider separating the count from the ETA.
