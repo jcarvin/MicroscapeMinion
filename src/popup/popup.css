@@ -795,6 +795,27 @@ button:hover { filter: brightness(1.1); }
   background: #fff;
 }
 
+/* ── Support footer ──────────────────────────────────── */
+
+.support-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 12px 2px;
+}
+
+.support-link {
+  font-size: 10px;
+  color: var(--muted);
+  text-decoration: none;
+  opacity: 0.55;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.support-link:hover {
+  color: var(--text);
+  opacity: 1;
+}
+
 /* ── Debug ───────────────────────────────────────────── */
 
 .debug-details {

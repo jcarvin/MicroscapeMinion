@@ -74,6 +74,16 @@ export default function App() {
           etaDebugLogVersion={status?.etaDebugLogVersion}
         />
       )}
+      <div className="support-footer">
+        <a
+          className="support-link"
+          href="https://ko-fi.com/facehair4000"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Support the dev ☕
+        </a>
+      </div>
     </>
   );
 }
