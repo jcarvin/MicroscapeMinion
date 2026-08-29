@@ -75,7 +75,9 @@ function effectiveSourceMode(row, item) {
   if (['any', 'craft', 'drops'].includes(row.sourceMode)) return row.sourceMode;
   if (hasAmbiguousSource(item)) return 'any';
   if (hasAcquisitionSource(item, 'craft')) return 'any';
-  if (hasAcquisitionSource(item, 'drops')) return 'drops';
+  if (hasAcquisitionSource(item, 'drops')) {
+    return hasAcquisitionSource(item, 'activity') ? 'any' : 'drops';
+  }
   return 'any';
 }
 
@@ -140,8 +142,13 @@ export default function GoalSection({ goalItems, goalStatuses }) {
       const targetValue = goal.maxCraftable && row.maxCraftable
         ? String(goal.targetCount)
         : row.targetValue;
-      if (targetValue === row.targetValue && sourceMode === row.sourceMode) return row;
-      return { ...row, targetValue, sourceMode };
+      const completed = goal.completed === true;
+      if (
+        targetValue === row.targetValue
+        && sourceMode === row.sourceMode
+        && completed === row.completed
+      ) return row;
+      return { ...row, targetValue, sourceMode, completed };
     }));
   }, [goalStatuses]);
 
@@ -198,7 +205,7 @@ export default function GoalSection({ goalItems, goalStatuses }) {
                   : hasAcquisitionSource(item, 'craft')
                     ? 'craft'
                     : hasAcquisitionSource(item, 'drops')
-                      ? 'drops'
+                      ? (hasAcquisitionSource(item, 'activity') ? 'any' : 'drops')
                       : null,
             targetValue: row.maxCraftable && !item?.craftable && Number(row.targetValue) === 0
               ? ''

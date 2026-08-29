@@ -23,7 +23,7 @@ import {
   isWorkActivityId,
   rememberWorkActivity,
 } from './activity-utils.js';
-import { getGoalCount, sameGoalItem, findKey } from './inventory.js';
+import { findKey, getGoalCount, sameGoalItem } from './inventory.js';
 import { runoutInfo } from './runout.js';
 import {
   hydrateEtaCalibrationCache,
@@ -46,12 +46,21 @@ import { buildStatus } from './status.js';
 import { fireNotification, sendChime } from './notify.js';
 import { buildOwnedCounts, planGoals } from './goal-planner.js';
 
+const GOAL_NAG_INTERVAL_MS = 5 * 60 * 1000;
+const GOAL_NAG_ALARM_PREFIX = 'goal-nag:';
+const GOAL_NAG_DEBUG_LOG_LIMIT = 60;
+
 // ── Startup ───────────────────────────────────────────────────────────────────
 
 // Seed activity defs from the bundled JSON — saved at startup so the live
 // ACTIVITY_DEFS handler can backfill inventoryChanges for any activity the
 // game parser extracted without it (e.g. batch activities with extra fields).
 let seedActivityDefs = {};
+let resolveActivityDefsReady;
+let resolveGoalsReady;
+const activityDefsReady = new Promise((resolve) => { resolveActivityDefsReady = resolve; });
+const goalsReady = new Promise((resolve) => { resolveGoalsReady = resolve; });
+const goalNagStartupReady = Promise.all([activityDefsReady, goalsReady]);
 
 chrome.storage.local.get(
   ['activityDefs', 'zoneData', 'xpTable', 'skillNotifyTarget', ETA_CALIBRATION_CACHE_KEY, 'consumableNotifyItems', 'notificationsEnabled'],
@@ -83,7 +92,8 @@ chrome.storage.local.get(
           state.ACTIVITY_DEFS = res.activityDefs;
           refreshGoalPlanning();
         }
-      });
+      })
+      .finally(resolveActivityDefsReady);
     if (res.zoneData) state.ZONE_DATA = res.zoneData;
     if (isValidXpTable(res.xpTable)) state.XP_TABLE = res.xpTable;
     if (res.skillNotifyTarget) state.skillNotifyTarget = res.skillNotifyTarget;
@@ -98,7 +108,7 @@ chrome.storage.local.get(
 );
 
 chrome.storage.local.get(['goals', 'goal'], (localRes) => {
-  chrome.storage.session.get(['goals', 'goal', 'lastWorkActivity'], (sessionRes) => {
+  chrome.storage.session.get(['goals', 'goal', 'lastWorkActivity', 'goalNagDebugLog'], (sessionRes) => {
     const hasLocalGoals = Array.isArray(localRes.goals);
     const hasLocalLegacyGoal = !hasLocalGoals && Boolean(localRes.goal);
     const storedGoals = hasLocalGoals
@@ -132,8 +142,15 @@ chrome.storage.local.get(['goals', 'goal'], (localRes) => {
     chrome.storage.session.remove(['goals', 'goal']);
 
     if (sessionRes.lastWorkActivity) state.lastWorkActivity = sessionRes.lastWorkActivity;
+    if (Array.isArray(sessionRes.goalNagDebugLog)) {
+      state.goalNagDebugLog = sessionRes.goalNagDebugLog;
+    }
     state.goalsLoaded = true;
     refreshGoalPlanning();
+    resolveGoalsReady();
+    for (const goal of state.goals) {
+      if (goal.completed) ensureGoalNagScheduled(goal.id);
+    }
   });
 });
 
@@ -199,16 +216,10 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
           delete state.goalPreliminaryEtaCache[g.id];
           state.goalHighWaterMark[g.id] = getGoalCount(g.itemName, g.itemId) ?? 0;
           state.goalNotifiedAt[g.id] = null;
-          if (state.goalNagTimers[g.id] != null) {
-            clearTimeout(state.goalNagTimers[g.id]);
-            delete state.goalNagTimers[g.id];
-          }
+          cancelGoalNag(g.id, 'goal-item-changed');
         } else if (prev.targetCount !== g.targetCount) {
           state.goalNotifiedAt[g.id] = null;
-          if (state.goalNagTimers[g.id] != null) {
-            clearTimeout(state.goalNagTimers[g.id]);
-            delete state.goalNagTimers[g.id];
-          }
+          cancelGoalNag(g.id, 'goal-target-changed');
         }
       }
 
@@ -220,10 +231,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
           for (const key of Object.keys(state.goalRateSamples)) {
             if (key.endsWith(`:${prevGoal.id}`)) delete state.goalRateSamples[key];
           }
-          if (state.goalNagTimers[prevGoal.id] != null) {
-            clearTimeout(state.goalNagTimers[prevGoal.id]);
-            delete state.goalNagTimers[prevGoal.id];
-          }
+          cancelGoalNag(prevGoal.id, 'goal-removed');
         }
       }
 
@@ -240,7 +248,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
 
     case 'GET_STATUS':
       refreshGoalPlanning();
-      respond(buildStatus());
+      respond({ ...buildStatus(), goalNagDebug: buildGoalNagDebugStatus() });
       break;
 
     case 'GET_ACTIVITY_DEFS': {
@@ -283,6 +291,30 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       chrome.storage.local.set({ notificationsEnabled: state.notificationsEnabled });
       respond({ ok: true });
       break;
+
+    case 'TEST_NOTIFICATION': {
+      if (!state.notificationsEnabled) {
+        respond({ ok: false, reason: 'disabled' });
+        break;
+      }
+      fireNotification('test', 'Microscape Minion', 'Test notification received!')
+        .then((result) => {
+          if (result.ok) sendChime('default');
+          respond(result);
+        });
+      break;
+    }
+
+    case 'DEBUG_CHECK_GOAL_NAGS': {
+      const goalIds = state.goals
+        .filter((goal) => goal.completed)
+        .map((goal) => goal.id);
+      Promise.all(goalIds.map((goalId) => handleGoalNagAlarm({
+        name: `${GOAL_NAG_ALARM_PREFIX}${goalId}`,
+        debug: true,
+      }))).then(() => respond({ ok: true, checked: goalIds.length }));
+      break;
+    }
   }
 
   return true;
@@ -297,6 +329,7 @@ function handleServerFrame(frame) {
   const now = Date.now();
   calibrateTick();
   const prevAct = state.mirroredState.me?.activity;
+  const prevWorkActivityId = getActivityId(getEtaActivity(prevAct));
   const prevExp = state.mirroredState.me?.exp;
   const prevMe = state.mirroredState.me;
   const preSnap = snapshotEta();
@@ -306,6 +339,13 @@ function handleServerFrame(frame) {
   const newAct = state.mirroredState.me?.activity;
   // Snapshot the previous work activity ID before rememberWorkActivity updates it
   rememberWorkActivity(newAct);
+  const newWorkActivityId = getActivityId(getEtaActivity(newAct));
+  if (prevWorkActivityId && prevWorkActivityId !== newWorkActivityId) {
+    cancelAllGoalNags('activity-changed', {
+      previousActivityId: prevWorkActivityId,
+      newActivityId: newWorkActivityId,
+    });
+  }
   trackXpGain(prevAct, newAct, prevExp, state.mirroredState.me?.exp);
   trackDropGain(prevAct, newAct, prevMe, state.mirroredState.me);
   trackCombatConsumables(prevAct, newAct, prevMe, state.mirroredState.me);
@@ -352,6 +392,7 @@ function handleClientFrame(frame) {
   };
   state.lastWorkActivity = null;
   chrome.storage.session.remove('lastWorkActivity');
+  cancelAllGoalNags('activity-stopped');
   detectIdleTransition();
   detectMaterialRunout();
 }
@@ -397,42 +438,174 @@ function detectIdleTransition() {
   state.prevActivityId = actId;
 }
 
-const GOAL_NAG_INTERVAL_MS = 5 * 60 * 1000;
-
-function isGoalRelatedToCurrentActivity(goal) {
+function goalActivityMatch(goal) {
   const me = state.mirroredState.me;
-  const etaAct = getEtaActivity(me?.activity ?? null);
+  const liveAct = me?.activity ?? null;
+  // A service worker restarted by an alarm has no mirrored page state yet.
+  // lastWorkActivity is session-backed, so it preserves the activity that was
+  // running when the worker went to sleep.
+  const etaAct = getEtaActivity(liveAct) ?? state.lastWorkActivity;
   const etaActId = getActivityId(etaAct);
-  if (!etaActId) return false;
-  const activityDef = state.ACTIVITY_DEFS[etaActId];
+  const activityDef = etaActId ? state.ACTIVITY_DEFS[etaActId] : null;
   const inventoryKey = findKey(activityDef?.inventoryChanges, goal.itemName, goal.itemId);
   const dropKey = findKey(activityDef?.dropItems, goal.itemName, goal.itemId);
-  const producedByActivity = Boolean(inventoryKey && activityDef.inventoryChanges[inventoryKey] > 0);
+  const producedByActivity = Boolean(
+    inventoryKey && activityDef.inventoryChanges[inventoryKey] > 0
+  );
   const droppedByActivity = Boolean(dropKey);
-  const planning = state.goalPlans.find((p) => p.goalId === goal.id) ?? null;
-  return planning?.sourceMode === 'craft'
-    ? producedByActivity && isMaxCraftActivity(etaActId, activityDef)
-    : planning?.sourceMode === 'drops'
-      ? droppedByActivity
-      : producedByActivity || droppedByActivity;
+  const planning = state.goalPlans.find((plan) => plan.goalId === goal.id) ?? null;
+  // Reminder eligibility follows what the player is actually doing. A goal's
+  // preferred planning source may be "drops" while the current activity still
+  // produces that item directly (for example, Iron Ore can be mined or dropped).
+  const related = producedByActivity || droppedByActivity;
+
+  return {
+    related,
+    liveActivityId: getActivityId(liveAct),
+    effectiveActivityId: etaActId,
+    lastWorkActivityId: getActivityId(state.lastWorkActivity),
+    sourceMode: planning?.sourceMode ?? null,
+    inventoryKey,
+    dropKey,
+    producedByActivity,
+    droppedByActivity,
+    activityDefinitionLoaded: Boolean(activityDef),
+  };
 }
 
-function scheduleGoalNag(goalId) {
-  if (state.goalNagTimers[goalId] != null) clearTimeout(state.goalNagTimers[goalId]);
-  state.goalNagTimers[goalId] = setTimeout(() => {
-    delete state.goalNagTimers[goalId];
-    const goal = state.goals.find((g) => g.id === goalId);
-    if (!goal?.completed) return;
-    if (!isGoalRelatedToCurrentActivity(goal)) return;
-    fireNotification(
-      'goal-nag',
-      'Microscape: Goal already reached!',
-      `${goal.itemName} is complete — switch activities or remove this goal.`
-    );
-    sendChime('default');
-    scheduleGoalNag(goalId);
-  }, GOAL_NAG_INTERVAL_MS);
+function pushGoalNagDebugEvent(type, details = {}) {
+  state.goalNagDebugLog.unshift({ at: Date.now(), type, ...details });
+  if (state.goalNagDebugLog.length > GOAL_NAG_DEBUG_LOG_LIMIT) {
+    state.goalNagDebugLog.length = GOAL_NAG_DEBUG_LOG_LIMIT;
+  }
+  chrome.storage.session.set({ goalNagDebugLog: state.goalNagDebugLog });
 }
+
+function buildGoalNagDebugStatus() {
+  return {
+    now: Date.now(),
+    intervalMs: GOAL_NAG_INTERVAL_MS,
+    goalsLoaded: state.goalsLoaded,
+    activityDefinitionsLoaded: Object.keys(state.ACTIVITY_DEFS).length > 0,
+    notificationsEnabled: state.notificationsEnabled,
+    scheduledFor: { ...state.goalNagScheduledFor },
+    completedGoals: state.goals
+      .filter((goal) => goal.completed)
+      .map((goal) => ({
+        id: goal.id,
+        itemName: goal.itemName,
+        targetCount: goal.targetCount,
+        notifiedAt: state.goalNotifiedAt[goal.id] ?? null,
+        ...goalActivityMatch(goal),
+      })),
+    events: state.goalNagDebugLog,
+  };
+}
+
+function scheduleGoalNag(goalId, reason = 'repeat') {
+  const alarmName = `${GOAL_NAG_ALARM_PREFIX}${goalId}`;
+  const scheduledFor = Date.now() + GOAL_NAG_INTERVAL_MS;
+  state.goalNagScheduledFor[goalId] = scheduledFor;
+  pushGoalNagDebugEvent('alarm-scheduled', { goalId, reason, alarmName, scheduledFor });
+  try {
+    const result = chrome.alarms.create(alarmName, { when: scheduledFor });
+    result?.catch?.((error) => {
+      delete state.goalNagScheduledFor[goalId];
+      pushGoalNagDebugEvent('alarm-schedule-failed', {
+        goalId,
+        reason: error?.message ?? String(error),
+      });
+    });
+  } catch (error) {
+    delete state.goalNagScheduledFor[goalId];
+    pushGoalNagDebugEvent('alarm-schedule-failed', {
+      goalId,
+      reason: error?.message ?? String(error),
+    });
+  }
+}
+
+function ensureGoalNagScheduled(goalId) {
+  const alarmName = `${GOAL_NAG_ALARM_PREFIX}${goalId}`;
+  chrome.alarms.get(alarmName, (alarm) => {
+    if (!alarm) {
+      scheduleGoalNag(goalId, 'startup-recovery');
+      return;
+    }
+    state.goalNagScheduledFor[goalId] = alarm.scheduledTime ?? null;
+    pushGoalNagDebugEvent('alarm-restored', {
+      goalId,
+      alarmName,
+      scheduledFor: alarm.scheduledTime ?? null,
+    });
+  });
+}
+
+function cancelGoalNag(goalId, reason = 'cancelled', details = {}) {
+  const alarmName = `${GOAL_NAG_ALARM_PREFIX}${goalId}`;
+  const scheduledFor = state.goalNagScheduledFor[goalId] ?? null;
+  delete state.goalNagScheduledFor[goalId];
+  chrome.alarms.clear(alarmName);
+  pushGoalNagDebugEvent('alarm-cancelled', {
+    goalId,
+    reason,
+    alarmName,
+    scheduledFor,
+    ...details,
+  });
+}
+
+function cancelAllGoalNags(reason, details = {}) {
+  for (const goal of state.goals) {
+    if (goal.completed) cancelGoalNag(goal.id, reason, details);
+  }
+}
+
+async function handleGoalNagAlarm(alarm) {
+  if (!alarm?.name?.startsWith(GOAL_NAG_ALARM_PREFIX)) return;
+  const waitedForStartup = !state.goalsLoaded || Object.keys(state.ACTIVITY_DEFS).length === 0;
+  await goalNagStartupReady;
+
+  const goalId = alarm.name.slice(GOAL_NAG_ALARM_PREFIX.length);
+  delete state.goalNagScheduledFor[goalId];
+  const goal = state.goals.find((candidate) => candidate.id === goalId);
+  const match = goal ? goalActivityMatch(goal) : null;
+  pushGoalNagDebugEvent('alarm-fired', {
+    goalId,
+    trigger: alarm.debug ? 'manual-debug' : 'alarm',
+    waitedForStartup,
+    goalFound: Boolean(goal),
+    goalCompleted: goal?.completed === true,
+    notificationsEnabled: state.notificationsEnabled,
+    match,
+  });
+  if (!goal?.completed) {
+    pushGoalNagDebugEvent('reminders-stopped', {
+      goalId,
+      reason: goal ? 'goal-not-completed' : 'goal-not-found',
+    });
+    return;
+  }
+  if (!match.related) {
+    pushGoalNagDebugEvent('reminders-stopped', {
+      goalId,
+      reason: 'activity-not-related',
+      match,
+    });
+    return;
+  }
+
+  const result = await fireNotification(
+    'goal-nag',
+    'Microscape: Goal already reached!',
+    `${goal.itemName} is complete — switch activities or remove this goal.`
+  );
+  if (result.ok) sendChime('default');
+  pushGoalNagDebugEvent('notification-attempted', { goalId, result });
+  scheduleGoalNag(goalId, 'repeat');
+}
+
+chrome.alarms.onAlarm.addListener(handleGoalNagAlarm);
 
 function detectGoalReached() {
   const newlyCompleted = [];
@@ -443,6 +616,13 @@ function detectGoalReached() {
     if (state.goalNotifiedAt[goal.id]) continue;
     state.goalNotifiedAt[goal.id] = Date.now();
     newlyCompleted.push(goal.id);
+    pushGoalNagDebugEvent('goal-completed', {
+      goalId: goal.id,
+      itemName: goal.itemName,
+      count,
+      targetCount: goal.targetCount,
+      match: goalActivityMatch(goal),
+    });
     fireNotification(
       'goal',
       'Microscape: Goal reached!',
@@ -456,7 +636,7 @@ function detectGoalReached() {
       completedSet.has(g.id) ? { ...g, completed: true } : g
     );
     chrome.storage.local.set({ goals: state.goals });
-    for (const goalId of newlyCompleted) scheduleGoalNag(goalId);
+    for (const goalId of newlyCompleted) scheduleGoalNag(goalId, 'goal-completed');
   }
 }
 
@@ -686,8 +866,8 @@ function resetTestState() {
   state.goalsLoaded = true;
   state.goalPlans = [];
   state.goalNotifiedAt = {};
-  for (const timer of Object.values(state.goalNagTimers)) clearTimeout(timer);
-  state.goalNagTimers = {};
+  state.goalNagScheduledFor = {};
+  state.goalNagDebugLog = [];
   state.runoutNotifiedFor = null;
   state.skillNotifyTarget = null;
   state.notificationsEnabled = true;

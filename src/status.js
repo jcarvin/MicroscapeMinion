@@ -202,8 +202,12 @@ export function buildStatus() {
   const itemNames = new Map();
   const craftableItemIds = getCraftableItemIds(state.ACTIVITY_DEFS);
   const chanceDropItemIds = getChanceDropItemIds(state.ACTIVITY_DEFS);
+  const activityOutputItemIds = new Set();
   for (const def of Object.values(state.ACTIVITY_DEFS)) {
-    for (const id of Object.keys(def.inventoryChanges ?? {})) itemNames.set(id, id);
+    for (const [id, change] of Object.entries(def.inventoryChanges ?? {})) {
+      itemNames.set(id, id);
+      if (change > 0) activityOutputItemIds.add(id);
+    }
     for (const id of Object.keys(def.dropItems ?? {})) itemNames.set(id, id);
   }
   for (const id of Object.keys(me?.inventory ?? {})) itemNames.set(id, id);
@@ -214,6 +218,7 @@ export function buildStatus() {
 
   const goalItems = [...itemNames].map(([id, name]) => {
     const acquisitionSources = [
+      ...(activityOutputItemIds.has(id) ? ['activity'] : []),
       ...(craftableItemIds.has(id) ? ['craft'] : []),
       ...(chanceDropItemIds.has(id) ? ['drops'] : []),
     ];

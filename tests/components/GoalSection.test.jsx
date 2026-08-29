@@ -14,7 +14,14 @@ vi.mock('../../src/popup/utils/messages', () => ({
 const items = [
   { id: 'woodLog', name: 'woodLog', count: 50, relatedToActivity: true },
   { id: 'stone', name: 'stone', count: 5, relatedToActivity: false },
-  { id: 'ironOre', name: 'ironOre', count: 10, relatedToActivity: false },
+  {
+    id: 'ironOre',
+    name: 'ironOre',
+    count: 10,
+    relatedToActivity: false,
+    chanceDrop: true,
+    acquisitionSources: ['activity', 'drops'],
+  },
   { id: 'ironBar', name: 'ironBar', count: 0, relatedToActivity: false, craftable: true },
   { id: 'coalOre', name: 'coalOre', count: 0, relatedToActivity: false },
   { id: 'goldOre', name: 'goldOre', count: 0, relatedToActivity: false },
@@ -98,6 +105,25 @@ describe('GoalSection', () => {
     expect(screen.getByDisplayValue('Wood Log')).toBeInTheDocument();
   });
 
+  it('syncs a newly completed goal from background polling', () => {
+    const { rerender } = render(
+      <GoalSection goalItems={items} goalStatuses={[woodStatus]} />
+    );
+
+    rerender(
+      <GoalSection
+        goalItems={items}
+        goalStatuses={[{
+          ...woodStatus,
+          goal: { ...woodStatus.goal, completed: true },
+        }]}
+      />
+    );
+
+    expect(document.querySelector('[data-goal-id="wood-goal"]')).toHaveClass('is-completed');
+    expect(screen.getByRole('spinbutton', { name: 'Goal target' })).toHaveAttribute('readonly');
+  });
+
   it('starts with one draft row and adds another row with the plus button', async () => {
     const user = userEvent.setup();
     render(<GoalSection goalItems={items} goalStatuses={[]} />);
@@ -123,6 +149,24 @@ describe('GoalSection', () => {
         itemId: 'woodLog',
         targetCount: 100,
       }),
+    ]);
+  });
+
+  it('defaults items produced by activities or drops to Any source', async () => {
+    const user = userEvent.setup();
+    render(<GoalSection goalItems={items} goalStatuses={[]} />);
+
+    await user.click(screen.getByPlaceholderText('Select item'));
+    await user.click(screen.getByText('Iron Ore'));
+    await user.type(screen.getByRole('spinbutton', { name: 'Goal target' }), '20');
+    await user.tab();
+
+    expect(screen.getByRole('button', { name: /^Any source\./ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(setGoals).toHaveBeenLastCalledWith([
+      expect.objectContaining({ itemId: 'ironOre', targetCount: 20, sourceMode: 'any' }),
     ]);
   });
 

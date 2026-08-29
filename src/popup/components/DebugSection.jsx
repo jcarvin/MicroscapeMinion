@@ -6,9 +6,13 @@ export default function DebugSection({
   tickLog,
   etaDebugLog,
   etaDebugLogVersion,
+  goalNagDebug,
+  onCheckGoalNags,
 }) {
   const [copyLabel, setCopyLabel] = useState('Copy');
   const [etaCopyLabel, setEtaCopyLabel] = useState('Copy');
+  const [nagCopyLabel, setNagCopyLabel] = useState('Copy');
+  const [nagCheckLabel, setNagCheckLabel] = useState('Check now');
 
   const tickLogText = tickLog?.length
     ? tickLog.map(formatTickEntry).join('\n')
@@ -49,8 +53,27 @@ export default function DebugSection({
     }
   }
 
+  async function handleNagCopy() {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(goalNagDebug ?? null, null, 2));
+      setNagCopyLabel('Copied!');
+      setTimeout(() => setNagCopyLabel('Copy'), 1500);
+    } catch {
+      setNagCopyLabel('Error');
+      setTimeout(() => setNagCopyLabel('Copy'), 1500);
+    }
+  }
+
+  async function handleNagCheck() {
+    setNagCheckLabel('Checking…');
+    const result = await onCheckGoalNags?.();
+    setNagCheckLabel(result?.ok ? `Checked ${result.checked}` : 'Check failed');
+    setTimeout(() => setNagCheckLabel('Check now'), 2000);
+  }
+
   const btnClass = `copy-log-btn${copyLabel === 'Copied!' ? ' copied' : ''}`;
   const etaBtnClass = `copy-log-btn${etaCopyLabel === 'Copied!' ? ' copied' : ''}`;
+  const nagBtnClass = `copy-log-btn${nagCopyLabel === 'Copied!' ? ' copied' : ''}`;
 
   return (
     <>
@@ -78,6 +101,21 @@ export default function DebugSection({
           <button className={etaBtnClass} onClick={handleEtaCopy}>{etaCopyLabel}</button>
         </div>
         <pre id="eta-debug-log-pre">{etaDebugLogText}</pre>
+      </details>
+      <details className="debug-details">
+        <summary>Debug — goal reminders</summary>
+        <div className="tick-log-header">
+          <span className="tick-log-hint">
+            Current completed-goal matching, scheduled alarms, and reminder lifecycle events
+          </span>
+          <button className="copy-log-btn" onClick={handleNagCheck}>{nagCheckLabel}</button>
+          <button className={nagBtnClass} onClick={handleNagCopy}>{nagCopyLabel}</button>
+        </div>
+        <pre id="goal-nag-debug-pre">
+          {goalNagDebug != null
+            ? JSON.stringify(goalNagDebug, null, 2)
+            : '(goal reminder debug unavailable — reload the extension)'}
+        </pre>
       </details>
     </>
   );
