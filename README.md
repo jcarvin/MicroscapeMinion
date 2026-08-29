@@ -107,6 +107,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 - Fix reminder eligibility for items available from multiple sources, such as Iron Ore completed through mining even when drops are also available.
 - Add debug tools to send a test notification, immediately check completed-goal reminders, and inspect or copy reminder diagnostics.
 
+### v0.1.16
+
+- When a goal is reached but the player is still on the same activity, fire a repeat notification every 5 minutes as a reminder. The nag stops when the goal is removed or the player switches to an unrelated activity.
+
 ### v0.1.15
 
 - Add a subtle "Support the dev" link in the bottom-right corner of the popup that opens the ko-fi page in a new tab.
