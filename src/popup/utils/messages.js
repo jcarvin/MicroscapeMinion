@@ -15,3 +15,4 @@ export const setConsumableNotify     = (itemId)  => send({ type: 'SET_CONSUMABLE
 export const clearConsumableNotify   = (itemId)  => send({ type: 'CLEAR_CONSUMABLE_NOTIFY', itemId });
 export const setNotificationsEnabled = (enabled) => send({ type: 'SET_NOTIFICATIONS_ENABLED', enabled });
 export const sendTestNotification = () => send({ type: 'TEST_NOTIFICATION' });
+export const checkGoalNagsNow = () => send({ type: 'DEBUG_CHECK_GOAL_NAGS' });

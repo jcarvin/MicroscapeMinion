@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { getStatus, sendTestNotification, setNotificationsEnabled } from './utils/messages';
+import {
+  checkGoalNagsNow,
+  getStatus,
+  sendTestNotification,
+  setNotificationsEnabled,
+} from './utils/messages';
 import Header from './components/Header';
 import StatusSection from './components/StatusSection';
 import GoalSection from './components/GoalSection';
@@ -75,6 +80,8 @@ export default function App() {
             tickLog={status?.tickLog ?? []}
             etaDebugLog={status?.etaDebugLog}
             etaDebugLogVersion={status?.etaDebugLogVersion}
+            goalNagDebug={status?.goalNagDebug}
+            onCheckGoalNags={checkGoalNagsNow}
           />
         )}
       </div>

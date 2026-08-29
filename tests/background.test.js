@@ -78,7 +78,7 @@ function sendServerUpdate(delta) {
 
 function fireAlarm(name) {
   const listener = chrome.alarms.onAlarm.addListener.mock.calls[0][0];
-  listener({ name });
+  return listener({ name });
 }
 
 describe('background activity definitions', () => {
@@ -229,7 +229,7 @@ describe('background activity definitions', () => {
       .toMatchObject({
         craftable: true,
         chanceDrop: true,
-        acquisitionSources: ['craft', 'drops'],
+        acquisitionSources: ['activity', 'craft', 'drops'],
       });
     expect(__test.buildStatus().goalStatuses[0].planning).toMatchObject({
       skill: 'mining',
@@ -728,7 +728,7 @@ describe('background activity definitions', () => {
     chrome.notifications.create.mockClear();
     chrome.alarms.create.mockClear();
     vi.setSystemTime(301_000);
-    fireAlarm('goal-nag:ore');
+    await fireAlarm('goal-nag:ore');
 
     expect(chrome.notifications.create).toHaveBeenCalledWith(
       expect.stringMatching(/^mm-goal-nag-/),
@@ -738,6 +738,118 @@ describe('background activity definitions', () => {
       })
     );
     expect(chrome.alarms.create).toHaveBeenCalledWith('goal-nag:ore', { when: 601_000 });
+
+    const statusResponse = sendRuntimeMessage({ type: 'GET_STATUS' });
+    const debug = statusResponse.mock.calls[0][0].goalNagDebug;
+    expect(debug).toMatchObject({
+      intervalMs: 300_000,
+      completedGoals: [{
+        id: 'ore',
+        effectiveActivityId: 'mine-iron',
+        related: true,
+      }],
+      scheduledFor: { ore: 601_000 },
+    });
+    expect(debug.events.map(({ type }) => type)).toEqual(expect.arrayContaining([
+      'goal-completed',
+      'alarm-scheduled',
+      'alarm-fired',
+      'notification-attempted',
+    ]));
+
+    const checkResponse = sendRuntimeMessage({ type: 'DEBUG_CHECK_GOAL_NAGS' });
+    await vi.waitFor(() => expect(checkResponse).toHaveBeenCalledWith({ ok: true, checked: 1 }));
+    const checkedStatus = sendRuntimeMessage({ type: 'GET_STATUS' }).mock.calls[0][0];
+    expect(checkedStatus.goalNagDebug.events).toContainEqual(
+      expect.objectContaining({ type: 'alarm-fired', trigger: 'manual-debug' })
+    );
+  });
+
+  it('reminds for the activity that completed a goal even when its preferred source is drops', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'mine-iron': { inventoryChanges: { ironOre: 1 } },
+        'fight-golem': { inventoryChanges: {}, dropItems: { ironOre: 1 } },
+      },
+      state: {
+        me: {
+          activity: { skill: 'mining', activity: 'mine-iron', remaining: 1 },
+          inventory: { ironOre: 0 },
+          lootBag: {},
+        },
+      },
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOALS',
+      goals: [{
+        id: 'ore',
+        itemName: 'Iron Ore',
+        itemId: 'ironOre',
+        targetCount: 1,
+        sourceMode: 'drops',
+      }],
+    });
+    sendServerUpdate({ me: { inventory: { ironOre: [0, 1] } } });
+    chrome.notifications.create.mockClear();
+
+    await fireAlarm('goal-nag:ore');
+
+    expect(chrome.notifications.create).toHaveBeenCalledWith(
+      expect.stringMatching(/^mm-goal-nag-/),
+      expect.objectContaining({ message: 'Iron Ore is complete — switch activities or remove this goal.' })
+    );
+    const status = sendRuntimeMessage({ type: 'GET_STATUS' }).mock.calls[0][0];
+    expect(status.goalNagDebug.completedGoals[0]).toMatchObject({
+      sourceMode: 'drops',
+      producedByActivity: true,
+      droppedByActivity: false,
+      related: true,
+    });
+    expect(status.goalItems.find(({ id }) => id === 'ironOre').acquisitionSources)
+      .toEqual(expect.arrayContaining(['activity', 'drops']));
+  });
+
+  it('waits for startup data when an alarm wakes the background worker', async () => {
+    vi.resetModules();
+    const miningAct = { skill: 'mining', activity: 'mine-iron', remaining: 1 };
+    installChromeMock({
+      localData: {
+        goals: [{
+          id: 'ore',
+          itemName: 'Iron Ore',
+          itemId: 'ironOre',
+          targetCount: 1,
+          completed: true,
+        }],
+      },
+      sessionData: { lastWorkActivity: miningAct },
+    });
+    let resolveSeed;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => {
+      resolveSeed = () => resolve({
+        json: () => Promise.resolve({
+          'mine-iron': { inventoryChanges: { ironOre: 1 } },
+        }),
+      });
+    })));
+    await import('../src/background.js');
+    chrome.notifications.create.mockClear();
+
+    const alarmResult = fireAlarm('goal-nag:ore');
+    expect(chrome.notifications.create).not.toHaveBeenCalled();
+    resolveSeed();
+    await alarmResult;
+
+    expect(chrome.notifications.create).toHaveBeenCalledWith(
+      expect.stringMatching(/^mm-goal-nag-/),
+      expect.objectContaining({ message: 'Iron Ore is complete — switch activities or remove this goal.' })
+    );
+    const statusResponse = sendRuntimeMessage({ type: 'GET_STATUS' });
+    expect(statusResponse.mock.calls[0][0].goalNagDebug.events).toContainEqual(
+      expect.objectContaining({ type: 'alarm-fired', waitedForStartup: true })
+    );
   });
 
   it('stops reminding after the completed goal is removed', async () => {
@@ -766,7 +878,7 @@ describe('background activity definitions', () => {
 
     expect(chrome.alarms.clear).toHaveBeenCalledWith('goal-nag:ore');
     chrome.notifications.create.mockClear();
-    fireAlarm('goal-nag:ore');
+    await fireAlarm('goal-nag:ore');
     expect(chrome.notifications.create).not.toHaveBeenCalled();
   });
 
@@ -803,7 +915,7 @@ describe('background activity definitions', () => {
     expect(chrome.alarms.clear).toHaveBeenCalledWith('goal-nag:ore');
     chrome.notifications.create.mockClear();
     chrome.alarms.create.mockClear();
-    fireAlarm('goal-nag:ore');
+    await fireAlarm('goal-nag:ore');
 
     expect(chrome.notifications.create).not.toHaveBeenCalled();
     expect(chrome.alarms.create).not.toHaveBeenCalled();
