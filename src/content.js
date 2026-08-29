@@ -30,20 +30,24 @@ function playChime(variant) {
       ? [659.25, 523.25]  // E5 → C5 (descending — warning)
       : [523.25, 659.25]; // C5 → E5 (ascending — positive)
 
-    let t = ctx.currentTime + 0.05;
-    for (const freq of notes) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.25, t);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
-      osc.start(t);
-      osc.stop(t + 0.65);
-      t += 0.18;
-    }
+    // AudioContext starts suspended when created outside a user gesture; resume
+    // before scheduling so currentTime advances and notes actually play.
+    ctx.resume().then(() => {
+      let t = ctx.currentTime + 0.05;
+      for (const freq of notes) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.25, t);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+        osc.start(t);
+        osc.stop(t + 0.65);
+        t += 0.18;
+      }
+    });
   } catch {
     // AudioContext unavailable — fail silently
   }
