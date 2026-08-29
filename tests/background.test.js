@@ -35,7 +35,7 @@ function installChromeMock({ cachedDefs = null, localData = {}, storageSet = vi.
         set: vi.fn(),
       },
     },
-    notifications: { create: vi.fn() },
+    notifications: { create: vi.fn((id) => Promise.resolve(id)) },
     tabs: { sendMessage: vi.fn(() => Promise.resolve()) },
   };
 }
@@ -686,6 +686,37 @@ describe('background activity definitions', () => {
 
     sendServerUpdate({ me: { inventory: { ironOre: [1, 2] } } });
     expect(chrome.notifications.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends a test notification through the message router', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+
+    const respond = sendRuntimeMessage({ type: 'TEST_NOTIFICATION' });
+
+    expect(chrome.notifications.create).toHaveBeenCalledWith(
+      expect.stringMatching(/^mm-test-/),
+      expect.objectContaining({
+        title: 'Microscape Minion',
+        message: 'Test notification received!',
+      })
+    );
+    await vi.waitFor(() => expect(respond).toHaveBeenCalledWith({
+      ok: true,
+      notificationId: expect.stringMatching(/^mm-test-/),
+    }));
+  });
+
+  it('does not send a test notification while notifications are muted', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+    sendRuntimeMessage({ type: 'SET_NOTIFICATIONS_ENABLED', enabled: false });
+    chrome.notifications.create.mockClear();
+
+    const respond = sendRuntimeMessage({ type: 'TEST_NOTIFICATION' });
+
+    expect(chrome.notifications.create).not.toHaveBeenCalled();
+    expect(respond).toHaveBeenCalledWith({ ok: false, reason: 'disabled' });
   });
 
   it('uses warmed observed accumulation rate for material goal ETA', async () => {

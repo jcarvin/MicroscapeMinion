@@ -1,14 +1,19 @@
 import { state } from './state.js';
 
-export function fireNotification(id, title, message) {
-  if (!state.notificationsEnabled) return;
-  chrome.notifications.create(`mm-${id}-${Date.now()}`, {
-    type: 'basic',
-    iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
-    title,
-    message,
-    priority: 2,
-  });
+export async function fireNotification(id, title, message) {
+  if (!state.notificationsEnabled) return { ok: false, reason: 'disabled' };
+  try {
+    const notificationId = await chrome.notifications.create(`mm-${id}-${Date.now()}`, {
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
+      title,
+      message,
+      priority: 2,
+    });
+    return { ok: true, notificationId };
+  } catch (error) {
+    return { ok: false, reason: error?.message ?? 'notification-create-failed' };
+  }
 }
 
 export function sendChime(variant) {

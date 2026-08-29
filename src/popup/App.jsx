@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getStatus, setNotificationsEnabled } from './utils/messages';
+import { getStatus, sendTestNotification, setNotificationsEnabled } from './utils/messages';
 import Header from './components/Header';
 import StatusSection from './components/StatusSection';
 import GoalSection from './components/GoalSection';
@@ -36,6 +36,8 @@ export default function App() {
         connected={status?.connected}
         idle={status?.idle}
         notificationsEnabled={status?.notificationsEnabled ?? true}
+        showDebug={showDebug}
+        onTestNotification={sendTestNotification}
         onToggleNotifications={() => {
           const next = !(status?.notificationsEnabled ?? true);
           setNotificationsEnabled(next);

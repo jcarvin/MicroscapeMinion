@@ -270,6 +270,19 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       chrome.storage.local.set({ notificationsEnabled: state.notificationsEnabled });
       respond({ ok: true });
       break;
+
+    case 'TEST_NOTIFICATION': {
+      if (!state.notificationsEnabled) {
+        respond({ ok: false, reason: 'disabled' });
+        break;
+      }
+      fireNotification('test', 'Microscape Minion', 'Test notification received!')
+        .then((result) => {
+          if (result.ok) sendChime('default');
+          respond(result);
+        });
+      break;
+    }
   }
 
   return true;

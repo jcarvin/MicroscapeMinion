@@ -14,3 +14,4 @@ export const clearSkillNotify = ()           => send({ type: 'CLEAR_SKILL_NOTIFY
 export const setConsumableNotify     = (itemId)  => send({ type: 'SET_CONSUMABLE_NOTIFY', itemId });
 export const clearConsumableNotify   = (itemId)  => send({ type: 'CLEAR_CONSUMABLE_NOTIFY', itemId });
 export const setNotificationsEnabled = (enabled) => send({ type: 'SET_NOTIFICATIONS_ENABLED', enabled });
+export const sendTestNotification = () => send({ type: 'TEST_NOTIFICATION' });
