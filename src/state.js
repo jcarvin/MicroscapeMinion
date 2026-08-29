@@ -48,6 +48,7 @@ export const state = {
   goalsLoaded: false,
   goalPlans: [],
   goalNotifiedAt: {},     // goalId -> timestamp
+  goalNagTimers: {},      // goalId -> setTimeout handle
   runoutNotifiedFor: null,
   skillNotifyTarget: null,
 
