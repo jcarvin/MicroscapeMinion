@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.16
+
+- When a goal is reached but the player is still on the same activity, fire a repeat notification every 5 minutes as a reminder. The nag stops when the goal is removed or the player switches to an unrelated activity.
+
 ### v0.1.15
 
 - Add a subtle "Support the dev" link in the bottom-right corner of the popup that opens the ko-fi page in a new tab.
