@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Microscape Minion",
-  "version": "0.1.15",
+  "version": "0.1.17",
   "description": "Idle detection, goal tracking, and material-runout alerts for Microscape. Read-only — never sends input to the game.",
 
   "permissions": ["notifications", "storage", "alarms"],

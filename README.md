@@ -101,6 +101,12 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.17
+
+- Remind you every five minutes when a completed item goal is still associated with your current activity, until you switch activities or remove the goal.
+- Fix reminder eligibility for items available from multiple sources, such as Iron Ore completed through mining even when drops are also available.
+- Add debug tools to send a test notification, immediately check completed-goal reminders, and inspect or copy reminder diagnostics.
+
 ### v0.1.15
 
 - Add a subtle "Support the dev" link in the bottom-right corner of the popup that opens the ko-fi page in a new tab.
