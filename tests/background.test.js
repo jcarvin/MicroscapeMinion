@@ -36,6 +36,12 @@ function installChromeMock({ cachedDefs = null, localData = {}, storageSet = vi.
       },
     },
     notifications: { create: vi.fn((id) => Promise.resolve(id)) },
+    alarms: {
+      create: vi.fn(),
+      get: vi.fn((_name, callback) => callback(null)),
+      clear: vi.fn(),
+      onAlarm: { addListener: vi.fn() },
+    },
     tabs: { sendMessage: vi.fn(() => Promise.resolve()) },
   };
 }
@@ -68,6 +74,11 @@ function sendServerUpdate(delta) {
     direction: 'server',
     frame: { event: 'update', args: [delta] },
   });
+}
+
+function fireAlarm(name) {
+  const listener = chrome.alarms.onAlarm.addListener.mock.calls[0][0];
+  listener({ name });
 }
 
 describe('background activity definitions', () => {
@@ -686,6 +697,116 @@ describe('background activity definitions', () => {
 
     sendServerUpdate({ me: { inventory: { ironOre: [1, 2] } } });
     expect(chrome.notifications.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('reminds every five minutes while a completed goal activity continues', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'mine-iron': { inventoryChanges: { ironOre: 1 } },
+      },
+      state: {
+        me: {
+          activity: { skill: 'mining', activity: 'mine-iron', remaining: 1 },
+          inventory: { ironOre: 0 },
+          lootBag: {},
+        },
+      },
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOALS',
+      goals: [{ id: 'ore', itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 1 }],
+    });
+
+    sendServerUpdate({ me: { inventory: { ironOre: [0, 1] } } });
+
+    expect(chrome.alarms.create).toHaveBeenCalledWith('goal-nag:ore', { when: 301_000 });
+
+    chrome.notifications.create.mockClear();
+    chrome.alarms.create.mockClear();
+    vi.setSystemTime(301_000);
+    fireAlarm('goal-nag:ore');
+
+    expect(chrome.notifications.create).toHaveBeenCalledWith(
+      expect.stringMatching(/^mm-goal-nag-/),
+      expect.objectContaining({
+        title: 'Microscape: Goal already reached!',
+        message: 'Iron Ore is complete — switch activities or remove this goal.',
+      })
+    );
+    expect(chrome.alarms.create).toHaveBeenCalledWith('goal-nag:ore', { when: 601_000 });
+  });
+
+  it('stops reminding after the completed goal is removed', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'mine-iron': { inventoryChanges: { ironOre: 1 } },
+      },
+      state: {
+        me: {
+          activity: { skill: 'mining', activity: 'mine-iron', remaining: 1 },
+          inventory: { ironOre: 0 },
+          lootBag: {},
+        },
+      },
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOALS',
+      goals: [{ id: 'ore', itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 1 }],
+    });
+    sendServerUpdate({ me: { inventory: { ironOre: [0, 1] } } });
+
+    chrome.alarms.clear.mockClear();
+    sendRuntimeMessage({ type: 'SET_GOALS', goals: [] });
+
+    expect(chrome.alarms.clear).toHaveBeenCalledWith('goal-nag:ore');
+    chrome.notifications.create.mockClear();
+    fireAlarm('goal-nag:ore');
+    expect(chrome.notifications.create).not.toHaveBeenCalled();
+  });
+
+  it('stops reminding after the user changes to an unrelated activity', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'mine-iron': { inventoryChanges: { ironOre: 1 } },
+        'mine-coal': { inventoryChanges: { coal: 1 } },
+      },
+      state: {
+        me: {
+          activity: { skill: 'mining', activity: 'mine-iron', remaining: 1 },
+          inventory: { ironOre: 0, coal: 0 },
+          lootBag: {},
+        },
+      },
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOALS',
+      goals: [{ id: 'ore', itemName: 'Iron Ore', itemId: 'ironOre', targetCount: 1 }],
+    });
+    sendServerUpdate({ me: { inventory: { ironOre: [0, 1] } } });
+    sendServerUpdate({
+      me: {
+        activity: [
+          { skill: 'mining', activity: 'mine-iron', remaining: 1 },
+          { skill: 'mining', activity: 'mine-coal', remaining: 1 },
+        ],
+      },
+    });
+
+    expect(chrome.alarms.clear).toHaveBeenCalledWith('goal-nag:ore');
+    chrome.notifications.create.mockClear();
+    chrome.alarms.create.mockClear();
+    fireAlarm('goal-nag:ore');
+
+    expect(chrome.notifications.create).not.toHaveBeenCalled();
+    expect(chrome.alarms.create).not.toHaveBeenCalled();
   });
 
   it('sends a test notification through the message router', async () => {
