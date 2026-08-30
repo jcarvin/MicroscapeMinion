@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import styled from 'styled-components';
 import { formatItemId } from '../utils/format';
+import useClickOutside from '../hooks/useClickOutside';
 
 const ComboCount = styled.span`
   font-size: 11px;
@@ -59,18 +60,16 @@ export const ComboWrap = styled.div`
   }
 `;
 
+function itemName(item) {
+  return item.name && item.name !== item.id ? item.name : formatItemId(item.id);
+}
+
 export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, inputRef }) {
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState('');
   const wrapRef = useRef(null);
 
-  useEffect(() => {
-    function handleMouseDown(e) {
-      if (!wrapRef.current?.contains(e.target)) setIsOpen(false);
-    }
-    document.addEventListener('mousedown', handleMouseDown);
-    return () => document.removeEventListener('mousedown', handleMouseDown);
-  }, []);
+  useClickOutside(wrapRef, () => setIsOpen(false));
 
   function handleFocus() {
     if (items.length > 0) { setFilter(''); setIsOpen(true); }
@@ -148,8 +147,4 @@ export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, i
       )}
     </ComboWrap>
   );
-}
-
-function itemName(item) {
-  return item.name && item.name !== item.id ? item.name : formatItemId(item.id);
 }

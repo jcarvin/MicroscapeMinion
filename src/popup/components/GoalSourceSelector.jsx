@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId } from 'react';
 import styled from 'styled-components';
+import useDelayedTooltip from '../hooks/useDelayedTooltip';
 
 const TOOLTIP_DELAY_MS = 150;
 
@@ -93,29 +94,7 @@ export const GoalSourceWrap = styled.div`
 
 export default function GoalSourceSelector({ value, onChange, options = GOAL_SOURCE_OPTIONS, delayMs = TOOLTIP_DELAY_MS }) {
   const tooltipId = useId();
-  const showTimerRef = useRef(null);
-  const [helpMode, setHelpMode] = useState(null);
-
-  function clearShowTimer() {
-    if (showTimerRef.current === null) return;
-    clearTimeout(showTimerRef.current);
-    showTimerRef.current = null;
-  }
-
-  function showHelp(mode) {
-    clearShowTimer();
-    showTimerRef.current = setTimeout(() => {
-      showTimerRef.current = null;
-      setHelpMode(mode);
-    }, delayMs);
-  }
-
-  function hideHelp() {
-    clearShowTimer();
-    setHelpMode(null);
-  }
-
-  useEffect(() => clearShowTimer, []);
+  const { tooltip: helpMode, show: showHelp, hide: hideHelp } = useDelayedTooltip(delayMs);
 
   const activeHelp = options.find(({ id }) => id === helpMode) ?? null;
 

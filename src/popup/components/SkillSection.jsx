@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 import { formatSkillName, formatNumber } from '../utils/format';
 import { setSkillNotify, clearSkillNotify } from '../utils/messages';
@@ -6,6 +6,7 @@ import { Card, CardLabel, EtaGroup } from './Shared';
 import EtaDisplay from './EtaDisplay';
 import EtaTooltip from './EtaTooltip';
 import SkillNotifyToggleSection from './SkillNotifyToggleSection';
+import useChromeStorageState from '../hooks/useChromeStorageState';
 
 const SKILL_LEVEL_SELECTIONS_KEY = 'skillLevelSelections';
 
@@ -85,16 +86,7 @@ function resolveOffset(xs, maxOffset, savedTargetLevel, currentOffset) {
 
 export default function SkillSection({ skillLevelStatus, skillNotifyTarget, onSelectedEtaChange }) {
   const [selectedLevelOffset, setSelectedLevelOffset] = useState(1);
-  const [savedSelections, setSavedSelections] = useState({});
-
-  useEffect(() => {
-    chrome.storage.local.get([SKILL_LEVEL_SELECTIONS_KEY], (res) => {
-      const saved = res[SKILL_LEVEL_SELECTIONS_KEY];
-      if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
-        setSavedSelections(saved);
-      }
-    });
-  }, []);
+  const [savedSelections, setSavedSelections] = useChromeStorageState(SKILL_LEVEL_SELECTIONS_KEY, {});
 
   const xs   = skillLevelStatus;
   const etas = xs?.etas ?? [];
@@ -124,9 +116,7 @@ export default function SkillSection({ skillLevelStatus, skillNotifyTarget, onSe
     setSelectedLevelOffset(newOffset);
     const newEta = xs?.etas?.[newOffset - 1];
     if (xs?.skill && newEta?.targetLevel) {
-      const updated = { ...savedSelections, [xs.skill]: newEta.targetLevel };
-      setSavedSelections(updated);
-      chrome.storage.local.set({ [SKILL_LEVEL_SELECTIONS_KEY]: updated });
+      setSavedSelections({ ...savedSelections, [xs.skill]: newEta.targetLevel });
     }
   }
 

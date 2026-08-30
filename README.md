@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.20
+
+- Internal: decompose large components (GoalSection, DebugSection) into focused sub-components with co-located styles, and extract shared logic into reusable hooks (useClickOutside, useTransientLabel, useDelayedTooltip, useNthClick, usePolledStatus, useChromeStorageState, useDragReorder). No user-facing changes.
+
 ### v0.1.19
 
 - Internal: migrate popup styles from a monolithic CSS file to styled-components, co-locating styles with each component.
