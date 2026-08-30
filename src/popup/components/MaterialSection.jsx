@@ -1,6 +1,20 @@
+import styled from 'styled-components';
 import { formatItemId, formatNumber } from '../utils/format';
+import { Card, CardLabel, EtaGroup } from './Shared';
 import EtaDisplay from './EtaDisplay';
 import EtaTooltip from './EtaTooltip';
+
+const RunoutRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+`;
+
+const RunoutLevelGoal = styled.div`
+  font-size: 11px;
+  color: ${({ theme }) => theme.muted};
+  margin-top: 4px;
+`;
 
 export default function MaterialSection({ runoutStatus, selectedSkillEta, xpPerCycle }) {
   if (!runoutStatus) return null;
@@ -24,18 +38,18 @@ export default function MaterialSection({ runoutStatus, selectedSkillEta, xpPerC
   }
 
   return (
-    <section className="card">
-      <div className="card-label">Material Runout</div>
-      <div className="runout-row">
+    <Card>
+      <CardLabel>Material Runout</CardLabel>
+      <RunoutRow>
         <span>{label}{cycles}</span>
-        <span className="eta-group">
+        <EtaGroup>
           <EtaDisplay etaMs={etaMs} doneLabel="Out now" warmupRemainingMs={rs.warmupRemainingMs ?? 0} />
           <EtaTooltip />
-        </span>
-      </div>
+        </EtaGroup>
+      </RunoutRow>
       {levelGoalLine && (
-        <div className="runout-level-goal">{levelGoalLine}</div>
+        <RunoutLevelGoal>{levelGoalLine}</RunoutLevelGoal>
       )}
-    </section>
+    </Card>
   );
 }

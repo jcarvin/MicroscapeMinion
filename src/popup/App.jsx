@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import styled from 'styled-components';
 import {
   checkGoalNagsNow,
   getStatus,
@@ -12,6 +13,31 @@ import MaterialSection from './components/MaterialSection';
 import CombatConsumableSection from './components/CombatConsumableSection';
 import SkillSection from './components/SkillSection';
 import DebugSection from './components/DebugSection';
+
+const ScrollContent = styled.div`
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+`;
+
+const SupportFooter = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 12px 8px;
+  flex-shrink: 0;
+`;
+
+const SupportLink = styled.a`
+  font-size: 10px;
+  color: ${({ theme }) => theme.muted};
+  text-decoration: none;
+  opacity: 0.55;
+  transition: opacity 0.15s, color 0.15s;
+  &:hover {
+    color: ${({ theme }) => theme.text};
+    opacity: 1;
+  }
+`;
 
 export default function App() {
   const [status, setStatus] = useState(null);
@@ -49,7 +75,7 @@ export default function App() {
         }}
         onToggleDebug={() => setShowDebug(v => !v)}
       />
-      <div className="scroll-content">
+      <ScrollContent>
         <StatusSection
           connected={status?.connected}
           idle={status?.idle}
@@ -84,17 +110,16 @@ export default function App() {
             onCheckGoalNags={checkGoalNagsNow}
           />
         )}
-      </div>
-      <div className="support-footer">
-        <a
-          className="support-link"
+      </ScrollContent>
+      <SupportFooter>
+        <SupportLink
           href="https://ko-fi.com/facehair4000"
           target="_blank"
           rel="noopener noreferrer"
         >
           Support the dev ☕
-        </a>
-      </div>
+        </SupportLink>
+      </SupportFooter>
     </>
   );
 }

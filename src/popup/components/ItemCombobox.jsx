@@ -1,5 +1,63 @@
 import { useState, useEffect, useRef } from 'react';
+import styled from 'styled-components';
 import { formatItemId } from '../utils/format';
+
+const ComboCount = styled.span`
+  font-size: 11px;
+  color: ${({ theme }) => theme.muted};
+  flex-shrink: 0;
+`;
+
+const ComboOption = styled.li`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 9px;
+  cursor: pointer;
+  font-size: 12px;
+  gap: 8px;
+  background: ${({ $selected }) => $selected ? 'rgba(91,141,238,.2)' : 'transparent'};
+
+  &:hover {
+    background: ${({ theme }) => theme.accent};
+    color: #fff;
+  }
+  &:hover ${ComboCount} { color: rgba(255,255,255,.7); }
+`;
+
+const ComboOptions = styled.ul`
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  min-width: 180px;
+  background: ${({ theme }) => theme.surface};
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: ${({ theme }) => theme.radius};
+  list-style: none;
+  margin: 0;
+  padding: 3px 0;
+  z-index: 50;
+  max-height: 140px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,.4);
+`;
+
+const ComboEmpty = styled.li`
+  padding: 5px 9px;
+  font-size: 12px;
+  color: ${({ theme }) => theme.muted};
+  font-style: italic;
+`;
+
+export const ComboWrap = styled.div`
+  position: relative;
+  min-width: 0;
+
+  input {
+    width: 100%;
+    cursor: pointer;
+  }
+`;
 
 export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, inputRef }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -39,7 +97,7 @@ export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, i
   }
 
   function handleOptionMouseDown(e, itemId) {
-    e.preventDefault(); // keep focus on input so blur doesn't fire first
+    e.preventDefault();
     onSelect(itemId);
     setIsOpen(false);
   }
@@ -55,7 +113,7 @@ export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, i
     : items;
 
   return (
-    <div className="combobox" ref={wrapRef}>
+    <ComboWrap ref={wrapRef}>
       <input
         ref={inputRef}
         type="text"
@@ -69,26 +127,26 @@ export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, i
         onKeyDown={handleKeyDown}
       />
       {isOpen && (
-        <ul className="combo-options">
+        <ComboOptions data-testid="combo-options">
           {filtered.length === 0 ? (
-            <li className="combo-empty">
+            <ComboEmpty>
               {items.length === 0 ? 'No items available' : 'No match'}
-            </li>
+            </ComboEmpty>
           ) : (
             filtered.map(item => (
-              <li
+              <ComboOption
                 key={item.id}
-                className={`combo-option${item.id === selectedId ? ' is-selected' : ''}`}
+                $selected={item.id === selectedId}
                 onMouseDown={e => handleOptionMouseDown(e, item.id)}
               >
-                <span className="combo-name">{itemName(item)}</span>
-                <span className="combo-count">{item.count}</span>
-              </li>
+                <span>{itemName(item)}</span>
+                <ComboCount>{item.count}</ComboCount>
+              </ComboOption>
             ))
           )}
-        </ul>
+        </ComboOptions>
       )}
-    </div>
+    </ComboWrap>
   );
 }
 
