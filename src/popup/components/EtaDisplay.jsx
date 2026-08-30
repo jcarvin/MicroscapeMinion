@@ -1,5 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
+import styled from 'styled-components';
 import { formatDuration } from '../utils/format';
+import { EtaLabel, EtaStack } from './Shared';
+
+const CalibratingNote = styled.span`
+  color: ${({ theme }) => theme.muted};
+  font-size: 10px;
+  opacity: 0.72;
+  white-space: nowrap;
+`;
 
 export default function EtaDisplay({
   etaMs,
@@ -13,7 +22,6 @@ export default function EtaDisplay({
   const [displayMs, setDisplayMs] = useState(etaMs);
   const [displayWarmupMs, setDisplayWarmupMs] = useState(warmupRemainingMs);
 
-  // Re-anchor whenever the upstream etaMs value changes
   useEffect(() => {
     if (etaMs != null && etaMs > 0) {
       anchorRef.current = { etaMs, at: Date.now() };
@@ -32,7 +40,6 @@ export default function EtaDisplay({
     setDisplayWarmupMs(warmupRemainingMs ?? 0);
   }, [warmupRemainingMs]);
 
-  // Tick every second while there's an active anchor
   useEffect(() => {
     if ((etaMs == null || etaMs <= 0) && (!warmupRemainingMs || warmupRemainingMs <= 0)) return;
     const id = setInterval(() => {
@@ -52,12 +59,12 @@ export default function EtaDisplay({
     return () => clearInterval(id);
   }, [etaMs, warmupRemainingMs]);
 
-  if (displayMs == null) return <span className="eta-label">ETA calibrating…</span>;
+  if (displayMs == null) return <EtaLabel>ETA calibrating…</EtaLabel>;
   if (displayMs <= 0) {
     return (
-      <span className="eta-label">
+      <EtaLabel>
         {complete === false ? 'ETA <1s' : doneLabel}
-      </span>
+      </EtaLabel>
     );
   }
 
@@ -66,11 +73,11 @@ export default function EtaDisplay({
     : '';
 
   return (
-    <span className="eta-stack">
-      <span className="eta-label">ETA {formatDuration(displayMs)}{tripNote}</span>
+    <EtaStack>
+      <EtaLabel>ETA {formatDuration(displayMs)}{tripNote}</EtaLabel>
       {displayWarmupMs > 0 && (
-        <span className="calibrating-note">Calibrating... {formatDuration(displayWarmupMs)}</span>
+        <CalibratingNote>Calibrating... {formatDuration(displayWarmupMs)}</CalibratingNote>
       )}
-    </span>
+    </EtaStack>
   );
 }

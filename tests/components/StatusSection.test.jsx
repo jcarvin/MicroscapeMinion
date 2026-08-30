@@ -26,11 +26,11 @@ describe('StatusSection', () => {
 
   it('applies the active class when active', () => {
     render(<StatusSection connected={true} idle={false} activity="fight-goblin" tickMs={500} />);
-    expect(screen.getByText('fight-goblin').className).toContain('active');
+    expect(screen.getByText('fight-goblin')).toHaveAttribute('data-status', 'active');
   });
 
   it('applies the idle class when idle', () => {
     render(<StatusSection connected={true} idle={true} />);
-    expect(screen.getByText('IDLE').className).toContain('idle');
+    expect(screen.getByText('IDLE')).toHaveAttribute('data-status', 'idle');
   });
 });

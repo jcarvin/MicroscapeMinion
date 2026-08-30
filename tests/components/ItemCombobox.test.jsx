@@ -11,14 +11,14 @@ const items = [
 describe('ItemCombobox', () => {
   it('is closed on initial render', () => {
     render(<ItemCombobox items={items} selectedId={null} onSelect={vi.fn()} />);
-    expect(document.querySelector('.combo-options')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('combo-options')).not.toBeInTheDocument();
   });
 
   it('opens on focus when items are available', async () => {
     const user = userEvent.setup();
     render(<ItemCombobox items={items} selectedId={null} onSelect={vi.fn()} />);
     await user.click(screen.getByPlaceholderText('Select item'));
-    expect(document.querySelector('.combo-options')).toBeInTheDocument();
+    expect(screen.queryByTestId('combo-options')).toBeInTheDocument();
     expect(screen.getByText('Wood Log')).toBeInTheDocument();
     expect(screen.getByText('Stone')).toBeInTheDocument();
   });
@@ -39,16 +39,16 @@ describe('ItemCombobox', () => {
     await user.click(screen.getByPlaceholderText('Select item'));
     await user.click(screen.getByText('Wood Log'));
     expect(onSelect).toHaveBeenCalledWith('woodLog');
-    expect(document.querySelector('.combo-options')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('combo-options')).not.toBeInTheDocument();
   });
 
   it('closes on Escape key', async () => {
     const user = userEvent.setup();
     render(<ItemCombobox items={items} selectedId={null} onSelect={vi.fn()} />);
     await user.click(screen.getByPlaceholderText('Select item'));
-    expect(document.querySelector('.combo-options')).toBeInTheDocument();
+    expect(screen.queryByTestId('combo-options')).toBeInTheDocument();
     await user.keyboard('{Escape}');
-    expect(document.querySelector('.combo-options')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('combo-options')).not.toBeInTheDocument();
   });
 
   it('closes on click outside', async () => {
@@ -60,9 +60,9 @@ describe('ItemCombobox', () => {
       </div>
     );
     await user.click(screen.getByPlaceholderText('Select item'));
-    expect(document.querySelector('.combo-options')).toBeInTheDocument();
+    expect(screen.queryByTestId('combo-options')).toBeInTheDocument();
     await user.click(screen.getByTestId('outside'));
-    expect(document.querySelector('.combo-options')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('combo-options')).not.toBeInTheDocument();
   });
 
   it('shows no-match message when filter has no results', async () => {

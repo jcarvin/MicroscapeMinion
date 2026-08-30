@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.19
+
+- Internal: migrate popup styles from a monolithic CSS file to styled-components, co-locating styles with each component.
+
 ### v0.1.18
 
 - Add a source selector (Any / Manual / Drops) for pure gathering items such as ore and logs, defaulting to Manual so XP projection is shown by default.

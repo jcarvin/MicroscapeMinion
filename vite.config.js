@@ -35,7 +35,7 @@ function extensionPlugin(mode) {
 }
 
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), extensionPlugin(mode)],
+  plugins: [react({ babel: { plugins: ['babel-plugin-styled-components'] } }), extensionPlugin(mode)],
   build: {
     outDir: mode === 'firefox' ? 'dist-firefox' : 'dist-chrome',
     emptyOutDir: true,

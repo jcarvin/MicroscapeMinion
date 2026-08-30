@@ -1,5 +1,81 @@
 import { useState } from 'react';
+import styled from 'styled-components';
 import { formatTickEntry } from '../utils/format';
+
+const DebugDetails = styled.details`
+  padding: 0 12px;
+
+  summary {
+    font-size: 10px;
+    color: ${({ theme }) => theme.muted};
+    cursor: pointer;
+    padding: 8px 0 4px;
+    list-style: none;
+    user-select: none;
+
+    &::before { content: '▶ '; }
+  }
+
+  &[open] summary::before { content: '▼ '; }
+`;
+
+const DebugMePre = styled.pre`
+  background: ${({ theme }) => theme.surface};
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: ${({ theme }) => theme.radius};
+  color: ${({ theme }) => theme.muted};
+  font: 10px/1.5 'Cascadia Code', 'Fira Code', monospace;
+  margin-bottom: 4px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+`;
+
+const DebugPre = styled.pre`
+  background: ${({ theme }) => theme.surface};
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: ${({ theme }) => theme.radius};
+  color: ${({ theme }) => theme.muted};
+  font: 9.5px/1.5 'Cascadia Code', 'Fira Code', monospace;
+  margin-bottom: 4px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 6px 8px;
+  white-space: pre;
+`;
+
+const TickLogHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+`;
+
+const TickLogHint = styled.span`
+  font-size: 9px;
+  color: ${({ theme }) => theme.muted};
+  flex: 1;
+  line-height: 1.3;
+`;
+
+const CopyLogBtn = styled.button`
+  background: ${({ theme }) => theme.surface};
+  border: 1px solid ${({ $copied, theme }) => $copied ? theme.green : theme.border};
+  border-radius: ${({ theme }) => theme.radius};
+  color: ${({ $copied, theme }) => $copied ? theme.green : theme.muted};
+  cursor: pointer;
+  font: 600 10px/1 inherit;
+  padding: 3px 7px;
+  flex-shrink: 0;
+
+  &:hover {
+    color: ${({ theme }) => theme.text};
+    border-color: ${({ theme }) => theme.accent};
+  }
+`;
 
 export default function DebugSection({
   rawMe,
@@ -71,52 +147,48 @@ export default function DebugSection({
     setTimeout(() => setNagCheckLabel('Check now'), 2000);
   }
 
-  const btnClass = `copy-log-btn${copyLabel === 'Copied!' ? ' copied' : ''}`;
-  const etaBtnClass = `copy-log-btn${etaCopyLabel === 'Copied!' ? ' copied' : ''}`;
-  const nagBtnClass = `copy-log-btn${nagCopyLabel === 'Copied!' ? ' copied' : ''}`;
-
   return (
     <>
-      <details className="debug-details">
+      <DebugDetails>
         <summary>Debug — raw <code>me</code> state</summary>
-        <pre id="debug-me">{rawMe != null ? JSON.stringify(rawMe, null, 2) : ''}</pre>
-      </details>
-      <details className="debug-details">
+        <DebugMePre>{rawMe != null ? JSON.stringify(rawMe, null, 2) : ''}</DebugMePre>
+      </DebugDetails>
+      <DebugDetails>
         <summary>Debug — tick log</summary>
-        <div className="tick-log-header">
-          <span className="tick-log-hint">
+        <TickLogHeader>
+          <TickLogHint>
             Newest first · <code>rd</code>=active ticks · <code>lb</code>=loot bag · <code>gen</code>=items · <code>bt</code>=bank trips · <code>cd</code>=ETA cycle dur · <code>od</code>=observed dur · <code>sm</code>=samples
             · <code>gr</code>/<code>rr</code>=goal/runout rate mode
-          </span>
-          <button className={btnClass} onClick={handleCopy}>{copyLabel}</button>
-        </div>
-        <pre id="tick-log-pre">{tickLogText}</pre>
-      </details>
-      <details className="debug-details">
+          </TickLogHint>
+          <CopyLogBtn $copied={copyLabel === 'Copied!'} onClick={handleCopy}>{copyLabel}</CopyLogBtn>
+        </TickLogHeader>
+        <DebugPre>{tickLogText}</DebugPre>
+      </DebugDetails>
+      <DebugDetails>
         <summary>Debug — ETA debug log</summary>
-        <div className="tick-log-header">
-          <span className="tick-log-hint">
+        <TickLogHeader>
+          <TickLogHint>
             Newest first · JSON · v{etaDebugLogVersion ?? '?'} · captures ETA model, rate samples, bank projection, activity phase, and inventory deltas
-          </span>
-          <button className={etaBtnClass} onClick={handleEtaCopy}>{etaCopyLabel}</button>
-        </div>
-        <pre id="eta-debug-log-pre">{etaDebugLogText}</pre>
-      </details>
-      <details className="debug-details">
+          </TickLogHint>
+          <CopyLogBtn $copied={etaCopyLabel === 'Copied!'} onClick={handleEtaCopy}>{etaCopyLabel}</CopyLogBtn>
+        </TickLogHeader>
+        <DebugPre>{etaDebugLogText}</DebugPre>
+      </DebugDetails>
+      <DebugDetails>
         <summary>Debug — goal reminders</summary>
-        <div className="tick-log-header">
-          <span className="tick-log-hint">
+        <TickLogHeader>
+          <TickLogHint>
             Current completed-goal matching, scheduled alarms, and reminder lifecycle events
-          </span>
-          <button className="copy-log-btn" onClick={handleNagCheck}>{nagCheckLabel}</button>
-          <button className={nagBtnClass} onClick={handleNagCopy}>{nagCopyLabel}</button>
-        </div>
-        <pre id="goal-nag-debug-pre">
+          </TickLogHint>
+          <CopyLogBtn onClick={handleNagCheck}>{nagCheckLabel}</CopyLogBtn>
+          <CopyLogBtn $copied={nagCopyLabel === 'Copied!'} onClick={handleNagCopy}>{nagCopyLabel}</CopyLogBtn>
+        </TickLogHeader>
+        <DebugPre id="goal-nag-debug-pre">
           {goalNagDebug != null
             ? JSON.stringify(goalNagDebug, null, 2)
             : '(goal reminder debug unavailable — reload the extension)'}
-        </pre>
-      </details>
+        </DebugPre>
+      </DebugDetails>
     </>
   );
 }

@@ -1,11 +1,78 @@
 import { useState, useEffect, useMemo } from 'react';
+import styled from 'styled-components';
 import { formatSkillName, formatNumber } from '../utils/format';
 import { setSkillNotify, clearSkillNotify } from '../utils/messages';
+import { Card, CardLabel, EtaGroup } from './Shared';
 import EtaDisplay from './EtaDisplay';
 import EtaTooltip from './EtaTooltip';
 import SkillNotifyToggleSection from './SkillNotifyToggleSection';
 
 const SKILL_LEVEL_SELECTIONS_KEY = 'skillLevelSelections';
+
+const SkillSliderRow = styled.div`
+  display: grid;
+  gap: 2px;
+  margin-bottom: 6px;
+`;
+
+const SkillSlider = styled.input`
+  width: 100%;
+  height: 16px;
+  accent-color: ${({ theme }) => theme.accent};
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+
+  &::-webkit-slider-runnable-track {
+    height: 4px;
+    background: ${({ theme }) => theme.border};
+    border-radius: 99px;
+  }
+
+  &::-webkit-slider-thumb {
+    width: 14px;
+    height: 14px;
+    margin-top: -5px;
+    background: ${({ theme }) => theme.accent};
+    border: 2px solid ${({ theme }) => theme.text};
+    border-radius: 50%;
+    cursor: pointer;
+    -webkit-appearance: none;
+  }
+
+  &::-moz-range-track {
+    height: 4px;
+    background: ${({ theme }) => theme.border};
+    border-radius: 99px;
+  }
+
+  &::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: ${({ theme }) => theme.accent};
+    border: 2px solid ${({ theme }) => theme.text};
+    border-radius: 50%;
+    cursor: pointer;
+  }
+`;
+
+const SkillNotchLabels = styled.div`
+  display: flex;
+  justify-content: space-between;
+  color: ${({ theme }) => theme.muted};
+  font-size: 9px;
+  line-height: 1;
+  padding: 0 2px;
+  user-select: none;
+`;
+
+const SkillXpEtaRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+`;
 
 function resolveOffset(xs, maxOffset, savedTargetLevel, currentOffset) {
   if (savedTargetLevel != null) {
@@ -75,27 +142,26 @@ export default function SkillSection({ skillLevelStatus, skillNotifyTarget, onSe
   }
 
   return (
-    <section className="card">
-      <div className="card-label">
+    <Card>
+      <CardLabel>
         Skill XP — {formatSkillName(xs.skill)} Lv {xs.currentLevel}
-      </div>
-      <div className="skill-xp-slider-row">
-        <input
+      </CardLabel>
+      <SkillSliderRow>
+        <SkillSlider
           type="range"
-          id="skill-level-slider"
           min="1"
           max={maxOffset}
           step="1"
           value={clampedOffset}
           onChange={handleSliderChange}
         />
-        <div className="skill-xp-notch-labels">
+        <SkillNotchLabels>
           {notchLabels.map(label => <span key={label}>{label}</span>)}
-        </div>
-      </div>
-      <div className="skill-xp-eta-row">
+        </SkillNotchLabels>
+      </SkillSliderRow>
+      <SkillXpEtaRow>
         <span>→ Lv {eta.targetLevel} ({formatNumber(eta.xpNeeded)} XP)</span>
-        <span className="eta-group">
+        <EtaGroup>
           <EtaDisplay
             etaMs={eta.etaMs ?? null}
             bankTrips={eta.bankTrips ?? 0}
@@ -103,13 +169,13 @@ export default function SkillSection({ skillLevelStatus, skillNotifyTarget, onSe
             warmupRemainingMs={eta.warmupRemainingMs ?? 0}
           />
           <EtaTooltip />
-        </span>
-      </div>
+        </EtaGroup>
+      </SkillXpEtaRow>
       <SkillNotifyToggleSection
         targetLevel={eta.targetLevel}
         checked={isNotifyChecked}
         onChange={handleNotifyChange}
       />
-    </section>
+    </Card>
   );
 }

@@ -1,7 +1,51 @@
+import styled from 'styled-components';
 import { formatItemId } from '../utils/format';
 import { setConsumableNotify, clearConsumableNotify } from '../utils/messages';
+import { Card, CardLabel, EtaGroup, NotifyLabel, ToggleSwitch, ToggleTrack } from './Shared';
 import EtaDisplay from './EtaDisplay';
 import EtaTooltip from './EtaTooltip';
+
+const ConsumableItem = styled.div`
+  & + & {
+    border-top: 1px solid ${({ theme }) => theme.border};
+    margin-top: 4px;
+    padding-top: 6px;
+  }
+`;
+
+const ConsumableRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  padding: 2px 0;
+`;
+
+const ConsumableName = styled.span`
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const ConsumableRight = styled.span`
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-shrink: 0;
+`;
+
+const ConsumableCount = styled.span`
+  color: ${({ theme }) => theme.muted};
+  font-size: 11px;
+  white-space: nowrap;
+`;
+
+const ConsumableNotifyRow = styled.div`
+  margin-top: 4px;
+`;
 
 export default function CombatConsumableSection({ combatConsumables, consumableNotifyItems }) {
   if (!combatConsumables?.length) return null;
@@ -9,23 +53,23 @@ export default function CombatConsumableSection({ combatConsumables, consumableN
   const notifySet = new Set(consumableNotifyItems ?? []);
 
   return (
-    <section className="card">
-      <div className="card-label">Combat Consumables</div>
+    <Card>
+      <CardLabel>Combat Consumables</CardLabel>
       {combatConsumables.map(item => (
-        <div key={item.itemId} className="consumable-item">
-          <div className="consumable-row">
-            <span className="consumable-name">{formatItemId(item.itemId)}</span>
-            <span className="consumable-right">
-              <span className="consumable-count">{item.currentCount}</span>
-              <span className="eta-group">
+        <ConsumableItem key={item.itemId}>
+          <ConsumableRow>
+            <ConsumableName>{formatItemId(item.itemId)}</ConsumableName>
+            <ConsumableRight>
+              <ConsumableCount>{item.currentCount}</ConsumableCount>
+              <EtaGroup>
                 <EtaDisplay etaMs={item.etaMs ?? null} />
                 <EtaTooltip />
-              </span>
-            </span>
-          </div>
-          <div className="consumable-notify-row">
-            <label className="skill-notify-label">
-              <span className="toggle-switch">
+              </EtaGroup>
+            </ConsumableRight>
+          </ConsumableRow>
+          <ConsumableNotifyRow>
+            <NotifyLabel>
+              <ToggleSwitch>
                 <input
                   type="checkbox"
                   checked={notifySet.has(item.itemId)}
@@ -34,13 +78,13 @@ export default function CombatConsumableSection({ combatConsumables, consumableN
                     else clearConsumableNotify(item.itemId);
                   }}
                 />
-                <span className="toggle-track"></span>
-              </span>
+                <ToggleTrack />
+              </ToggleSwitch>
               Notify when empty
-            </label>
-          </div>
-        </div>
+            </NotifyLabel>
+          </ConsumableNotifyRow>
+        </ConsumableItem>
       ))}
-    </section>
+    </Card>
   );
 }

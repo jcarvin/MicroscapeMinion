@@ -1,17 +1,26 @@
+import styled from 'styled-components';
+import { NotifyLabel, ToggleSwitch, ToggleTrack } from './Shared';
+
+const SkillNotifyRow = styled.div`
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid ${({ theme }) => theme.border};
+`;
+
 export default function SkillNotifyToggleSection({ targetLevel, checked, onChange }) {
   return (
-    <div className="skill-notify-row">
-      <label className="skill-notify-label">
-        <span className="toggle-switch">
+    <SkillNotifyRow>
+      <NotifyLabel>
+        <ToggleSwitch>
           <input
             type="checkbox"
             checked={checked}
             onChange={e => onChange(e.target.checked)}
           />
-          <span className="toggle-track"></span>
-        </span>
+          <ToggleTrack />
+        </ToggleSwitch>
         Notify when Lv {targetLevel} is reached
-      </label>
-    </div>
+      </NotifyLabel>
+    </SkillNotifyRow>
   );
 }

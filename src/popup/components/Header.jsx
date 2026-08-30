@@ -1,4 +1,58 @@
 import { useRef, useState } from 'react';
+import styled from 'styled-components';
+
+const StyledHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 12px 9px;
+  border-bottom: 1px solid ${({ theme }) => theme.border};
+`;
+
+const Dot = styled.span`
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: ${({ theme, $connected, $idle }) =>
+    $connected ? ($idle ? theme.amber : theme.green) : theme.muted};
+  flex-shrink: 0;
+  transition: background 0.3s;
+  cursor: pointer;
+`;
+
+const Brand = styled.span`
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  color: ${({ theme }) => theme.text};
+  flex: 1;
+`;
+
+const BaseHeaderBtn = styled.button`
+  background: transparent;
+  border: none;
+  border-radius: ${({ theme }) => theme.radius};
+  color: ${({ theme }) => theme.muted};
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 3px;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+  &:hover { opacity: 1; filter: none; }
+`;
+
+const NotifToggleBtn = styled(BaseHeaderBtn)`
+  opacity: ${({ $muted }) => $muted ? 0.45 : 0.7};
+`;
+
+const TestNotifBtn = styled(BaseHeaderBtn)`
+  font-size: 10px;
+  padding-inline: 4px;
+  &:hover:not(:disabled) { opacity: 1; filter: none; }
+  &:disabled { cursor: default; opacity: 0.35; }
+`;
 
 export default function Header({
   connected,
@@ -9,9 +63,6 @@ export default function Header({
   onToggleNotifications,
   onToggleDebug,
 }) {
-  let dotClass = 'dot';
-  if (connected) dotClass += idle ? ' idle' : ' connected';
-
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef(null);
   const testResetTimerRef = useRef(null);
@@ -53,12 +104,11 @@ export default function Header({
         : 'Test';
 
   return (
-    <div className="header">
-      <span className={dotClass} onClick={handleDotClick} style={{ cursor: 'pointer' }} />
-      <span className="brand">Microscape Minion</span>
+    <StyledHeader>
+      <Dot $connected={connected} $idle={idle} onClick={handleDotClick} />
+      <Brand>Microscape Minion</Brand>
       {showDebug && (
-        <button
-          className="test-notif-btn"
+        <TestNotifBtn
           onClick={handleTestNotification}
           disabled={!notificationsEnabled || testState === 'sending'}
           title={!notificationsEnabled
@@ -69,17 +119,17 @@ export default function Header({
           aria-label="Send test notification"
         >
           {testLabel}
-        </button>
+        </TestNotifBtn>
       )}
-      <button
-        className={`notif-toggle-btn${notificationsEnabled ? '' : ' notif-muted'}`}
+      <NotifToggleBtn
+        $muted={!notificationsEnabled}
         onClick={onToggleNotifications}
         title={notificationsEnabled ? 'Mute notifications' : 'Unmute notifications'}
         aria-label={notificationsEnabled ? 'Mute notifications' : 'Unmute notifications'}
         aria-pressed={!notificationsEnabled}
       >
         {notificationsEnabled ? '🔔' : '🔕'}
-      </button>
-    </div>
+      </NotifToggleBtn>
+    </StyledHeader>
   );
 }
