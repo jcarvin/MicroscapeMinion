@@ -91,14 +91,25 @@ export default function GoalRowItem({
   const { etaMs, bankTrips } = resolveGoalEta(status);
   const isDraggedOver = dragOverId === row.id && draggedIndex !== rowIndex;
 
+  const dropBefore = isDraggedOver && draggedIndex > rowIndex;
+  const dropAfter = isDraggedOver && draggedIndex < rowIndex;
+  const semanticClasses = [
+    row.completed && 'is-completed',
+    isCurrentActivityGoal && 'is-current-activity',
+    isInfeasible && 'is-infeasible',
+    dropBefore && 'drop-before',
+    dropAfter && 'drop-after',
+  ].filter(Boolean).join(' ') || undefined;
+
   return (
     <GoalRow
+      className={semanticClasses}
       $isCompleted={row.completed}
       $isCurrent={isCurrentActivityGoal}
       $isInfeasible={isInfeasible}
       $isDragging={draggedId === row.id}
-      $dropBefore={isDraggedOver && draggedIndex > rowIndex}
-      $dropAfter={isDraggedOver && draggedIndex < rowIndex}
+      $dropBefore={dropBefore}
+      $dropAfter={dropAfter}
       data-goal-id={row.id}
       onDragEnter={onDragEnter}
       onDragOver={(event) => { event.preventDefault(); onDragEnter(); }}
