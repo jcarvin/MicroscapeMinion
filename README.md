@@ -101,6 +101,15 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.18
+
+- Add a source selector (Any / Manual / Drops) for pure gathering items such as ore and logs, defaulting to Manual so XP projection is shown by default.
+- Show a Max button for bait-fishing goals (sardine, trout, salmon): the target caps at available bait quantity and the limiting item is named.
+- Items that cannot be purchased no longer show the Any option in the source selector.
+- Show XP projection whenever a skill level is achievable and XP is non-zero, even when materials only partially cover the goal (e.g. bait fishing with partial bait stock).
+- Fix: the planner now prefers activities that yield skill XP over higher-yield alternatives when multiple activities produce the same item.
+- Fix: pre-calibration ETA no longer includes unrelated chest-opening or combat activities that incidentally drop the goal item, preventing wildly optimistic estimates before calibration warms up.
+
 ### v0.1.17
 
 - Remind you every five minutes when a completed item goal is still associated with your current activity, until you switch activities or remove the goal.
