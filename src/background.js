@@ -269,6 +269,55 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       break;
     }
 
+    case 'GET_PLANNER_DEBUG': {
+      const itemId = msg.itemId ?? null;
+      const manualInputActivityDefs = Object.keys(state.BUNDLED_ACTIVITY_DEFS).length > 0
+        ? state.BUNDLED_ACTIVITY_DEFS
+        : state.ACTIVITY_DEFS;
+      const bundledLoaded = Object.keys(state.BUNDLED_ACTIVITY_DEFS).length > 0;
+      const relevantLive = itemId
+        ? Object.fromEntries(
+            Object.entries(state.ACTIVITY_DEFS).filter(([, def]) =>
+              Object.keys(def?.inventoryChanges ?? {}).includes(itemId)
+              || Object.keys(def?.dropItems ?? {}).includes(itemId)
+            )
+          )
+        : {};
+      const relevantBundled = itemId
+        ? Object.fromEntries(
+            Object.entries(state.BUNDLED_ACTIVITY_DEFS).filter(([, def]) =>
+              Object.keys(def?.inventoryChanges ?? {}).includes(itemId)
+            )
+          )
+        : {};
+      const observedActivityXp = inferObservedActivityXp(state.xpRateSamples);
+      const relevantObserved = itemId
+        ? Object.fromEntries(
+            Object.entries(observedActivityXp).filter(([k]) => {
+              const liveDef = state.ACTIVITY_DEFS[k];
+              return liveDef && Object.keys(liveDef?.inventoryChanges ?? {}).includes(itemId);
+            })
+          )
+        : observedActivityXp;
+      const plans = state.goalPlans;
+      const goalPlan = itemId
+        ? plans.find((p) => p.itemId === itemId) ?? null
+        : plans;
+      respond({
+        bundledLoaded,
+        bundledActivityCount: Object.keys(state.BUNDLED_ACTIVITY_DEFS).length,
+        liveActivityCount: Object.keys(state.ACTIVITY_DEFS).length,
+        manualInputSource: bundledLoaded ? 'bundled' : 'live',
+        relevantLiveActivityDefs: relevantLive,
+        relevantBundledActivityDefs: relevantBundled,
+        relevantObservedXp: relevantObserved,
+        skillXp: state.mirroredState.me?.exp ?? {},
+        goalPlanForItem: goalPlan,
+        ready: goalPlanningReady(),
+      });
+      break;
+    }
+
     case 'SET_SKILL_NOTIFY':
       state.skillNotifyTarget = { skill: msg.skill, level: msg.level };
       chrome.storage.local.set({ skillNotifyTarget: state.skillNotifyTarget });

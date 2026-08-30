@@ -490,6 +490,36 @@ describe('goal planner', () => {
     });
   });
 
+  it('prefers the mining activity over a chest that incidentally yields ore', () => {
+    const result = planGoals({
+      goals: [{ ...goal('ore', 'ironOre', 3000), sourceMode: 'manual' }],
+      activityDefs: {
+        'mine-iron': {
+          level: 15,
+          xpPerCycle: 35,
+          inventoryChanges: { ironOre: 1 },
+        },
+        'chest-al-di': {
+          level: 1,
+          xpPerCycle: 0,
+          inventoryChanges: { sigilAl: -1, sigilDi: -1, coins: 50, coalOre: 10, ironOre: 8 },
+        },
+      },
+      manualInputActivityDefs: {
+        'mine-iron': { level: 15, xpPerCycle: 35, inventoryChanges: { ironOre: 1 } },
+      },
+      ownedCounts: { ironOre: 853, sigilAl: 100, sigilDi: 100 },
+    });
+
+    expect(result.plans[0]).toMatchObject({
+      activityId: 'mine-iron',
+      skill: 'mining',
+      xpKnown: true,
+      xpGained: (3000 - 853) * 35,
+      feasible: true,
+    });
+  });
+
   it('limits Manual bait fishing by available bait and supports Max', () => {
     const activityDefs = {
       'catch-sardine': {

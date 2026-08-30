@@ -383,9 +383,9 @@ function selectProducer(activities, itemId, xpLedger, xpTable) {
   const accessible = evaluated.filter(({ access }) => access.feasible);
   return (accessible.length > 0 ? accessible : evaluated)
     .sort((a, b) =>
-      b.output - a.output
-        || Number(Boolean(b.activity.skill) && b.activity.xpPerCycle !== null)
+      Number(Boolean(b.activity.skill) && b.activity.xpPerCycle !== null)
           - Number(Boolean(a.activity.skill) && a.activity.xpPerCycle !== null)
+        || b.output - a.output
         || (a.activity.requiredLevel ?? 0) - (b.activity.requiredLevel ?? 0)
         || a.activity.activityId.localeCompare(b.activity.activityId))[0];
 }
@@ -590,9 +590,13 @@ export function planGoals({
     if (sourceMode === 'manual' && inputActivities.length === 0) {
       // Pure gathering has no finite material limit. Use the producer activity
       // for XP, but only write outputs to the ledger so incidental live inputs
-      // such as sigils do not constrain the goal.
-      const producer = producers.length > 0
-        ? selectProducer(producers, itemId, xpLedger, xpTable)
+      // such as sigils do not constrain the goal. Prefer input-free activities
+      // (genuine gathering) over activities that consume items (e.g. chest opening)
+      // so that a chest yielding 8 ore doesn't displace the mining activity's XP.
+      const gatherProducers = producers.filter(({ inputs }) => inputs.length === 0);
+      const producerPool = gatherProducers.length > 0 ? gatherProducers : producers;
+      const producer = producerPool.length > 0
+        ? selectProducer(producerPool, itemId, xpLedger, xpTable)
         : null;
       const activity = producer?.activity ?? null;
       const targetCount = safeCount(goal.targetCount);
