@@ -266,8 +266,12 @@ function enrichPlannerActivityDefs(activityDefs, fallbackDefs, observedActivityX
         };
   }
 
-  // A route that only exists in the bundled definitions can still have a more
-  // authoritative XP award observed from actual gameplay.
+  // Observed XP from gameplay is treated as authoritative and overwrites both
+  // bundled and live-bundle values. This is intentional: the live bundle may
+  // carry stale or incorrect metadata, while sampled grants are ground-truth.
+  // Caveat: during bonus XP events the observed samples will undercount the
+  // true base grant. There is no event-awareness mechanism today; if that
+  // becomes a problem, callers can pass observedActivityXp: {} to opt out.
   for (const [activityId, observed] of Object.entries(observedActivityXp ?? {})) {
     const def = result[activityId];
     if (!def) continue;
@@ -289,6 +293,10 @@ function enrichPlannerActivityDefs(activityDefs, fallbackDefs, observedActivityX
  * collected for ETA calibration. The most frequently observed positive grant
  * wins; this ignores an occasional doubled grant when two cycles arrive in one
  * server update without hard-coding any activity or item XP values.
+ *
+ * Assumes each activity grants XP in at most one skill. If Microscape ever
+ * adds dual-skill activities the second skill would be silently dropped here
+ * (the higher-observation-count skill would win and the other would vanish).
  */
 export function inferObservedActivityXp(xpRateSamples) {
   const candidates = new Map();
