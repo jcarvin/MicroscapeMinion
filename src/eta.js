@@ -247,7 +247,7 @@ export function computeGoalEta(
 
   // Use optimal mixed strategy when multiple activities produce the same item
   // (e.g. fill-water-bucket-1 and fill-water-bucket-10).
-  const allProducers = collectGoalProducers(g.itemName, g.itemId);
+  const allProducers = collectGoalProducers(g.itemName, g.itemId, actId);
   allProducers.sort((a, b) => b.yield - a.yield || a.actId.localeCompare(b.actId));
 
   let planGatherMs, planBankTrips;
@@ -279,13 +279,19 @@ export function computeGoalEta(
   };
 }
 
-export function collectGoalProducers(itemName, itemId) {
+export function collectGoalProducers(itemName, itemId, actId) {
+  // Restrict to activities in the same verb family (same leading word before the first '-').
+  // This prevents e.g. chest-al-di (family 'chest') from mixing with mine-iron (family 'mine')
+  // in the optimal-mix ETA calculation, which was designed only for same-family variants like
+  // fill-water-bucket-1 vs fill-water-bucket-10.
+  const family = actId ? actId.split('-')[0] : null;
   const result = [];
-  for (const [actId, def] of Object.entries(state.ACTIVITY_DEFS ?? {})) {
+  for (const [id, def] of Object.entries(state.ACTIVITY_DEFS ?? {})) {
     if (!def.inventoryChanges) continue;
+    if (family && id.split('-')[0] !== family) continue;
     const key = findKey(def.inventoryChanges, itemName, itemId);
     const yield_ = key ? (def.inventoryChanges[key] ?? 0) : 0;
-    if (yield_ > 0) result.push({ actId, def, yield: yield_ });
+    if (yield_ > 0) result.push({ actId: id, def, yield: yield_ });
   }
   return result;
 }
