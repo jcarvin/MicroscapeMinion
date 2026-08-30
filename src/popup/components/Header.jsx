@@ -1,5 +1,7 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import styled from 'styled-components';
+import useNthClick from '../hooks/useNthClick';
+import useTransientLabel from '../hooks/useTransientLabel';
 
 const StyledHeader = styled.div`
   display: flex;
@@ -63,45 +65,21 @@ export default function Header({
   onToggleNotifications,
   onToggleDebug,
 }) {
-  const clickCountRef = useRef(0);
-  const clickTimerRef = useRef(null);
-  const testResetTimerRef = useRef(null);
-  const [testState, setTestState] = useState('idle');
-  const [testFailureReason, setTestFailureReason] = useState(null);
-
-  function handleDotClick() {
-    clickCountRef.current += 1;
-    clearTimeout(clickTimerRef.current);
-    if (clickCountRef.current >= 3) {
-      clickCountRef.current = 0;
-      onToggleDebug?.();
-    } else {
-      clickTimerRef.current = setTimeout(() => {
-        clickCountRef.current = 0;
-      }, 600);
-    }
-  }
+  const handleDotClick = useNthClick(3, onToggleDebug, 600);
+  const [testLabel, flashTestLabel] = useTransientLabel('Test', 2000);
+  const [sending, setSending] = useState(false);
+  const [lastFailureReason, setLastFailureReason] = useState(null);
 
   async function handleTestNotification() {
-    clearTimeout(testResetTimerRef.current);
-    setTestState('sending');
-    setTestFailureReason(null);
+    setSending(true);
     const result = await onTestNotification?.();
-    setTestState(result?.ok ? 'sent' : 'failed');
-    if (!result?.ok) setTestFailureReason(result?.reason ?? 'unknown error');
-    testResetTimerRef.current = setTimeout(() => {
-      setTestState('idle');
-      setTestFailureReason(null);
-    }, 2000);
+    setSending(false);
+    flashTestLabel(result?.ok ? 'Sent' : 'Failed');
+    setLastFailureReason(result?.ok ? null : (result?.reason ?? 'unknown error'));
   }
 
-  const testLabel = testState === 'sending'
-    ? '…'
-    : testState === 'sent'
-      ? 'Sent'
-      : testState === 'failed'
-        ? 'Failed'
-        : 'Test';
+  const displayLabel = sending ? '…' : testLabel;
+  const failureReason = !sending && testLabel === 'Failed' ? lastFailureReason : null;
 
   return (
     <StyledHeader>
@@ -110,15 +88,15 @@ export default function Header({
       {showDebug && (
         <TestNotifBtn
           onClick={handleTestNotification}
-          disabled={!notificationsEnabled || testState === 'sending'}
+          disabled={!notificationsEnabled || sending}
           title={!notificationsEnabled
             ? 'Enable notifications to test'
-            : testState === 'failed'
-              ? `Notification failed: ${testFailureReason}`
+            : failureReason
+              ? `Notification failed: ${failureReason}`
               : 'Send test notification'}
           aria-label="Send test notification"
         >
-          {testLabel}
+          {displayLabel}
         </TestNotifBtn>
       )}
       <NotifToggleBtn

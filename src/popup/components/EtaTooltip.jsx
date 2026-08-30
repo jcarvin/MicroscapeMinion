@@ -1,6 +1,7 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId } from 'react';
 import styled from 'styled-components';
 import { ETA_INFO_TITLE } from '../utils/format';
+import useDelayedTooltip from '../hooks/useDelayedTooltip';
 
 const TOOLTIP_DELAY_MS = 150;
 
@@ -77,36 +78,14 @@ const EtaTooltipBubble = styled.span`
 
 export default function EtaTooltip({ delayMs = TOOLTIP_DELAY_MS }) {
   const tooltipId = useId();
-  const showTimerRef = useRef(null);
-  const [isOpen, setIsOpen] = useState(false);
-
-  function clearShowTimer() {
-    if (!showTimerRef.current) return;
-    clearTimeout(showTimerRef.current);
-    showTimerRef.current = null;
-  }
-
-  function handleShow() {
-    clearShowTimer();
-    showTimerRef.current = setTimeout(() => {
-      showTimerRef.current = null;
-      setIsOpen(true);
-    }, delayMs);
-  }
-
-  function handleHide() {
-    clearShowTimer();
-    setIsOpen(false);
-  }
-
-  useEffect(() => clearShowTimer, []);
+  const { tooltip: isOpen, show, hide } = useDelayedTooltip(delayMs);
 
   return (
     <EtaTooltipWrap
-      onMouseEnter={handleShow}
-      onMouseLeave={handleHide}
-      onFocus={handleShow}
-      onBlur={handleHide}
+      onMouseEnter={() => show()}
+      onMouseLeave={hide}
+      onFocus={() => show()}
+      onBlur={hide}
     >
       <EtaInfo
         tabIndex={0}

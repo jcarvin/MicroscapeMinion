@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import GoalSection from '../../src/popup/components/GoalSection';
+import GoalSection from '../../src/popup/components/goalSection';
 import { setGoals } from '../../src/popup/utils/messages';
 
 vi.mock('../../src/popup/utils/messages', () => ({

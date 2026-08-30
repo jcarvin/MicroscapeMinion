@@ -1,18 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { useRef, useState } from 'react';
 import styled from 'styled-components';
 import {
   checkGoalNagsNow,
-  getStatus,
   sendTestNotification,
   setNotificationsEnabled,
 } from './utils/messages';
+import usePolledStatus from './hooks/usePolledStatus';
 import Header from './components/Header';
 import StatusSection from './components/StatusSection';
-import GoalSection from './components/GoalSection';
+import GoalSection from './components/goalSection';
 import MaterialSection from './components/MaterialSection';
 import CombatConsumableSection from './components/CombatConsumableSection';
 import SkillSection from './components/SkillSection';
-import DebugSection from './components/DebugSection';
+import DebugSection from './components/debugSection';
 
 const ScrollContent = styled.div`
   flex: 1;
@@ -40,7 +40,7 @@ const SupportLink = styled.a`
 `;
 
 export default function App() {
-  const [status, setStatus] = useState(null);
+  const status = usePolledStatus();
   const [showDebug, setShowDebug] = useState(false);
   const selectedSkillEtaRef = useRef(null);
   const [selectedSkillEta, setSelectedSkillEta] = useState(null);
@@ -51,15 +51,6 @@ export default function App() {
       setSelectedSkillEta(eta ?? null);
     }
   }
-
-  useEffect(() => {
-    function poll() {
-      getStatus().then(s => { if (s) setStatus(s); });
-    }
-    poll();
-    const id = setInterval(poll, 1000);
-    return () => clearInterval(id);
-  }, []);
 
   return (
     <>
