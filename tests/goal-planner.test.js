@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildOwnedCounts,
   getCraftableItemIds,
+  getManualInputActivityItemIds,
+  inferObservedActivityXp,
   planGoals,
 } from '../src/goal-planner.js';
 import activityDefs from '../src/activity-defs.json';
@@ -292,7 +294,7 @@ describe('goal planner', () => {
     });
   });
 
-  it('plans deterministic farming inputs and XP without exposing Max', () => {
+  it('plans deterministic farming inputs and XP outside recipe mode', () => {
     const xpTable = computeMicroscapeXpTable();
     const activityDefs = {
       'farm-potatoes': {
@@ -321,6 +323,215 @@ describe('goal planner', () => {
       xpKnown: true,
     });
     expect(result.ledger).toMatchObject({ potatoSeed: 0, potato: 6 });
+  });
+
+  it('distinguishes input-limited manual activities from recipes and pure gathering', () => {
+    const testDefs = {
+      'mine-iron': { inventoryChanges: { ironOre: 1 } },
+      'catch-sardine': { inventoryChanges: { rawShrimp: -1, rawSardine: 1 } },
+      'smelt-iron': { inventoryChanges: { ironOre: -2, ironBar: 1 } },
+    };
+
+    expect([...getManualInputActivityItemIds(testDefs)]).toEqual(['rawSardine']);
+    expect(getManualInputActivityItemIds(testDefs)).not.toContain('ironOre');
+    expect(getManualInputActivityItemIds(testDefs)).not.toContain('ironBar');
+
+    const bundledManualInputs = getManualInputActivityItemIds(activityDefs);
+    expect(bundledManualInputs).toContain('rawSardine');
+    expect(bundledManualInputs).toContain('rawTrout');
+    expect(bundledManualInputs).toContain('rawSalmon');
+  });
+
+  it('keeps pure Manual gathering unlimited while projecting its XP', () => {
+    const xpTable = computeMicroscapeXpTable();
+    const result = planGoals({
+      goals: [{ ...goal('ore', 'ironOre', 5), sourceMode: 'manual' }],
+      activityDefs: {
+        'mine-iron': {
+          level: 1,
+          xpPerCycle: 10,
+          inventoryChanges: { ironOre: 1 },
+        },
+      },
+      ownedCounts: { ironOre: 1 },
+      skillXp: { mining: xpTable[1] },
+      xpTable,
+    });
+
+    expect(result.plans[0]).toMatchObject({
+      sourceMode: 'manual',
+      feasible: true,
+      achievableTarget: 5,
+      limitingItemIds: [],
+      xpGained: 40,
+      xpKnown: true,
+    });
+    expect(result.ledger.ironOre).toBe(5);
+  });
+
+  it('projects Manual XP even when current skill XP is unavailable', () => {
+    const result = planGoals({
+      goals: [{ ...goal('ore', 'ironOre', 5), sourceMode: 'manual' }],
+      activityDefs: {
+        'mine-iron': {
+          level: 15,
+          xpPerCycle: 35,
+          inventoryChanges: { ironOre: 1 },
+        },
+      },
+      ownedCounts: {},
+    });
+
+    expect(result.plans[0]).toMatchObject({
+      skill: 'mining',
+      xpKnown: true,
+      xpGained: 175,
+      projectedLevelBefore: null,
+      expectedLevel: null,
+    });
+  });
+
+  it('recovers Manual XP generically from observed grants when metadata is absent', () => {
+    const observedActivityXp = inferObservedActivityXp({
+      'mine-iron:mining': {
+        samples: [
+          { value: 1000, at: 1, workMs: 0 },
+          { value: 1035, at: 2, workMs: 32_000 },
+          { value: 1070, at: 3, workMs: 64_000 },
+          { value: 1140, at: 4, workMs: 128_000 },
+          { value: 1175, at: 5, workMs: 160_000 },
+        ],
+      },
+    });
+    const result = planGoals({
+      goals: [{ ...goal('ore', 'ironOre', 3000), sourceMode: 'manual' }],
+      activityDefs: {
+        'mine-iron': { inventoryChanges: { ironOre: 1 } },
+      },
+      manualInputActivityDefs: {
+        'mine-iron': { inventoryChanges: { ironOre: 1 } },
+      },
+      observedActivityXp,
+      ownedCounts: { ironOre: 515 },
+    });
+
+    expect(observedActivityXp).toEqual({
+      'mine-iron': { skill: 'mining', xpPerCycle: 35 },
+    });
+    expect(result.plans[0]).toMatchObject({
+      activityId: 'mine-iron',
+      skill: 'mining',
+      xpKnown: true,
+      xpGained: (3000 - 515) * 35,
+    });
+  });
+
+  it('ignores live mining sigil inputs when the bundled activity is pure gathering', () => {
+    const xpTable = computeMicroscapeXpTable();
+    const result = planGoals({
+      goals: [{ ...goal('ore', 'ironOre', 3000), sourceMode: 'manual' }],
+      activityDefs: {
+        'mining-iron-sigil-di': {
+          level: null,
+          xpPerCycle: null,
+          inventoryChanges: { sigilDi: -1, ironOre: 1 },
+        },
+      },
+      manualInputActivityDefs: {
+        'mine-iron': {
+          level: 15,
+          xpPerCycle: 35,
+          inventoryChanges: { ironOre: 1 },
+        },
+      },
+      ownedCounts: { sigilDi: 351, ironOre: 351 },
+      skillXp: { mining: xpTable[15] },
+      xpTable,
+    });
+
+    expect(result.plans[0]).toMatchObject({
+      sourceMode: 'manual',
+      feasible: true,
+      materialFeasible: true,
+      achievableTarget: 3000,
+      limitingItemIds: [],
+      skill: 'mining',
+      projectedLevelBefore: 15,
+      xpGained: (3000 - 351) * 35,
+      xpKnown: true,
+      activityId: 'mine-iron',
+    });
+    expect(result.ledger).toMatchObject({ sigilDi: 351, ironOre: 3000 });
+  });
+
+  it('uses a canonical bundled producer when a live variant cannot provide XP metadata', () => {
+    const result = planGoals({
+      goals: [{ ...goal('ore', 'ironOre', 10), sourceMode: 'manual' }],
+      activityDefs: {
+        'live-special-action': {
+          inventoryChanges: { ironOre: 1, mysteryBonus: 1 },
+        },
+      },
+      manualInputActivityDefs: {
+        'mine-iron': {
+          level: 15,
+          xpPerCycle: 35,
+          inventoryChanges: { ironOre: 1 },
+        },
+      },
+      ownedCounts: {},
+    });
+
+    expect(result.plans[0]).toMatchObject({
+      feasible: true,
+      skill: 'mining',
+      xpKnown: true,
+      xpGained: 350,
+    });
+  });
+
+  it('limits Manual bait fishing by available bait and supports Max', () => {
+    const activityDefs = {
+      'catch-sardine': {
+        skill: 'fishing',
+        level: 1,
+        xpPerCycle: 10,
+        inventoryChanges: { rawShrimp: -1, rawSardine: 1 },
+      },
+    };
+    const manualGoal = {
+      ...goal('sardines', 'rawSardine', 6),
+      sourceMode: 'manual',
+    };
+    const limited = planGoals({
+      goals: [manualGoal],
+      activityDefs,
+      ownedCounts: { rawShrimp: 3 },
+    });
+    const max = planGoals({
+      goals: [{ ...manualGoal, targetCount: 0, maxCraftable: true }],
+      activityDefs,
+      ownedCounts: { rawShrimp: 3, rawSardine: 2 },
+    });
+
+    expect(limited.plans[0]).toMatchObject({
+      sourceMode: 'manual',
+      feasible: false,
+      materialFeasible: false,
+      achievableTarget: 3,
+      limitingItemIds: ['rawShrimp'],
+    });
+    expect(max.goals[0]).toMatchObject({
+      targetCount: 5,
+      maxCraftable: true,
+      sourceMode: 'manual',
+    });
+    expect(max.plans[0]).toMatchObject({
+      sourceMode: 'manual',
+      achievableTarget: 5,
+      limitingItemIds: ['rawShrimp'],
+    });
+    expect(max.ledger).toMatchObject({ rawShrimp: 0, rawSardine: 5 });
   });
 
   it('treats combat drops as chance-based planned acquisition without Max or XP', () => {

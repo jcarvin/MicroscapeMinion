@@ -12,7 +12,14 @@ vi.mock('../../src/popup/utils/messages', () => ({
 }));
 
 const items = [
-  { id: 'woodLog', name: 'woodLog', count: 50, relatedToActivity: true },
+  {
+    id: 'woodLog',
+    name: 'woodLog',
+    count: 50,
+    relatedToActivity: true,
+    manualActivity: true,
+    acquisitionSources: ['activity', 'manual'],
+  },
   { id: 'stone', name: 'stone', count: 5, relatedToActivity: false },
   {
     id: 'ironOre',
@@ -20,7 +27,38 @@ const items = [
     count: 10,
     relatedToActivity: false,
     chanceDrop: true,
-    acquisitionSources: ['activity', 'drops'],
+    manualActivity: true,
+    acquisitionSources: ['activity', 'manual', 'drops'],
+  },
+  {
+    id: 'rawSardine',
+    name: 'rawSardine',
+    count: 0,
+    relatedToActivity: false,
+    manualActivity: true,
+    manualHasInputs: true,
+    acquisitionSources: ['activity', 'manual'],
+  },
+  {
+    id: 'rawSalmon',
+    name: 'rawSalmon',
+    count: 0,
+    relatedToActivity: false,
+    chanceDrop: true,
+    manualActivity: true,
+    manualHasInputs: true,
+    acquisitionSources: ['activity', 'manual', 'drops'],
+    bazaarTradeable: true,
+  },
+  {
+    id: 'petMapBog',
+    name: 'petMapBog',
+    count: 0,
+    relatedToActivity: false,
+    manualActivity: true,
+    manualHasInputs: true,
+    bazaarTradeable: false,
+    acquisitionSources: ['activity', 'manual'],
   },
   { id: 'ironBar', name: 'ironBar', count: 0, relatedToActivity: false, craftable: true },
   { id: 'coalOre', name: 'coalOre', count: 0, relatedToActivity: false },
@@ -148,8 +186,121 @@ describe('GoalSection', () => {
         itemName: 'Wood Log',
         itemId: 'woodLog',
         targetCount: 100,
+        sourceMode: 'manual',
       }),
     ]);
+  });
+
+  it('shows Any and Manual for pure gathering and defaults to Manual', async () => {
+    const user = userEvent.setup();
+    render(<GoalSection goalItems={items} goalStatuses={[]} />);
+
+    await user.click(screen.getByPlaceholderText('Select item'));
+    await user.click(screen.getByText('Wood Log'));
+
+    expect(screen.getByRole('button', { name: /^Manual source\./ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: /^Any source\./ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Drops source\./ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Use maximum craftable target' }))
+      .not.toBeInTheDocument();
+  });
+
+  it('keeps Manual mode when enabling Max for input-limited fishing', async () => {
+    const user = userEvent.setup();
+    render(<GoalSection goalItems={items} goalStatuses={[]} />);
+
+    await user.click(screen.getByPlaceholderText('Select item'));
+    await user.click(screen.getByText('Raw Sardine'));
+    const max = screen.getByRole('button', { name: 'Use maximum craftable target' });
+    await user.click(max);
+
+    expect(max).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /^Any source\./ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Manual source\./ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(setGoals).toHaveBeenLastCalledWith([
+      expect.objectContaining({
+        itemId: 'rawSardine',
+        targetCount: 0,
+        maxCraftable: true,
+        sourceMode: 'manual',
+      }),
+    ]);
+  });
+
+  it('keeps all Raw Salmon sources visible with Max and disables Max for Any', async () => {
+    const user = userEvent.setup();
+    const status = {
+      goal: {
+        id: 'salmon-goal',
+        itemId: 'rawSalmon',
+        itemName: 'Raw Salmon',
+        targetCount: 486,
+        maxCraftable: true,
+        sourceMode: 'manual',
+      },
+      count: 0,
+      eta: null,
+      relatedToActivity: false,
+      planning: {
+        feasible: true,
+        sourceMode: 'manual',
+        sourceType: 'activity',
+        sourceOptions: ['any', 'manual', 'drops'],
+        xpKnown: true,
+        xpGained: 34020,
+        skill: 'fishing',
+        expectedLevel: 43,
+      },
+    };
+    render(<GoalSection goalItems={items} goalStatuses={[status]} />);
+
+    expect(screen.getByRole('button', { name: /^Any source\./ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Manual source\./ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Drops source\./ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^Any source\./ }));
+
+    expect(screen.queryByRole('button', { name: 'Use maximum craftable target' }))
+      .not.toBeInTheDocument();
+    expect(setGoals).toHaveBeenLastCalledWith([
+      expect.objectContaining({
+        itemId: 'rawSalmon',
+        targetCount: 486,
+        sourceMode: 'any',
+      }),
+    ]);
+  });
+
+  it('hides the selector for an explicitly untradeable single-source item', () => {
+    const status = {
+      goal: {
+        id: 'map-goal', itemId: 'petMapBog', itemName: 'Pet Map: Bog', targetCount: 1,
+        sourceMode: 'manual',
+      },
+      count: 0,
+      eta: null,
+      relatedToActivity: false,
+      planning: {
+        feasible: true,
+        sourceMode: 'manual',
+        sourceType: 'activity',
+        sourceOptions: ['any', 'manual'],
+        xpKnown: true,
+        xpGained: 0,
+        skill: 'piety',
+        expectedLevel: 1,
+      },
+    };
+    render(<GoalSection goalItems={items} goalStatuses={[status]} />);
+
+    expect(screen.queryByRole('group', { name: 'Goal acquisition source' }))
+      .not.toBeInTheDocument();
   });
 
   it('defaults items produced by activities or drops to Any source', async () => {
@@ -331,6 +482,31 @@ describe('GoalSection', () => {
     expect(screen.getByText('Expected Mining level: 40 · +559,944 XP')).toBeInTheDocument();
   });
 
+  it('shows projected XP when current skill XP is unavailable', () => {
+    const status = {
+      goal: { id: 'ore-goal', itemId: 'ironOre', itemName: 'Iron Ore', targetCount: 3000 },
+      count: 442,
+      eta: null,
+      relatedToActivity: false,
+      planning: {
+        goalId: 'ore-goal',
+        feasible: true,
+        materialFeasible: true,
+        levelFeasible: true,
+        skill: 'mining',
+        projectedLevelBefore: null,
+        expectedLevel: null,
+        xpGained: 89530,
+        xpKnown: true,
+        limitingItemIds: [],
+        pending: false,
+      },
+    };
+    render(<GoalSection goalItems={items} goalStatuses={[status]} />);
+
+    expect(screen.getByText('Projected Mining XP: +89,530 XP')).toBeInTheDocument();
+  });
+
   it('marks a level-locked goal red and explains the projected shortfall', () => {
     const status = {
       goal: { id: 'gold-goal', itemId: 'goldOre', itemName: 'Gold Ore', targetCount: 1 },
@@ -461,7 +637,10 @@ describe('GoalSection', () => {
     fireEvent.dragStart(handles[1], { dataTransfer });
     fireEvent.drop(document.querySelector('[data-goal-id="wood-goal"]'), { dataTransfer });
 
-    expect(setGoals).toHaveBeenLastCalledWith([stoneStatus.goal, woodStatus.goal]);
+    expect(setGoals).toHaveBeenLastCalledWith([
+      stoneStatus.goal,
+      { ...woodStatus.goal, sourceMode: 'manual' },
+    ]);
   });
 
   it('shows the insertion edge that matches the existing reorder behavior', () => {

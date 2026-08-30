@@ -6,7 +6,12 @@ export const GOAL_SOURCE_OPTIONS = [
   {
     id: 'any',
     label: 'Any',
-    description: 'Use any acquisition route. Materials and XP are not projected.',
+    description: 'Use any acquisition route (including purchasing). Materials and XP are not projected.',
+  },
+  {
+    id: 'manual',
+    label: 'Manual',
+    description: 'Assumes manual gathering (e.g., mining). Shows ETA and XP projections.',
   },
   {
     id: 'craft',
@@ -16,7 +21,7 @@ export const GOAL_SOURCE_OPTIONS = [
   {
     id: 'drops',
     label: 'Drops',
-    description: 'Treat the goal as chance-based drops. Max and XP projections are disabled.',
+    description: 'Assumes fighting a monster that drops the item. ETA from calibrated drop rate. XP not projected.',
   },
 ];
 
@@ -46,7 +51,7 @@ export default function GoalSourceSelector({ value, onChange, options = GOAL_SOU
 
   useEffect(() => clearShowTimer, []);
 
-  const activeHelp = GOAL_SOURCE_OPTIONS.find(({ id }) => id === helpMode) ?? null;
+  const activeHelp = options.find(({ id }) => id === helpMode) ?? null;
 
   return (
     <div className="goal-source-selector" onMouseLeave={hideHelp}>

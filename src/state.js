@@ -2,6 +2,8 @@ import { computeMicroscapeXpTable } from './xp.js';
 
 export const state = {
   ACTIVITY_DEFS: {},
+  BUNDLED_ACTIVITY_DEFS: {},
+  ITEM_TRADEABILITY: {},
   ZONE_DATA: {},
   XP_TABLE: computeMicroscapeXpTable(),
 

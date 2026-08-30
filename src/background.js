@@ -44,7 +44,11 @@ import { snapshotEta, computeSkillLevelEtas } from './eta.js';
 import { pushTickEntry, pushTickEvent, safelyPushEtaDebugEntry } from './debug-log.js';
 import { buildStatus } from './status.js';
 import { fireNotification, sendChime } from './notify.js';
-import { buildOwnedCounts, planGoals } from './goal-planner.js';
+import {
+  buildOwnedCounts,
+  inferObservedActivityXp,
+  planGoals,
+} from './goal-planner.js';
 
 const GOAL_NAG_INTERVAL_MS = 5 * 60 * 1000;
 const GOAL_NAG_ALARM_PREFIX = 'goal-nag:';
@@ -69,6 +73,7 @@ chrome.storage.local.get(
       .then((r) => r.json())
       .then((seed) => {
         seedActivityDefs = seed ?? {};
+        state.BUNDLED_ACTIVITY_DEFS = seedActivityDefs;
         const storedMerge = mergeMissingActivityDefs(res.activityDefs, seed);
         // Live bundle parsing can finish before this extension-resource fetch.
         // Keep its routes authoritative, but backfill planner metadata when an
@@ -181,6 +186,9 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         }
       }
       state.ACTIVITY_DEFS = liveDefs;
+      if (msg.itemTradeability && typeof msg.itemTradeability === 'object') {
+        state.ITEM_TRADEABILITY = msg.itemTradeability;
+      }
       const toCache = { activityDefs: msg.defs };
       if (msg.zones && Object.keys(msg.zones).length > 0) {
         state.ZONE_DATA = msg.zones;
@@ -767,8 +775,8 @@ function normalizeGoals(goals) {
     const targetCount = Number(goal.targetCount);
     const maxCraftable = goal.maxCraftable === true;
     const sourceMode = maxCraftable
-      ? 'craft'
-      : ['any', 'craft', 'drops'].includes(goal.sourceMode)
+      ? (goal.sourceMode === 'manual' ? 'manual' : 'craft')
+      : ['any', 'manual', 'craft', 'drops'].includes(goal.sourceMode)
         ? goal.sourceMode
         : null;
     const minimumTarget = maxCraftable ? 0 : 1;
@@ -804,9 +812,14 @@ function goalPlanningReady() {
 }
 
 function calculateGoalPlanning(goals = state.goals) {
+  const manualInputActivityDefs = Object.keys(state.BUNDLED_ACTIVITY_DEFS).length > 0
+    ? state.BUNDLED_ACTIVITY_DEFS
+    : state.ACTIVITY_DEFS;
   return planGoals({
     goals,
     activityDefs: state.ACTIVITY_DEFS,
+    manualInputActivityDefs,
+    observedActivityXp: inferObservedActivityXp(state.xpRateSamples),
     ownedCounts: buildOwnedCounts(state.mirroredState.me),
     skillXp: state.mirroredState.me?.exp,
     xpTable: state.XP_TABLE,
@@ -833,6 +846,8 @@ function refreshGoalPlanning() {
 
 function resetTestState() {
   state.ACTIVITY_DEFS = {};
+  state.BUNDLED_ACTIVITY_DEFS = {};
+  state.ITEM_TRADEABILITY = {};
   state.ZONE_DATA = {};
   state.XP_TABLE = computeMicroscapeXpTable();
   state.mirroredState = {};
@@ -873,8 +888,21 @@ function resetTestState() {
   state.notificationsEnabled = true;
 }
 
-function setTestState({ activityDefs, zoneData, xpTable, state: gameState, lastWorkAct, tickMs } = {}) {
+function setTestState({
+  activityDefs,
+  bundledActivityDefs,
+  itemTradeability,
+  xpRateSamples,
+  zoneData,
+  xpTable,
+  state: gameState,
+  lastWorkAct,
+  tickMs,
+} = {}) {
   if (activityDefs) state.ACTIVITY_DEFS = activityDefs;
+  if (bundledActivityDefs) state.BUNDLED_ACTIVITY_DEFS = bundledActivityDefs;
+  if (itemTradeability) state.ITEM_TRADEABILITY = itemTradeability;
+  if (xpRateSamples) state.xpRateSamples = xpRateSamples;
   if (zoneData) state.ZONE_DATA = zoneData;
   if (xpTable) state.XP_TABLE = xpTable;
   if (gameState) state.mirroredState = gameState;
