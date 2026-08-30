@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import DebugSection from '../../src/popup/components/DebugSection';
+import DebugSection from '../../src/popup/components/debugSection';
 
 describe('DebugSection', () => {
   it('shows goal reminder state and lifecycle events', () => {

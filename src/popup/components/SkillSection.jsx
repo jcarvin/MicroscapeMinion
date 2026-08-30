@@ -92,7 +92,7 @@ export default function SkillSection({ skillLevelStatus, skillNotifyTarget, onSe
   const etas = xs?.etas ?? [];
 
   const maxOffset      = Math.min(10, etas.length) || 1;
-  const savedTarget    = xs?.skill ? (savedSelections[xs.skill] ?? null) : null;
+  const savedTarget    = xs?.skill ? ((savedSelections ?? {})[xs.skill] ?? null) : null;
   const clampedOffset  = etas.length > 0
     ? resolveOffset(xs, maxOffset, savedTarget, selectedLevelOffset)
     : 1;

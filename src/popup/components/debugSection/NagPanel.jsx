@@ -1,13 +1,16 @@
+import { useState } from 'react';
 import useTransientLabel from '../../hooks/useTransientLabel';
 import { CopyLogBtn, DebugDetails, DebugPre, PanelHeader, PanelHint } from './DebugSection.styles';
 
 export default function NagPanel({ goalNagDebug, onCheckGoalNags }) {
   const [copyLabel, flashCopy] = useTransientLabel('Copy', 1500);
   const [checkLabel, flashCheck] = useTransientLabel('Check now', 2000);
+  const [checking, setChecking] = useState(false);
 
   async function handleNagCheck() {
-    flashCheck('Checking…');
+    setChecking(true);
     const result = await onCheckGoalNags?.();
+    setChecking(false);
     flashCheck(result?.ok ? `Checked ${result.checked}` : 'Check failed');
   }
 
@@ -27,7 +30,7 @@ export default function NagPanel({ goalNagDebug, onCheckGoalNags }) {
         <PanelHint>
           Current completed-goal matching, scheduled alarms, and reminder lifecycle events
         </PanelHint>
-        <CopyLogBtn onClick={handleNagCheck}>{checkLabel}</CopyLogBtn>
+        <CopyLogBtn onClick={handleNagCheck} disabled={checking}>{checking ? 'Checking…' : checkLabel}</CopyLogBtn>
         <CopyLogBtn onClick={handleNagCopy}>{copyLabel}</CopyLogBtn>
       </PanelHeader>
       <DebugPre id="goal-nag-debug-pre">
