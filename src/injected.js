@@ -99,10 +99,18 @@
     })
     .then((bundle) => {
       const defs = parseActivityDefs(bundle);
+      const itemTradeability = parseItemTradeability(bundle);
       const zones = parseZones(bundle);
       const xpTable = parseXpTable(bundle);
       if (Object.keys(defs).length > 0) {
-        window.postMessage({ __mm: true, type: 'ACTIVITY_DEFS', defs, zones, xpTable }, '*');
+        window.postMessage({
+          __mm: true,
+          type: 'ACTIVITY_DEFS',
+          defs,
+          itemTradeability,
+          zones,
+          xpTable,
+        }, '*');
       }
     })
     .catch(() => {});
@@ -162,11 +170,19 @@
     }
 
     const mobs = parseMobDefs(bundle);
-    const combatRe = /\{\s*id:\s*`(fight-[^`]+)`(?:,\s*\w+:\s*`[^`]*`)*,\s*mob:\s*`([^`]+)`\s*,\s*level:\s*(\d+)/g;
+    // Combat activity fields change ordering more often than skilling fields.
+    // Parse the complete object so numeric/boolean fields between id, mob, and
+    // level do not make its drop route disappear from the goal source selector.
+    const combatRe = /\{\s*id:\s*`(fight-[^`]+)`/g;
     while ((m = combatRe.exec(bundle)) !== null) {
+      const end = findMatchingBrace(bundle, m.index);
+      if (end < 0) continue;
+      const body = bundle.slice(m.index, end + 1);
+      const mobId = body.match(/\bmob:\s*`([^`]+)`/)?.[1];
+      const levelValue = body.match(/\blevel:\s*(\d+)/)?.[1];
+      if (!mobId || levelValue === undefined) continue;
       const id = m[1];
-      const mobId = m[2];
-      const level = parseInt(m[3], 10);
+      const level = parseInt(levelValue, 10);
       const mob = mobs[mobId];
       defs[id] = {
         durationMs: mob?.speed ? mob.speed * 2000 : 0,
@@ -292,6 +308,57 @@
     return -1;
   }
 
+  function hasTopLevelProperty(source, name) {
+    let depth = 0;
+    let quote = null;
+    let escaped = false;
+    for (let i = 0; i < source.length; i++) {
+      const ch = source[i];
+      if (quote) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === quote) quote = null;
+        continue;
+      }
+      if (ch === '`' || ch === '"' || ch === "'") {
+        quote = ch;
+        continue;
+      }
+      if (ch === '{' || ch === '[') {
+        depth++;
+        continue;
+      }
+      if (ch === '}' || ch === ']') {
+        depth--;
+        continue;
+      }
+      if (depth !== 1 || !source.startsWith(name, i)) continue;
+      const before = source[i - 1];
+      const after = source[i + name.length];
+      if ((before && /[\w$]/.test(before)) || (after && /[\w$]/.test(after))) continue;
+      let colon = i + name.length;
+      while (/\s/.test(source[colon] ?? '')) colon++;
+      if (source[colon] === ':') return true;
+    }
+    return false;
+  }
+
+  function parseItemTradeability(bundle) {
+    const result = {};
+    const re = /\{\s*id:\s*`([^`]+)`/g;
+    let m;
+    while ((m = re.exec(bundle)) !== null) {
+      const end = findMatchingBrace(bundle, m.index);
+      if (end < 0) continue;
+      const body = bundle.slice(m.index, end + 1);
+      // Item definitions have a top-level category. Microscape's own item UI
+      // labels definitions without a top-level value as "Untradeable".
+      if (!hasTopLevelProperty(body, 'category')) continue;
+      result[m[1]] = hasTopLevelProperty(body, 'value');
+    }
+    return result;
+  }
+
   function parseXpTable(bundle) {
     // Prefer a bundled table if one is exposed. Microscape's XP curve is the
     // OSRS curve with the per-level points multiplied by 10 before division.
@@ -333,5 +400,6 @@
 
   if (window.__MM_TEST_HOOKS__) {
     window.__MM_TEST_HOOKS__.parseActivityDefs = parseActivityDefs;
+    window.__MM_TEST_HOOKS__.parseItemTradeability = parseItemTradeability;
   }
 })();

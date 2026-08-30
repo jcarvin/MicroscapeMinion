@@ -21,7 +21,7 @@ function createRow(goal = null) {
     itemName: goal?.itemName ?? '',
     targetValue: goal ? String(goal.targetCount) : '',
     maxCraftable: goal?.maxCraftable === true,
-    sourceMode: ['any', 'craft', 'drops'].includes(goal?.sourceMode) ? goal.sourceMode : null,
+    sourceMode: ['any', 'manual', 'craft', 'drops'].includes(goal?.sourceMode) ? goal.sourceMode : null,
     completed: goal?.completed === true,
   };
 }
@@ -63,6 +63,7 @@ function hasAcquisitionSource(item, source) {
   if (item?.acquisitionSources?.includes(source)) return true;
   if (source === 'craft') return item?.craftable === true;
   if (source === 'drops') return item?.chanceDrop === true;
+  if (source === 'manual') return item?.manualActivity === true;
   return false;
 }
 
@@ -70,14 +71,33 @@ function hasAmbiguousSource(item) {
   return hasAcquisitionSource(item, 'craft') && hasAcquisitionSource(item, 'drops');
 }
 
+function sourceOptionsFor(item, planning) {
+  if (!item) return [];
+  const specificIds = GOAL_SOURCE_OPTIONS
+    .filter(({ id }) => id !== 'any')
+    .filter(({ id }) => hasAcquisitionSource(item, id)
+      || planning?.sourceOptions?.includes(id))
+    .map(({ id }) => id);
+  const anyAvailable = item.bazaarTradeable !== false || specificIds.length > 1;
+  return GOAL_SOURCE_OPTIONS
+    .filter(({ id }) => (id === 'any' && anyAvailable) || specificIds.includes(id))
+    .map((option) => option.id === 'any' && item.bazaarTradeable === false
+      ? {
+          ...option,
+          description: 'Use any available acquisition route. Materials and XP are not projected.',
+        }
+      : option);
+}
+
 function effectiveSourceMode(row, item) {
-  if (row.maxCraftable) return 'craft';
-  if (['any', 'craft', 'drops'].includes(row.sourceMode)) return row.sourceMode;
+  if (row.maxCraftable) return row.sourceMode === 'manual' ? 'manual' : 'craft';
+  if (['any', 'manual', 'craft', 'drops'].includes(row.sourceMode)) return row.sourceMode;
   if (hasAmbiguousSource(item)) return 'any';
   if (hasAcquisitionSource(item, 'craft')) return 'any';
   if (hasAcquisitionSource(item, 'drops')) {
     return hasAcquisitionSource(item, 'activity') ? 'any' : 'drops';
   }
+  if (hasAcquisitionSource(item, 'manual')) return 'manual';
   return 'any';
 }
 
@@ -95,7 +115,8 @@ function completeGoals(rows, items, persistedGoals = []) {
       const savedGoal = savedGoals.get(row.id);
       return savedGoal ? [savedGoal] : [];
     }
-    const hasKnownSource = item?.craftable || item?.chanceDrop;
+    const hasKnownSource = item?.craftable || item?.chanceDrop || item?.manualActivity
+      || ['any', 'manual', 'craft', 'drops'].includes(row.sourceMode);
     return [{
       id: row.id,
       itemId: row.itemId,
@@ -206,7 +227,9 @@ export default function GoalSection({ goalItems, goalStatuses }) {
                     ? 'craft'
                     : hasAcquisitionSource(item, 'drops')
                       ? (hasAcquisitionSource(item, 'activity') ? 'any' : 'drops')
-                      : null,
+                      : hasAcquisitionSource(item, 'manual')
+                        ? 'manual'
+                        : null,
             targetValue: row.maxCraftable && !item?.craftable && Number(row.targetValue) === 0
               ? ''
               : row.targetValue,
@@ -220,6 +243,8 @@ export default function GoalSection({ goalItems, goalStatuses }) {
     const row = rows.find((candidate) => candidate.id === rowId);
     if (!row || row.completed) return;
     const enabling = !row.maxCraftable;
+    const item = goalItems.find(({ id }) => id === row.itemId);
+    const sourceMode = effectiveSourceMode(row, item);
     if (!enabling && Number(row.targetValue) === 0) {
       persistedGoalsRef.current = persistedGoalsRef.current.filter((goal) => goal.id !== rowId);
     }
@@ -227,7 +252,9 @@ export default function GoalSection({ goalItems, goalStatuses }) {
       ? {
           ...candidate,
           maxCraftable: enabling,
-          sourceMode: 'craft',
+          sourceMode: enabling
+            ? (sourceMode === 'manual' ? 'manual' : 'craft')
+            : candidate.sourceMode,
           targetValue: enabling
             ? (candidate.targetValue === '' ? '0' : candidate.targetValue)
             : (Number(candidate.targetValue) === 0 ? '' : candidate.targetValue),
@@ -237,8 +264,11 @@ export default function GoalSection({ goalItems, goalStatuses }) {
 
   function handleSourceChange(rowId, sourceMode) {
     const row = rows.find((candidate) => candidate.id === rowId);
-    if (!row || !['any', 'craft', 'drops'].includes(sourceMode)) return;
-    const disablesMax = sourceMode !== 'craft' && row.maxCraftable;
+    if (!row || !['any', 'manual', 'craft', 'drops'].includes(sourceMode)) return;
+    const item = goalItems.find(({ id }) => id === row.itemId);
+    const supportsMax = sourceMode === 'craft'
+      || (sourceMode === 'manual' && item?.manualHasInputs === true);
+    const disablesMax = !supportsMax && row.maxCraftable;
     if (disablesMax && Number(row.targetValue) === 0) {
       persistedGoalsRef.current = persistedGoalsRef.current.filter((goal) => goal.id !== rowId);
     }
@@ -246,7 +276,7 @@ export default function GoalSection({ goalItems, goalStatuses }) {
       ? {
           ...candidate,
           sourceMode,
-          maxCraftable: sourceMode === 'craft' ? candidate.maxCraftable : false,
+          maxCraftable: supportsMax ? candidate.maxCraftable : false,
           targetValue: disablesMax && Number(candidate.targetValue) === 0
             ? ''
             : candidate.targetValue,
@@ -321,6 +351,7 @@ export default function GoalSection({ goalItems, goalStatuses }) {
           const item = goalItems.find(({ id }) => id === row.itemId);
           const planning = localPlans.get(row.id) ?? status?.planning ?? null;
           const sourceMode = effectiveSourceMode(row, item);
+          const sourceOptions = sourceOptionsFor(item, planning);
           const ambiguousSource = hasAmbiguousSource(item);
           const targetCount = Number(row.targetValue);
           const count = status?.count ?? item?.count ?? 0;
@@ -363,9 +394,9 @@ export default function GoalSection({ goalItems, goalStatuses }) {
               : planning?.sourceType === 'any'
                 ? 'Multiple sources · materials and XP not projected'
               : (row.maxCraftable && limitation ? `Limited by ${limitingNames.join(', ')}` : null);
-          const showLevelProjection = planning?.xpKnown === true
-            && planning?.feasible === true
-            && planning.expectedLevel !== null;
+          const showXpProjection = planning?.xpKnown === true
+            && planning?.levelFeasible !== false
+            && planning.xpGained > 0;
           const { etaMs, bankTrips } = resolveGoalEta(status);
           const dropPosition = dragOverId === row.id && draggedIndex !== rowIndex
             ? (draggedIndex < rowIndex ? ' drop-after' : ' drop-before')
@@ -411,6 +442,7 @@ export default function GoalSection({ goalItems, goalStatuses }) {
                 />
                 <div className="goal-target-control">
                   {((item?.craftable && (!ambiguousSource || sourceMode === 'craft'))
+                    || (item?.manualHasInputs && sourceMode === 'manual')
                     || row.maxCraftable) && (
                     <button
                       type="button"
@@ -449,16 +481,10 @@ export default function GoalSection({ goalItems, goalStatuses }) {
                 </button>
               </div>
 
-              {item && (item.craftable || item.chanceDrop) && !row.maxCraftable && (
+              {sourceOptions.length > 1 && (
                 <GoalSourceSelector
                   value={sourceMode}
-                  options={
-                    ambiguousSource
-                      ? GOAL_SOURCE_OPTIONS
-                      : item.craftable
-                        ? GOAL_SOURCE_OPTIONS.filter((o) => o.id !== 'drops')
-                        : GOAL_SOURCE_OPTIONS.filter((o) => o.id !== 'craft')
-                  }
+                  options={sourceOptions}
                   onChange={(nextSourceMode) => handleSourceChange(row.id, nextSourceMode)}
                 />
               )}
@@ -508,10 +534,12 @@ export default function GoalSection({ goalItems, goalStatuses }) {
                 </div>
               )}
               {planningNote && <div className="goal-plan-note">{planningNote}</div>}
-              {showLevelProjection && (
+              {showXpProjection && (
                 <div className="goal-level-projection">
-                  Expected {formatSkillName(planning.skill)} level: {planning.expectedLevel}
-                  {' · '}+{formatNumber(planning.xpGained)} XP
+                  {planning.expectedLevel !== null
+                    ? `Expected ${formatSkillName(planning.skill)} level: ${planning.expectedLevel} · `
+                    : `Projected ${formatSkillName(planning.skill)} XP: `}
+                  +{formatNumber(planning.xpGained)} XP
                 </div>
               )}
             </div>

@@ -340,6 +340,129 @@ describe('background activity definitions', () => {
     ]);
   });
 
+  it('preserves Manual mode for input-limited Max goals', async () => {
+    const { __test } = await loadBackground();
+
+    expect(__test.normalizeGoals([{
+      id: 'sardines',
+      itemId: 'rawSardine',
+      targetCount: 0,
+      maxCraftable: true,
+      sourceMode: 'manual',
+    }])).toEqual([{
+      id: 'sardines',
+      itemId: 'rawSardine',
+      itemName: 'rawSardine',
+      targetCount: 0,
+      maxCraftable: true,
+      sourceMode: 'manual',
+    }]);
+  });
+
+  it('does not expose or plan live mining sigils as hard Manual inputs', async () => {
+    const { __test } = await loadBackground();
+    const xpTable = computeMicroscapeXpTable();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'mining-iron-sigil-di': {
+          level: null,
+          xpPerCycle: null,
+          inventoryChanges: { sigilDi: -1, ironOre: 1 },
+        },
+      },
+      bundledActivityDefs: {
+        'mine-iron': {
+          level: 15,
+          xpPerCycle: 35,
+          inventoryChanges: { ironOre: 1 },
+        },
+      },
+      xpTable,
+      state: {
+        me: {
+          exp: { mining: xpTable[15] },
+          inventory: { sigilDi: 351, ironOre: 351 },
+          lootBag: {},
+        },
+      },
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOALS',
+      goals: [{
+        id: 'ore',
+        itemId: 'ironOre',
+        itemName: 'Iron Ore',
+        targetCount: 3000,
+        sourceMode: 'manual',
+      }],
+    });
+
+    const status = __test.buildStatus();
+    expect(status.goalStatuses[0].planning).toMatchObject({
+      feasible: true,
+      achievableTarget: 3000,
+      limitingItemIds: [],
+      skill: 'mining',
+      projectedLevelBefore: 15,
+      xpGained: (3000 - 351) * 35,
+      xpKnown: true,
+      activityId: 'mine-iron',
+    });
+    expect(status.goalItems.find(({ id }) => id === 'ironOre')).toMatchObject({
+      manualActivity: true,
+      manualHasInputs: false,
+    });
+  });
+
+  it('projects Manual XP from persisted activity observations when parsed XP is missing', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'mine-iron': { inventoryChanges: { ironOre: 1 } },
+      },
+      bundledActivityDefs: {
+        'mine-iron': { inventoryChanges: { ironOre: 1 } },
+      },
+      xpRateSamples: {
+        'mine-iron:mining': {
+          samples: [
+            { value: 466000, at: 1, workMs: 0 },
+            { value: 466035, at: 2, workMs: 32000 },
+            { value: 466070, at: 3, workMs: 64000 },
+            { value: 466140, at: 4, workMs: 128000 },
+            { value: 466175, at: 5, workMs: 160000 },
+          ],
+        },
+      },
+      state: {
+        me: {
+          exp: { mining: 466175 },
+          inventory: { ironOre: 515 },
+          lootBag: {},
+        },
+      },
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOALS',
+      goals: [{
+        id: 'ore',
+        itemId: 'ironOre',
+        itemName: 'Iron Ore',
+        targetCount: 3000,
+        sourceMode: 'manual',
+      }],
+    });
+
+    expect(__test.buildStatus().goalStatuses[0].planning).toMatchObject({
+      activityId: 'mine-iron',
+      skill: 'mining',
+      xpKnown: true,
+      xpGained: 86975,
+    });
+  });
+
   it('recalculates ordered Max goals and returns planning details immediately', async () => {
     const { __test } = await loadBackground();
     __test.resetTestState();
@@ -666,6 +789,44 @@ describe('background activity definitions', () => {
     expect(firstUnrelated).toBeGreaterThan(0);
     expect(status.goalItems.slice(0, firstUnrelated).every(({ relatedToActivity }) => relatedToActivity)).toBe(true);
     expect(status.goalItems.slice(firstUnrelated).every(({ relatedToActivity }) => !relatedToActivity)).toBe(true);
+  });
+
+  it('reports bazaar eligibility separately from manual and drop routes', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: {
+        'catch-salmon': {
+          inventoryChanges: { feather: -1, rawSalmon: 1 },
+        },
+        'fight-bear': {
+          inventoryChanges: {},
+          dropItems: { rawSalmon: 1 },
+        },
+        'exchange-pet-map-bog': {
+          inventoryChanges: { audienceFavor: -10, petMapBog: 1 },
+        },
+      },
+      itemTradeability: {
+        rawSalmon: true,
+        petMapBog: false,
+      },
+      state: { me: { inventory: {}, lootBag: {} } },
+    });
+
+    const items = new Map(__test.buildStatus().goalItems.map((item) => [item.id, item]));
+    expect(items.get('rawSalmon')).toMatchObject({
+      bazaarTradeable: true,
+      manualActivity: true,
+      chanceDrop: true,
+      acquisitionSources: ['activity', 'drops', 'manual'],
+    });
+    expect(items.get('petMapBog')).toMatchObject({
+      bazaarTradeable: false,
+      manualActivity: true,
+      chanceDrop: false,
+      acquisitionSources: ['activity', 'manual'],
+    });
   });
 
   it('notifies independently when multiple goals are reached', async () => {

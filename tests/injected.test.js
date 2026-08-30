@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-async function loadInjectedParser() {
+async function loadInjectedHooks() {
   vi.resetModules();
   const hooks = {};
   window.__MM_TEST_HOOKS__ = hooks;
@@ -14,7 +14,11 @@ async function loadInjectedParser() {
   };
   vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('skip live fetch'))));
   await import('../src/injected.js');
-  return hooks.parseActivityDefs;
+  return hooks;
+}
+
+async function loadInjectedParser() {
+  return (await loadInjectedHooks()).parseActivityDefs;
 }
 
 describe('injected activity definition parser', () => {
@@ -93,6 +97,60 @@ describe('injected activity definition parser', () => {
       'forge-iron-armor': {
         inventoryChanges: { ironBar: -5, ironArmor: 1 },
       },
+    });
+  });
+
+  it('parses combat drops when extra fields separate mob and level', async () => {
+    const parseActivityDefs = await loadInjectedParser();
+    const bundle = `
+      {
+        id: \`bear\`,
+        enemyType: \`creature\`,
+        speed: 4,
+        stats: { hp: 30 },
+        drops: { rawSalmon: { quantity: 2, rarity: 5 } }
+      }
+      {
+        id: \`fight-bear\`,
+        name: \`Bear\`,
+        difficulty: 3,
+        mob: \`bear\`,
+        isSafe: false,
+        level: 12
+      }
+    `;
+
+    expect(parseActivityDefs(bundle)['fight-bear']).toMatchObject({
+      level: 12,
+      mob: 'bear',
+      dropItems: { rawSalmon: 2 },
+    });
+  });
+
+  it('uses the item value property as the bundle tradeability signal', async () => {
+    const { parseItemTradeability } = await loadInjectedHooks();
+    const bundle = `
+      { id: \`rawSalmon\`, name: \`raw salmon\`, category: \`resources\`, value: 4 }
+      {
+        id: \`petMapBog\`,
+        name: \`Pet Map: Bog\`,
+        category: \`pets\`,
+        maxOwnable: 1,
+        obsoleteIfOwning: \`petBog\`
+      }
+      {
+        id: \`petMapNestedValue\`,
+        name: \`Pet Map: Nested Value\`,
+        category: \`pets\`,
+        metadata: { value: 99 }
+      }
+      { id: \`not-an-item\`, name: \`Ability\`, type: \`static\`, value: 5 }
+    `;
+
+    expect(parseItemTradeability(bundle)).toEqual({
+      rawSalmon: true,
+      petMapBog: false,
+      petMapNestedValue: false,
     });
   });
 });

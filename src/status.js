@@ -11,6 +11,8 @@ import { getMaterialCount, getGoalCount, findKey } from './inventory.js';
 import {
   getChanceDropItemIds,
   getCraftableItemIds,
+  getManualActivityItemIds,
+  getManualInputActivityItemIds,
   isMaxCraftActivity,
 } from './goal-planner.js';
 import { runoutInfo } from './runout.js';
@@ -65,7 +67,9 @@ export function buildStatus() {
       ? producedByActivity && isMaxCraftActivity(etaActId, activityDef)
       : planning?.sourceMode === 'drops'
         ? droppedByActivity
-        : producedByActivity || droppedByActivity;
+        : planning?.sourceMode === 'manual'
+          ? producedByActivity
+          : producedByActivity || droppedByActivity;
     const eta = etaActId && relatedToActivity
       ? computeGoalEta(goal, effectiveCount, etaActId, etaAct, etaActIsLive, goal.id)
       : null;
@@ -203,6 +207,11 @@ export function buildStatus() {
   const craftableItemIds = getCraftableItemIds(state.ACTIVITY_DEFS);
   const chanceDropItemIds = getChanceDropItemIds(state.ACTIVITY_DEFS);
   const activityOutputItemIds = new Set();
+  const manualActivityItemIds = getManualActivityItemIds(state.ACTIVITY_DEFS);
+  const manualInputActivityDefs = Object.keys(state.BUNDLED_ACTIVITY_DEFS).length > 0
+    ? state.BUNDLED_ACTIVITY_DEFS
+    : state.ACTIVITY_DEFS;
+  const manualInputActivityItemIds = getManualInputActivityItemIds(manualInputActivityDefs);
   for (const def of Object.values(state.ACTIVITY_DEFS)) {
     for (const [id, change] of Object.entries(def.inventoryChanges ?? {})) {
       itemNames.set(id, id);
@@ -221,6 +230,7 @@ export function buildStatus() {
       ...(activityOutputItemIds.has(id) ? ['activity'] : []),
       ...(craftableItemIds.has(id) ? ['craft'] : []),
       ...(chanceDropItemIds.has(id) ? ['drops'] : []),
+      ...(manualActivityItemIds.has(id) ? ['manual'] : []),
     ];
     return {
       id,
@@ -230,6 +240,11 @@ export function buildStatus() {
       relatedToActivity: relatedItemIds.has(id),
       craftable: craftableItemIds.has(id),
       chanceDrop: chanceDropItemIds.has(id),
+      manualActivity: manualActivityItemIds.has(id),
+      manualHasInputs: manualInputActivityItemIds.has(id),
+      // Missing catalog metadata stays permissive: almost all Microscape items
+      // are tradeable, while explicit false comes from an item lacking `value`.
+      bazaarTradeable: state.ITEM_TRADEABILITY[id] !== false,
       acquisitionSources,
     };
   });
