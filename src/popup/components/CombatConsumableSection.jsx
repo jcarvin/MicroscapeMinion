@@ -1,13 +1,13 @@
 import styled from 'styled-components';
 import { formatItemId } from '../utils/format';
 import { setConsumableNotify, clearConsumableNotify } from '../utils/messages';
-import { Card, CardLabel, EtaGroup, NotifyLabel, ToggleSwitch, ToggleTrack } from './Shared';
+import { Card, CardLabel, EtaGroup, NotifyLabel, SectionWrapper, ToggleSwitch, ToggleTrack } from './Shared';
 import EtaDisplay from './EtaDisplay';
 import EtaTooltip from './EtaTooltip';
 
 const ConsumableItem = styled.div`
   & + & {
-    border-top: 1px solid ${({ theme }) => theme.border};
+    border-top: 1px solid ${({ theme }) => theme.parchmentDark};
     margin-top: 4px;
     padding-top: 6px;
   }
@@ -38,7 +38,7 @@ const ConsumableRight = styled.span`
 `;
 
 const ConsumableCount = styled.span`
-  color: ${({ theme }) => theme.muted};
+  color: ${({ theme }) => theme.brown500};
   font-size: 11px;
   white-space: nowrap;
 `;
@@ -53,38 +53,40 @@ export default function CombatConsumableSection({ combatConsumables, consumableN
   const notifySet = new Set(consumableNotifyItems ?? []);
 
   return (
-    <Card>
+    <SectionWrapper>
       <CardLabel>Combat Consumables</CardLabel>
-      {combatConsumables.map(item => (
-        <ConsumableItem key={item.itemId}>
-          <ConsumableRow>
-            <ConsumableName>{formatItemId(item.itemId)}</ConsumableName>
-            <ConsumableRight>
-              <ConsumableCount>{item.currentCount}</ConsumableCount>
-              <EtaGroup>
-                <EtaDisplay etaMs={item.etaMs ?? null} />
-                <EtaTooltip />
-              </EtaGroup>
-            </ConsumableRight>
-          </ConsumableRow>
-          <ConsumableNotifyRow>
-            <NotifyLabel>
-              <ToggleSwitch>
-                <input
-                  type="checkbox"
-                  checked={notifySet.has(item.itemId)}
-                  onChange={e => {
-                    if (e.target.checked) setConsumableNotify(item.itemId);
-                    else clearConsumableNotify(item.itemId);
-                  }}
-                />
-                <ToggleTrack />
-              </ToggleSwitch>
-              Notify when empty
-            </NotifyLabel>
-          </ConsumableNotifyRow>
-        </ConsumableItem>
-      ))}
-    </Card>
+      <Card>
+        {combatConsumables.map(item => (
+          <ConsumableItem key={item.itemId}>
+            <ConsumableRow>
+              <ConsumableName>{formatItemId(item.itemId)}</ConsumableName>
+              <ConsumableRight>
+                <ConsumableCount>{item.currentCount}</ConsumableCount>
+                <EtaGroup>
+                  <EtaDisplay etaMs={item.etaMs ?? null} />
+                  <EtaTooltip />
+                </EtaGroup>
+              </ConsumableRight>
+            </ConsumableRow>
+            <ConsumableNotifyRow>
+              <NotifyLabel>
+                <ToggleSwitch>
+                  <input
+                    type="checkbox"
+                    checked={notifySet.has(item.itemId)}
+                    onChange={e => {
+                      if (e.target.checked) setConsumableNotify(item.itemId);
+                      else clearConsumableNotify(item.itemId);
+                    }}
+                  />
+                  <ToggleTrack />
+                </ToggleSwitch>
+                Notify when empty
+              </NotifyLabel>
+            </ConsumableNotifyRow>
+          </ConsumableItem>
+        ))}
+      </Card>
+    </SectionWrapper>
   );
 }

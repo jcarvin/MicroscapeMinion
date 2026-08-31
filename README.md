@@ -101,6 +101,15 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.22
+
+- Visual overhaul: redesign the popup UI to match the Microscape game aesthetic — deep forest green background with parchment card panels, brown borders, and RPG-style controls.
+- Section headings (STATUS, GOAL TRACKER, etc.) now sit directly on the green background above their parchment cards, matching the game's HUD layout.
+- Progress bars now use a hard-edged game stat bar style (brown track, moss green fill) instead of pill-shaped bars.
+- Source selector tabs (Any / Craft / Drops) and the Max button now render as physical RPG inventory buttons with active/inactive states.
+- Typography: Pixelify Sans for headings and labels; IBM Plex Mono for body text and numbers.
+- Popup width increased to 350px.
+
 ### v0.1.21
 
 - Replace the default scrollbar with a slim 4px overlay scrollbar that floats over content without shifting layout, styled to match the dark theme.

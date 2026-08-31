@@ -8,7 +8,8 @@ const StyledHeader = styled.div`
   align-items: center;
   gap: 7px;
   padding: 10px 12px 9px;
-  border-bottom: 1px solid ${({ theme }) => theme.border};
+  background: ${({ theme }) => theme.panel};
+  border-bottom: 2px solid #64401f;
 `;
 
 const Dot = styled.span`
@@ -20,11 +21,14 @@ const Dot = styled.span`
   flex-shrink: 0;
   transition: background 0.3s;
   cursor: pointer;
+  box-shadow: 0 0 4px ${({ theme, $connected, $idle }) =>
+    $connected ? ($idle ? theme.amber : theme.green) : 'transparent'};
 `;
 
 const Brand = styled.span`
-  font-size: 12px;
-  font-weight: 600;
+  font-family: 'Pixelify Sans', monospace;
+  font-size: 14px;
+  font-weight: 700;
   letter-spacing: .03em;
   color: ${({ theme }) => theme.text};
   flex: 1;
@@ -42,7 +46,9 @@ const BaseHeaderBtn = styled.button`
   flex-shrink: 0;
   opacity: 0.7;
   transition: opacity 0.15s;
-  &:hover { opacity: 1; filter: none; }
+  box-shadow: none;
+  &:hover { opacity: 1; filter: none; background: transparent; }
+  &:active { transform: none; box-shadow: none; }
 `;
 
 const NotifToggleBtn = styled(BaseHeaderBtn)`

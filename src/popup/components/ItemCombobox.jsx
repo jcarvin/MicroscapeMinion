@@ -5,7 +5,7 @@ import useClickOutside from '../hooks/useClickOutside';
 
 const ComboCount = styled.span`
   font-size: 11px;
-  color: ${({ theme }) => theme.muted};
+  color: ${({ theme }) => theme.brown500};
   flex-shrink: 0;
 `;
 
@@ -17,13 +17,14 @@ const ComboOption = styled.li`
   cursor: pointer;
   font-size: 12px;
   gap: 8px;
-  background: ${({ $selected }) => $selected ? 'rgba(91,141,238,.2)' : 'transparent'};
+  background: ${({ $selected }) => $selected ? 'rgba(78,133,41,.15)' : 'transparent'};
+  color: ${({ theme }) => theme.brown900};
 
   &:hover {
     background: ${({ theme }) => theme.accent};
-    color: #fff;
+    color: ${({ theme }) => theme.text};
   }
-  &:hover ${ComboCount} { color: rgba(255,255,255,.7); }
+  &:hover ${ComboCount} { color: rgba(245,229,189,.7); }
 `;
 
 const ComboOptions = styled.ul`
@@ -31,8 +32,8 @@ const ComboOptions = styled.ul`
   top: calc(100% + 3px);
   left: 0;
   min-width: 180px;
-  background: ${({ theme }) => theme.surface};
-  border: 1px solid ${({ theme }) => theme.border};
+  background: ${({ theme }) => theme.parchmentLight};
+  border: 2px solid ${({ theme }) => theme.brown700};
   border-radius: ${({ theme }) => theme.radius};
   list-style: none;
   margin: 0;
@@ -40,13 +41,13 @@ const ComboOptions = styled.ul`
   z-index: 50;
   max-height: 140px;
   overflow-y: auto;
-  box-shadow: 0 4px 12px rgba(0,0,0,.4);
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.3);
 `;
 
 const ComboEmpty = styled.li`
   padding: 5px 9px;
   font-size: 12px;
-  color: ${({ theme }) => theme.muted};
+  color: ${({ theme }) => theme.brown500};
   font-style: italic;
 `;
 
