@@ -101,6 +101,11 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.21
+
+- Replace the default scrollbar with a slim 4px overlay scrollbar that floats over content without shifting layout, styled to match the dark theme.
+- Add a collapsible toggle to each goal row: a `▾` chevron below the drag handle rotates 90° and hides the progress bar, source selector, plan notes, and XP projection when clicked.
+
 ### v0.1.20
 
 - Internal: decompose large components (GoalSection, DebugSection) into focused sub-components with co-located styles, and extract shared logic into reusable hooks (useClickOutside, useTransientLabel, useDelayedTooltip, useNthClick, usePolledStatus, useChromeStorageState, useDragReorder). No user-facing changes.
