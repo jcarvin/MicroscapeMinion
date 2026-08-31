@@ -35,6 +35,33 @@ export const GoalDragBtn = styled(GoalIconBtnBase)`
   &:hover { color: ${({ theme }) => theme.text}; }
 `;
 
+export const GoalDragColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+`;
+
+export const GoalCollapseBtn = styled.button`
+  background: transparent;
+  color: ${({ theme }) => theme.muted};
+  width: 18px;
+  height: 12px;
+  padding: 0;
+  font-size: 9px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.18s ease, color 0.15s;
+  transform: rotate(${({ $collapsed }) => ($collapsed ? '-90deg' : '0deg')});
+  &:hover { color: ${({ theme }) => theme.text}; filter: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+`;
+
 export const GoalTargetControl = styled.div`
   display: flex;
   align-items: center;

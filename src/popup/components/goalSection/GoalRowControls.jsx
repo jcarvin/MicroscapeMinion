@@ -1,6 +1,8 @@
 import ItemCombobox from '../ItemCombobox';
 import {
+  GoalCollapseBtn,
   GoalDragBtn,
+  GoalDragColumn,
   GoalMaxBtn,
   GoalRemoveBtn,
   GoalRowFields,
@@ -13,6 +15,8 @@ export default function GoalRowControls({
   goalItems,
   sourceMode,
   ambiguousSource,
+  collapsed,
+  hasCollapsibleContent,
   onDragStart,
   onDragEnd,
   onSelect,
@@ -20,6 +24,7 @@ export default function GoalRowControls({
   onTargetChange,
   onTargetBlur,
   onRemove,
+  onToggleCollapse,
 }) {
   const showMaxBtn = (
     (item?.craftable && (!ambiguousSource || sourceMode === 'craft'))
@@ -29,20 +34,33 @@ export default function GoalRowControls({
 
   return (
     <GoalRowFields>
-      <GoalDragBtn
-        type="button"
-        draggable
-        aria-label="Drag to reorder goal"
-        title="Drag to reorder"
-        onDragStart={(event) => {
-          event.dataTransfer.effectAllowed = 'move';
-          event.dataTransfer.setData('text/plain', row.id);
-          onDragStart();
-        }}
-        onDragEnd={onDragEnd}
-      >
-        ::
-      </GoalDragBtn>
+      <GoalDragColumn>
+        <GoalDragBtn
+          type="button"
+          draggable
+          aria-label="Drag to reorder goal"
+          title="Drag to reorder"
+          onDragStart={(event) => {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', row.id);
+            onDragStart();
+          }}
+          onDragEnd={onDragEnd}
+        >
+          ::
+        </GoalDragBtn>
+        {hasCollapsibleContent && (
+          <GoalCollapseBtn
+            type="button"
+            $collapsed={collapsed}
+            aria-label={collapsed ? 'Expand goal details' : 'Collapse goal details'}
+            title={collapsed ? 'Expand' : 'Collapse'}
+            onClick={onToggleCollapse}
+          >
+            ▾
+          </GoalCollapseBtn>
+        )}
+      </GoalDragColumn>
       <ItemCombobox
         items={goalItems}
         selectedId={row.itemId}

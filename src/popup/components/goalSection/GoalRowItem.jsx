@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { formatItemId, formatNumber, formatSkillName } from '../../utils/format';
 import GoalSourceSelector from '../GoalSourceSelector';
 import GoalProgress from './GoalProgress';
@@ -91,6 +92,9 @@ export default function GoalRowItem({
   const { etaMs, bankTrips } = resolveGoalEta(status);
   const isDraggedOver = dragOverId === row.id && draggedIndex !== rowIndex;
 
+  const [collapsed, setCollapsed] = useState(false);
+  const hasCollapsibleContent = isValid || sourceOptions.length > 1 || Boolean(planningNote) || showXpProjection;
+
   const dropBefore = isDraggedOver && draggedIndex > rowIndex;
   const dropAfter = isDraggedOver && draggedIndex < rowIndex;
   const semanticClasses = [
@@ -121,6 +125,8 @@ export default function GoalRowItem({
         goalItems={goalItems}
         sourceMode={sourceMode}
         ambiguousSource={ambiguousSource}
+        collapsed={collapsed}
+        hasCollapsibleContent={hasCollapsibleContent}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
         onSelect={onSelect}
@@ -128,9 +134,10 @@ export default function GoalRowItem({
         onTargetChange={onTargetChange}
         onTargetBlur={onTargetBlur}
         onRemove={onRemove}
+        onToggleCollapse={() => setCollapsed(v => !v)}
       />
 
-      {sourceOptions.length > 1 && (
+      {!collapsed && sourceOptions.length > 1 && (
         <GoalSourceSelector
           value={sourceMode}
           options={sourceOptions}
@@ -138,7 +145,7 @@ export default function GoalRowItem({
         />
       )}
 
-      {isValid && (
+      {!collapsed && isValid && (
         <GoalProgress
           count={count}
           targetCount={targetCount}
@@ -152,9 +159,9 @@ export default function GoalRowItem({
         />
       )}
 
-      {planningNote && <GoalPlanNote>{planningNote}</GoalPlanNote>}
+      {!collapsed && planningNote && <GoalPlanNote>{planningNote}</GoalPlanNote>}
 
-      {showXpProjection && (
+      {!collapsed && showXpProjection && (
         <GoalLevelProjection>
           {planning.expectedLevel !== null
             ? `Expected ${formatSkillName(planning.skill)} level: ${planning.expectedLevel} · `
