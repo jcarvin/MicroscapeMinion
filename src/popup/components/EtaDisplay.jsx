@@ -4,7 +4,7 @@ import { formatDuration } from '../utils/format';
 import { EtaLabel, EtaStack } from './Shared';
 
 const CalibratingNote = styled.span`
-  color: ${({ theme }) => theme.muted};
+  color: ${({ theme }) => theme.brown500};
   font-size: 10px;
   opacity: 0.72;
   white-space: nowrap;

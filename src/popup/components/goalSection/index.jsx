@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { Card, CardLabel } from '../Shared';
+import { CardLabel, SectionWrapper } from '../Shared';
 import InsertDivider from './InsertDivider';
 import GoalRowItem from './GoalRowItem';
 import { GoalAddBtn, GoalHeading, GoalList } from './GoalSection.styles';
@@ -24,7 +24,7 @@ export default function GoalSection({ goalItems, goalStatuses }) {
   const draggedIndex = rows.findIndex(({ id }) => id === drag.draggedId);
 
   return (
-    <Card>
+    <SectionWrapper>
       <GoalHeading>
         <CardLabel>Goal Tracker</CardLabel>
         <GoalAddBtn
@@ -76,6 +76,6 @@ export default function GoalSection({ goalItems, goalStatuses }) {
           <InsertDivider onInsert={() => insertRowAt(rows.length)} />
         )}
       </GoalList>
-    </Card>
+    </SectionWrapper>
   );
 }

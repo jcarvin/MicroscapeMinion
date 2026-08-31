@@ -20,7 +20,7 @@ const EtaInfo = styled.span`
   height: 12px;
   border: 1px solid currentColor;
   border-radius: 50%;
-  color: ${({ theme }) => theme.muted};
+  color: ${({ theme }) => theme.brown500};
   font-size: 8px;
   font-style: italic;
   font-weight: 700;

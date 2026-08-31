@@ -4,7 +4,7 @@ import { NotifyLabel, ToggleSwitch, ToggleTrack } from './Shared';
 const SkillNotifyRow = styled.div`
   margin-top: 7px;
   padding-top: 6px;
-  border-top: 1px solid ${({ theme }) => theme.border};
+  border-top: 1px solid ${({ theme }) => theme.parchmentDark};
 `;
 
 export default function SkillNotifyToggleSection({ targetLevel, checked, onChange }) {

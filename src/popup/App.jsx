@@ -26,31 +26,29 @@ const ScrollContent = styled.div`
     background: transparent;
   }
   &::-webkit-scrollbar-thumb {
-    background: rgba(107, 112, 128, 0.3);
+    background: rgba(49,93,32,.5);
     border-radius: 99px;
   }
   &::-webkit-scrollbar-thumb:hover {
-    background: rgba(107, 112, 128, 0.6);
+    background: rgba(78,133,41,.7);
   }
 `;
 
 const SupportFooter = styled.div`
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   padding: 6px 12px 8px;
   flex-shrink: 0;
+  border-top: 1px solid ${({ theme }) => theme.border};
 `;
 
 const SupportLink = styled.a`
   font-size: 10px;
-  color: ${({ theme }) => theme.muted};
+  color: ${({ theme }) => theme.gold};
   text-decoration: none;
-  opacity: 0.55;
-  transition: opacity 0.15s, color 0.15s;
-  &:hover {
-    color: ${({ theme }) => theme.text};
-    opacity: 1;
-  }
+  opacity: 0.7;
+  transition: opacity 0.15s;
+  &:hover { opacity: 1; }
 `;
 
 export default function App() {

@@ -1,5 +1,5 @@
 import styled from 'styled-components';
-import { Card, CardLabel } from './Shared';
+import { Card, CardLabel, SectionWrapper } from './Shared';
 
 const StatusRow = styled.div`
   display: flex;
@@ -12,13 +12,13 @@ const StatusBadge = styled.span`
   font-weight: 500;
   color: ${({ theme, $status }) =>
     $status === 'idle' ? theme.amber :
-    $status === 'active' ? theme.green :
-    theme.text};
+    $status === 'active' ? theme.accent :
+    theme.brown900};
 `;
 
 const TickRate = styled.span`
   font-size: 10px;
-  color: ${({ theme }) => theme.muted};
+  color: ${({ theme }) => theme.brown500};
 `;
 
 export default function StatusSection({ connected, idle, activity, tickMs }) {
@@ -35,12 +35,14 @@ export default function StatusSection({ connected, idle, activity, tickMs }) {
   }
 
   return (
-    <Card>
+    <SectionWrapper>
       <CardLabel>Status</CardLabel>
-      <StatusRow>
-        <StatusBadge $status={status} data-status={status}>{badge}</StatusBadge>
-        <TickRate>{tickText}</TickRate>
-      </StatusRow>
-    </Card>
+      <Card>
+        <StatusRow>
+          <StatusBadge $status={status} data-status={status}>{badge}</StatusBadge>
+          <TickRate>{tickText}</TickRate>
+        </StatusRow>
+      </Card>
+    </SectionWrapper>
   );
 }
