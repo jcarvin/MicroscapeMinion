@@ -17,7 +17,21 @@ import DebugSection from './components/debugSection';
 const ScrollContent = styled.div`
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow-y: overlay;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(107, 112, 128, 0.3);
+    border-radius: 99px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(107, 112, 128, 0.6);
+  }
 `;
 
 const SupportFooter = styled.div`
