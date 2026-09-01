@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.23
+
+- Fix: clicking the "+" insert button on goal row dividers now works correctly. The global button `:active` style was overriding the centering transform, shifting the button away from the cursor mid-click so the click never registered.
+
 ### v0.1.22
 
 - Visual overhaul: redesign the popup UI to match the Microscape game aesthetic — deep forest green background with parchment card panels, brown borders, and RPG-style controls.
