@@ -203,6 +203,11 @@ export const GoalInsertBtn = styled.button`
     color: ${({ theme }) => theme.brown900};
     border-color: ${({ theme }) => theme.gold};
   }
+
+  &:active {
+    transform: translate(-50%, -50%);
+    box-shadow: none;
+  }
 `;
 
 export const GoalAddBtn = styled.button`
