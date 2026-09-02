@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.24
+
+- Fix: item dropdown in the goal row now appears above the footer instead of being clipped behind it. The dropdown list is rendered via a React portal at a fixed position so it escapes the scroll container's overflow clipping context. The dropdown also flips upward automatically when there is not enough space below the input.
+
 ### v0.1.23
 
 - Fix: clicking the "+" insert button on goal row dividers now works correctly. The global button `:active` style was overriding the centering transform, shifting the button away from the cursor mid-click so the click never registered.

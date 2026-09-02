@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import styled from 'styled-components';
 import { formatItemId } from '../utils/format';
 import useClickOutside from '../hooks/useClickOutside';
@@ -28,9 +29,7 @@ const ComboOption = styled.li`
 `;
 
 const ComboOptions = styled.ul`
-  position: absolute;
-  top: calc(100% + 3px);
-  left: 0;
+  position: fixed;
   min-width: 180px;
   background: ${({ theme }) => theme.parchmentLight};
   border: 2px solid ${({ theme }) => theme.brown700};
@@ -38,7 +37,7 @@ const ComboOptions = styled.ul`
   list-style: none;
   margin: 0;
   padding: 3px 0;
-  z-index: 50;
+  z-index: 9999;
   max-height: 140px;
   overflow-y: auto;
   box-shadow: 3px 3px 0 rgba(0,0,0,0.3);
@@ -68,9 +67,23 @@ function itemName(item) {
 export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, inputRef }) {
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState('');
+  const [dropStyle, setDropStyle] = useState({});
   const wrapRef = useRef(null);
 
   useClickOutside(wrapRef, () => setIsOpen(false));
+
+  useLayoutEffect(() => {
+    if (!isOpen || !wrapRef.current) return;
+    const rect = wrapRef.current.getBoundingClientRect();
+    const dropdownHeight = 140;
+    const gap = 3;
+    const spaceBelow = window.innerHeight - rect.bottom - gap;
+    if (spaceBelow >= dropdownHeight || spaceBelow >= rect.top - gap) {
+      setDropStyle({ top: rect.bottom + gap, left: rect.left, minWidth: rect.width });
+    } else {
+      setDropStyle({ bottom: window.innerHeight - rect.top + gap, left: rect.left, minWidth: rect.width, top: 'auto' });
+    }
+  }, [isOpen]);
 
   function handleFocus() {
     if (items.length > 0) { setFilter(''); setIsOpen(true); }
@@ -126,8 +139,8 @@ export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, i
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
       />
-      {isOpen && (
-        <ComboOptions data-testid="combo-options">
+      {isOpen && createPortal(
+        <ComboOptions data-testid="combo-options" style={dropStyle}>
           {filtered.length === 0 ? (
             <ComboEmpty>
               {items.length === 0 ? 'No items available' : 'No match'}
@@ -144,7 +157,8 @@ export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, i
               </ComboOption>
             ))
           )}
-        </ComboOptions>
+        </ComboOptions>,
+        document.body
       )}
     </ComboWrap>
   );
