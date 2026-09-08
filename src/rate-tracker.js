@@ -202,10 +202,14 @@ export function trackGoalAccumulation(prevAct, newAct, prevMe, newMe) {
 
     if (newCount < prevCount) {
       state.goalRateSamples[rateKey] = [];
-      // Count dropped during a work activity: the item was consumed as crafting
-      // input, not banked. Lower the HWM so ETA doesn't falsely report "done"
-      // (which happens when HWM >= targetCount but actual count is still below it).
-      state.goalHighWaterMark[goal.id] = newCount;
+      // Lower HWM only when newAct is itself a work activity, meaning the count
+      // dropped because the item was consumed as crafting input (e.g. molten glass
+      // used to craft vials). When newAct is banking/travel, act falls back to
+      // prevAct so isWork is true, but the drop is a bank deposit — HWM must
+      // remain stable across bank trips.
+      if (isWorkActivityId(getActivityId(newAct))) {
+        state.goalHighWaterMark[goal.id] = newCount;
+      }
       continue;
     }
     if (newCount === prevCount) continue;

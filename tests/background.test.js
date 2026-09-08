@@ -1364,6 +1364,76 @@ describe('background activity definitions', () => {
     expect(status.goalStatuses[0].eta.totalMs).toBeGreaterThan(185 * 32_000);            // clearly non-zero
   });
 
+  it('lowers high-water mark when goal item is consumed as crafting material', async () => {
+    const { __test } = await loadBackground();
+    vi.useFakeTimers();
+    __test.resetTestState();
+    const makeGlassAct = { skill: 'crafting', activity: 'make-molten-glass', remaining: 1 };
+    const craftVialAct = { skill: 'crafting', activity: 'craft-vial', remaining: 1 };
+    __test.setTestState({
+      activityDefs: {
+        'make-molten-glass': {
+          durationMs: 18_000,
+          xpPerCycle: 20,
+          inventoryChanges: { sand: -1, sodaAsh: -1, moltenGlass: 1 },
+        },
+        'craft-vial': {
+          durationMs: 14_000,
+          xpPerCycle: 18,
+          inventoryChanges: { moltenGlass: -1, vial: 1 },
+        },
+      },
+      state: {
+        me: {
+          activity: makeGlassAct,
+          exp: { crafting: 0 },
+          inventory: { moltenGlass: 0 },
+          lootBag: {},
+        },
+      },
+      lastWorkAct: makeGlassAct,
+    });
+    sendRuntimeMessage({
+      type: 'SET_GOALS',
+      goals: [{ id: 'glass-goal', itemName: 'Molten Glass', itemId: 'moltenGlass', targetCount: 100 }],
+    });
+
+    // Craft 100 molten glass — HWM reaches target
+    vi.setSystemTime(1_000);
+    sendServerUpdate({ me: { lootBag: { moltenGlass: [50] } } }); // hwm = 50
+    vi.setSystemTime(301_000);
+    sendServerUpdate({ me: { lootBag: { moltenGlass: [50, 100] } } }); // hwm = 100
+
+    // Goal should appear done from ETA perspective (remaining = 0)
+    let status = __test.buildStatus();
+    expect(status.goalStatuses[0].eta).toBe(0);
+
+    // Switch to crafting vials, which consumes molten glass (work → work)
+    vi.setSystemTime(310_000);
+    sendServerUpdate({
+      me: {
+        activity: [makeGlassAct, craftVialAct],
+        lootBag: { moltenGlass: [100, 94] },
+      },
+    });
+
+    // HWM should now be lowered to 94 (consumption, not banking)
+    // Return to making glass — ETA should reflect remaining = 100 - 94 = 6, not 0
+    vi.setSystemTime(320_000);
+    sendServerUpdate({
+      me: {
+        activity: [craftVialAct, makeGlassAct],
+        lootBag: { moltenGlass: [94] },
+      },
+    });
+    status = __test.buildStatus();
+    expect(status.goalStatuses[0].count).toBe(94);
+    // ETA must be non-zero (goal not falsely complete)
+    expect(status.goalStatuses[0].eta).not.toBe(0);
+    expect(status.goalStatuses[0].eta).not.toBeNull();
+    expect(status.goalStatuses[0].eta.totalMs).toBeGreaterThan(0);
+  });
+
   it('does not charge an extra bank trip when travel/banking is already in progress', async () => {
     const { __test } = await loadBackground();
     vi.useFakeTimers();
