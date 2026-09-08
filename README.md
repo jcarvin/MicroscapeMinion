@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.25
+
+- Fix: goal ETA no longer shows "ETA <1s" and gets stuck when crafting an item that is also consumed as material for another goal. The high-water mark (used to keep the ETA stable during banking) was never reduced when the goal item was consumed during a work activity, causing the ETA formula to treat the goal as already complete. The high-water mark is now lowered to the current count whenever a goal item drops during a work activity (consumption), while remaining stable during banking and travel (deposits).
+
 ### v0.1.24
 
 - Fix: item dropdown in the goal row now appears above the footer instead of being clipped behind it. The dropdown list is rendered via a React portal at a fixed position so it escapes the scroll container's overflow clipping context. The dropdown also flips upward automatically when there is not enough space below the input.
