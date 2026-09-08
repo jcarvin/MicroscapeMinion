@@ -202,6 +202,10 @@ export function trackGoalAccumulation(prevAct, newAct, prevMe, newMe) {
 
     if (newCount < prevCount) {
       state.goalRateSamples[rateKey] = [];
+      // Count dropped during a work activity: the item was consumed as crafting
+      // input, not banked. Lower the HWM so ETA doesn't falsely report "done"
+      // (which happens when HWM >= targetCount but actual count is still below it).
+      state.goalHighWaterMark[goal.id] = newCount;
       continue;
     }
     if (newCount === prevCount) continue;
