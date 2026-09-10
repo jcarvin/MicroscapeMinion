@@ -1,11 +1,33 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
+import styled from 'styled-components';
 import { CardLabel, SectionWrapper } from '../Shared';
 import InsertDivider from './InsertDivider';
 import GoalRowItem from './GoalRowItem';
 import { GoalAddBtn, GoalHeading, GoalList } from './GoalSection.styles';
 import useGoalRows from './useGoalRows';
+import SetQueueButton from '../setQueue/SetQueueButton';
+import QueuePreviewDialog from '../setQueue/QueuePreviewDialog';
+import useActivityQueuePreview from '../../hooks/useActivityQueuePreview';
+import useZonePreferenceWriter from '../../hooks/useZonePreferenceWriter';
 
-export default function GoalSection({ goalItems, goalStatuses }) {
+const HeaderRight = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+`;
+
+export default function GoalSection({
+  goalItems,
+  goalStatuses,
+  isMember,
+  connected,
+  gameQueue,
+  activityDefs,
+  skillByActivity,
+  zoneDefinitions,
+  learnedZonePreferences,
+  currentZoneId,
+}) {
   const {
     rows,
     localPlans,
@@ -20,6 +42,37 @@ export default function GoalSection({ goalItems, goalStatuses }) {
     addRow,
   } = useGoalRows(goalItems, goalStatuses);
 
+  const [showDialog, setShowDialog] = useState(false);
+
+  const writeZonePreference = useZonePreferenceWriter();
+
+  const {
+    steps,
+    skippedGoals,
+    unresolvedStepCount,
+    waitingStepCount,
+    canConfirm,
+    autoStart,
+    setAutoStart,
+    setStepZone,
+    confirm,
+    cancelSubmit,
+    resetOverrides,
+    isSubmitting,
+  } = useActivityQueuePreview({
+    goalStatuses,
+    activityDefs,
+    skillByActivity,
+    zoneDefinitions,
+    learnedZonePreferences,
+    currentZoneId,
+  });
+
+  function handleOpenDialog() {
+    resetOverrides();
+    setShowDialog(true);
+  }
+
   const statusesById = new Map((goalStatuses ?? []).map((s) => [s.goal.id, s]));
   const draggedIndex = rows.findIndex(({ id }) => id === drag.draggedId);
 
@@ -27,14 +80,21 @@ export default function GoalSection({ goalItems, goalStatuses }) {
     <SectionWrapper>
       <GoalHeading>
         <CardLabel>Goal Tracker</CardLabel>
-        <GoalAddBtn
-          type="button"
-          aria-label="Add goal"
-          title="Add goal"
-          onClick={addRow}
-        >
-          +
-        </GoalAddBtn>
+        <HeaderRight>
+          <SetQueueButton
+            isMember={isMember}
+            connected={connected}
+            onClick={handleOpenDialog}
+          />
+          <GoalAddBtn
+            type="button"
+            aria-label="Add goal"
+            title="Add goal"
+            onClick={addRow}
+          >
+            +
+          </GoalAddBtn>
+        </HeaderRight>
       </GoalHeading>
 
       <GoalList>
@@ -76,6 +136,25 @@ export default function GoalSection({ goalItems, goalStatuses }) {
           <InsertDivider onInsert={() => insertRowAt(rows.length)} />
         )}
       </GoalList>
+
+      {showDialog && (
+        <QueuePreviewDialog
+          steps={steps}
+          skippedGoals={skippedGoals}
+          unresolvedStepCount={unresolvedStepCount}
+          waitingStepCount={waitingStepCount}
+          canConfirm={canConfirm}
+          autoStart={autoStart}
+          setAutoStart={setAutoStart}
+          gameQueue={gameQueue}
+          onSelectZone={setStepZone}
+          writeZonePreference={writeZonePreference}
+          isSubmitting={isSubmitting}
+          onConfirm={async () => { const result = await confirm(); if (result?.ok !== false) setShowDialog(false); }}
+          onCancel={() => { cancelSubmit(); setShowDialog(false); }}
+          onClose={() => setShowDialog(false)}
+        />
+      )}
     </SectionWrapper>
   );
 }

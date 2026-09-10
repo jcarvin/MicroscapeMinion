@@ -6,7 +6,7 @@ A browser extension for [Microscape](https://microscape.cc/play/) that watches y
 - **Material runout** — see how many cycles of materials you have left and when they'll run out
 - **Goal tracker** — set a target item and quantity and get an ETA including bank trips
 
-Microscape Minion is read-only. It never sends anything to the game — it only watches.
+Microscape Minion only sends input to the game when you explicitly press **Set Queue** (members only). Otherwise it only watches.
 
 Available for Chrome and Firefox.
 
@@ -100,6 +100,11 @@ Microscape Minion will appear in your extensions list and remain installed perma
 
 <details>
 <summary>Release notes</summary>
+
+### v0.1.27
+
+- New (members): **Set Queue** button in the Goal Tracker header translates your ordered goals into in-game activity queue steps. The modal shows a preview, lets you choose a location for any step that needs one, and remembers your choices. Non-members do not see the button. The extension now sends input to the game only when you explicitly press Confirm in the Set Queue dialog.
+- Fix: zone parsing now uses a structural walk instead of a regex, finding all zones including those with unquoted keys or properties that appear before `name:`. Previously 8 zones were silently missed, causing some ETAs to use an incorrect bank-trip distance.
 
 ### v0.1.26
 

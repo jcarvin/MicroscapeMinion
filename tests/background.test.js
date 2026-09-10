@@ -1813,3 +1813,204 @@ describe('background activity definitions', () => {
     expect(__test.buildStatus().combatConsumables).toBeNull();
   });
 });
+
+describe('SET_GAME_QUEUE', () => {
+  let __test;
+  let storageSet;
+
+  beforeEach(async () => {
+    storageSet = vi.fn();
+    ({ __test } = await loadBackground({ storageSet }));
+    __test.resetTestState();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  // Sets up a member state directly (bypassing applyPatch, which can't represent
+  // array values cleanly in delta format) and sends a dummy __mm frame to set
+  // the tab ID so SET_GAME_QUEUE doesn't reject with not-connected.
+  function setMemberStateDirectly({ activityQueue = [], activityQueueRunning = false } = {}) {
+    __test.setTestState({
+      state: {
+        meta: { isMember: true },
+        me: { inventory: {}, lootBag: {}, activityQueue, activityQueueRunning, fallbackStep: null },
+      },
+    });
+    sendRuntimeMessage({ __mm: true, direction: 'server', frame: { event: 'update', args: [{}] } });
+  }
+
+  it('refuses when not connected (no tab)', () => {
+    __test.setTestState({ state: { meta: { isMember: true }, me: { activityQueue: [] } } });
+    const respond = sendRuntimeMessage({ type: 'SET_GAME_QUEUE', steps: [{ type: 'skill' }] });
+    expect(respond).toHaveBeenCalledWith(expect.objectContaining({ ok: false, reason: 'not-connected' }));
+  });
+
+  it('refuses when not a member', () => {
+    __test.setTestState({ state: { meta: { isMember: false }, me: { activityQueue: [] } } });
+    sendRuntimeMessage({ __mm: true, direction: 'server', frame: { event: 'update', args: [{}] } });
+    const respond = sendRuntimeMessage({ type: 'SET_GAME_QUEUE', steps: [{ type: 'skill' }] });
+    expect(respond).toHaveBeenCalledWith(expect.objectContaining({ ok: false, reason: 'not-member' }));
+  });
+
+  it('refuses when steps array is empty', () => {
+    setMemberStateDirectly();
+    const respond = sendRuntimeMessage({ type: 'SET_GAME_QUEUE', steps: [] });
+    expect(respond).toHaveBeenCalledWith(expect.objectContaining({ ok: false, reason: 'no-steps' }));
+  });
+
+  it('emits stop → removes → adds → start in order', async () => {
+    vi.useFakeTimers();
+    setMemberStateDirectly({
+      activityQueue: [{ type: 'skill' }],
+      activityQueueRunning: true,
+    });
+    const steps = [
+      { type: 'skill', zone: 'z1', skill: 'cooking', activity: 'cook-shrimp', stop: { kind: 'items', itemId: 'shrimpMeat', goal: 10, op: 'gte' } },
+    ];
+    sendRuntimeMessage({ type: 'SET_GAME_QUEUE', steps, autoStart: true });
+    // Advance past all inter-emit delays
+    await vi.runAllTimersAsync();
+
+    const sentMessages = chrome.tabs.sendMessage.mock.calls.map(c => c[1].payload?.type);
+    expect(sentMessages).toEqual([
+      'stop-activity',
+      'activity-queue-remove',
+      'activity-queue-add',
+      'activity-queue-start',
+    ]);
+  });
+
+  it('does not emit stop-activity when queue is not running', async () => {
+    vi.useFakeTimers();
+    setMemberStateDirectly({ activityQueue: [], activityQueueRunning: false });
+    sendRuntimeMessage({ type: 'SET_GAME_QUEUE', steps: [{ type: 'skill', zone: 'z1' }], autoStart: false });
+    await vi.runAllTimersAsync();
+
+    const sentTypes = chrome.tabs.sendMessage.mock.calls.map(c => c[1].payload?.type);
+    expect(sentTypes).not.toContain('stop-activity');
+    expect(sentTypes).toContain('activity-queue-add');
+  });
+
+  it('does not emit activity-queue-start when autoStart is false', async () => {
+    vi.useFakeTimers();
+    setMemberStateDirectly();
+    sendRuntimeMessage({ type: 'SET_GAME_QUEUE', steps: [{ type: 'skill', zone: 'z1' }], autoStart: false });
+    await vi.runAllTimersAsync();
+
+    const sentTypes = chrome.tabs.sendMessage.mock.calls.map(c => c[1].payload?.type);
+    expect(sentTypes).not.toContain('activity-queue-start');
+  });
+});
+
+describe('zone preference recording', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('records zone preferences from observed work activities but not travel', async () => {
+    const storageSet = vi.fn();
+    const { __test } = await loadBackground({ storageSet });
+    __test.resetTestState();
+    __test.setTestState({
+      activityDefs: { 'cook-shrimp': { entity: 'fire', inventoryChanges: {}, level: 1, xpPerCycle: 30, durationMs: 18000 } },
+      state: { meta: {}, me: { inventory: {}, lootBag: {} } },
+    });
+
+    // Observe a cooking activity in Kitchen zone
+    sendServerUpdate({ me: { activity: { skill: 'cooking', activity: 'cook-shrimp', zone: 'kitchen', remaining: 1 } } });
+
+    const prefs = __test.buildStatus().learnedZonePreferences;
+    expect(prefs.byActivityId['cook-shrimp']).toBe('kitchen');
+    expect(prefs.byEntityId['fire']).toBe('kitchen');
+  });
+
+  it('does not record zone preferences for travel', async () => {
+    const { __test } = await loadBackground();
+    __test.resetTestState();
+    __test.setTestState({
+      state: { meta: {}, me: { inventory: {}, lootBag: {} } },
+    });
+
+    sendServerUpdate({ me: { activity: { type: 'travel', destination: { map: 'town' } } } });
+
+    const prefs = __test.buildStatus().learnedZonePreferences;
+    expect(Object.keys(prefs.byActivityId)).toHaveLength(0);
+    expect(Object.keys(prefs.byEntityId)).toHaveLength(0);
+  });
+});
+
+describe('CANCEL_GAME_QUEUE mid-operation', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('cancels an in-flight SET_GAME_QUEUE and responds with cancelled', async () => {
+    vi.useFakeTimers();
+    const storageSet = vi.fn();
+    const { __test } = await loadBackground({ storageSet });
+    __test.resetTestState();
+    __test.setTestState({
+      state: {
+        meta: { isMember: true },
+        me: { inventory: {}, lootBag: {}, activityQueue: [{ type: 'skill' }], activityQueueRunning: true, fallbackStep: null },
+      },
+    });
+    // Set tab ID by sending a dummy __mm frame
+    sendRuntimeMessage({ __mm: true, direction: 'server', frame: { event: 'update', args: [{}] } });
+
+    const steps = [{ type: 'skill', zone: 'z1', skill: 'cooking', activity: 'cook-shrimp', stop: { kind: 'items', itemId: 'shrimpMeat', goal: 10, op: 'gte' } }];
+    const queueRespond = sendRuntimeMessage({ type: 'SET_GAME_QUEUE', steps, autoStart: true });
+
+    // Cancel before the operation completes
+    sendRuntimeMessage({ type: 'CANCEL_GAME_QUEUE' });
+
+    await vi.runAllTimersAsync();
+
+    expect(queueRespond).toHaveBeenCalledWith(expect.objectContaining({ ok: false, reason: 'cancelled' }));
+  });
+});
+
+describe('SET_ZONE_PREFERENCE', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('updates learnedZonePreferences and responds ok', async () => {
+    const storageSet = vi.fn();
+    const { __test } = await loadBackground({ storageSet });
+    __test.resetTestState();
+
+    const respond = sendRuntimeMessage({ type: 'SET_ZONE_PREFERENCE', activityId: 'cook-shrimp', entityId: 'fire', zoneId: 'kitchen' });
+
+    expect(respond).toHaveBeenCalledWith({ ok: true });
+    const prefs = __test.buildStatus().learnedZonePreferences;
+    expect(prefs.byActivityId['cook-shrimp']).toBe('kitchen');
+    expect(prefs.byEntityId['fire']).toBe('kitchen');
+  });
+
+  it('does not call storage.local.set when the preference is unchanged', async () => {
+    const storageSet = vi.fn();
+    const { __test } = await loadBackground({ storageSet });
+    __test.resetTestState();
+    __test.setTestState({
+      learnedZonePreferences: { byActivityId: { 'cook-shrimp': 'kitchen' }, byEntityId: { fire: 'kitchen' } },
+    });
+
+    storageSet.mockClear();
+    sendRuntimeMessage({ type: 'SET_ZONE_PREFERENCE', activityId: 'cook-shrimp', entityId: 'fire', zoneId: 'kitchen' });
+
+    // mergeZonePreference returns the same reference when nothing changed — saveZonePreferences should not be called
+    const prefsCalls = storageSet.mock.calls.filter(c => 'learnedZonePreferences' in (c[0] ?? {}));
+    expect(prefsCalls).toHaveLength(0);
+  });
+});

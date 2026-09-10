@@ -1,8 +1,9 @@
-import { useState, useRef, useLayoutEffect } from 'react';
+import { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import styled from 'styled-components';
 import { formatItemId } from '../utils/format';
 import useClickOutside from '../hooks/useClickOutside';
+import usePortalPosition from '../hooks/usePortalPosition';
 
 const ComboCount = styled.span`
   font-size: 11px;
@@ -67,23 +68,10 @@ function itemName(item) {
 export default function ItemCombobox({ items, selectedId, onSelect, onConfirm, inputRef }) {
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState('');
-  const [dropStyle, setDropStyle] = useState({});
   const wrapRef = useRef(null);
 
   useClickOutside(wrapRef, () => setIsOpen(false));
-
-  useLayoutEffect(() => {
-    if (!isOpen || !wrapRef.current) return;
-    const rect = wrapRef.current.getBoundingClientRect();
-    const dropdownHeight = 140;
-    const gap = 3;
-    const spaceBelow = window.innerHeight - rect.bottom - gap;
-    if (spaceBelow >= dropdownHeight || spaceBelow >= rect.top - gap) {
-      setDropStyle({ top: rect.bottom + gap, left: rect.left, minWidth: rect.width });
-    } else {
-      setDropStyle({ bottom: window.innerHeight - rect.top + gap, left: rect.left, minWidth: rect.width, top: 'auto' });
-    }
-  }, [isOpen]);
+  const dropStyle = usePortalPosition(wrapRef, isOpen);
 
   function handleFocus() {
     if (items.length > 0) { setFilter(''); setIsOpen(true); }

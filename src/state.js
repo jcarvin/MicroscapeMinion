@@ -5,6 +5,9 @@ export const state = {
   BUNDLED_ACTIVITY_DEFS: {},
   ITEM_TRADEABILITY: {},
   ZONE_DATA: {},
+  ZONE_DEFINITIONS: {},
+  SKILL_BY_ACTIVITY: {},
+  learnedZonePreferences: { byActivityId: {}, byEntityId: {} },
   XP_TABLE: computeMicroscapeXpTable(),
 
   mirroredState: {},
