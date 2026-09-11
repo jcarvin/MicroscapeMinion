@@ -137,6 +137,7 @@ dist
 !.yarn/sdks
 !.yarn/versions
 
+.DS_Store
 microscape-minion*.zip
 dist-chrome/
 dist-firefox/

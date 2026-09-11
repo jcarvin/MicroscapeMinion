@@ -19,6 +19,7 @@ import { applyPatch } from './patch.js';
 import {
   getActivityId,
   getActivitySkill,
+  getActivityZone,
   getEtaActivity,
   isWorkActivityId,
   rememberWorkActivity,
@@ -55,10 +56,18 @@ import {
   detectMaterialRunout,
   detectSkillLevelReached,
 } from './detectors.js';
+import { emitGameInputSequence } from './game-input.js';
+import {
+  mergeZonePreference,
+  loadZonePreferences,
+  saveZonePreferences,
+} from './zone-preferences.js';
 
 const GOAL_NAG_INTERVAL_MS = 5 * 60 * 1000;
 const GOAL_NAG_ALARM_PREFIX = 'goal-nag:';
 const GOAL_NAG_DEBUG_LOG_LIMIT = 60;
+
+let queueSetCancelled = false;
 
 // ── Startup ───────────────────────────────────────────────────────────────────
 
@@ -73,8 +82,9 @@ const goalsReady = new Promise((resolve) => { resolveGoalsReady = resolve; });
 const goalNagStartupReady = Promise.all([activityDefsReady, goalsReady]);
 
 chrome.storage.local.get(
-  ['activityDefs', 'zoneData', 'xpTable', 'skillNotifyTarget', ETA_CALIBRATION_CACHE_KEY, 'consumableNotifyItems', 'notificationsEnabled'],
+  ['activityDefs', 'zoneData', 'zoneDefinitions', 'skillByActivity', 'xpTable', 'skillNotifyTarget', ETA_CALIBRATION_CACHE_KEY, 'consumableNotifyItems', 'notificationsEnabled'],
   (res) => {
+    loadZonePreferences((prefs) => { state.learnedZonePreferences = prefs; });
     fetch(chrome.runtime.getURL('src/activity-defs.json'))
       .then((r) => r.json())
       .then((seed) => {
@@ -88,24 +98,30 @@ chrome.storage.local.get(
         const liveMerge = hasLiveDefs
           ? enrichActivityMetadata(state.ACTIVITY_DEFS, storedMerge.defs)
           : null;
-        const defs = liveMerge?.defs ?? storedMerge.defs;
-        const added = liveMerge?.added ?? storedMerge.added;
+        // When live defs are present, they take precedence for existing activities,
+        // but storedMerge may contain seed-only activities not yet parsed by the live
+        // bundle; spread storedMerge first so liveMerge overrides, not drops them.
+        const defs = liveMerge
+          ? { ...storedMerge.defs, ...liveMerge.defs }
+          : storedMerge.defs;
+        const added = liveMerge
+          ? (liveMerge.added || storedMerge.added)
+          : storedMerge.added;
         state.ACTIVITY_DEFS = defs;
         if (added) chrome.storage.local.set({ activityDefs: state.ACTIVITY_DEFS });
         refreshGoalPlanning();
       })
-      .catch(() => {
-        if (
-          Object.keys(state.ACTIVITY_DEFS).length === 0
-          && res.activityDefs
-          && Object.keys(res.activityDefs).length > 0
-        ) {
-          state.ACTIVITY_DEFS = res.activityDefs;
-          refreshGoalPlanning();
-        }
-      })
+      .catch(() => {})
       .finally(resolveActivityDefsReady);
+    // Apply cached defs immediately so entity/zone resolution works on the first
+    // popup poll, before the async seed JSON fetch resolves. The seed fetch will
+    // overwrite this with a properly merged result a moment later.
+    if (res.activityDefs && Object.keys(res.activityDefs).length > 0) {
+      state.ACTIVITY_DEFS = res.activityDefs;
+    }
     if (res.zoneData) state.ZONE_DATA = res.zoneData;
+    if (res.zoneDefinitions && Object.keys(res.zoneDefinitions).length > 0) state.ZONE_DEFINITIONS = res.zoneDefinitions;
+    if (res.skillByActivity && Object.keys(res.skillByActivity).length > 0) state.SKILL_BY_ACTIVITY = res.skillByActivity;
     if (isValidXpTable(res.xpTable)) state.XP_TABLE = res.xpTable;
     if (res.skillNotifyTarget) state.skillNotifyTarget = res.skillNotifyTarget;
     if (Array.isArray(res.consumableNotifyItems)) {
@@ -199,6 +215,14 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       if (msg.zones && Object.keys(msg.zones).length > 0) {
         state.ZONE_DATA = msg.zones;
         toCache.zoneData = msg.zones;
+      }
+      if (msg.zoneDefinitions && Object.keys(msg.zoneDefinitions).length > 0) {
+        state.ZONE_DEFINITIONS = msg.zoneDefinitions;
+        toCache.zoneDefinitions = msg.zoneDefinitions;
+      }
+      if (msg.skillByActivity && Object.keys(msg.skillByActivity).length > 0) {
+        state.SKILL_BY_ACTIVITY = msg.skillByActivity;
+        toCache.skillByActivity = msg.skillByActivity;
       }
       if (isValidXpTable(msg.xpTable)) {
         state.XP_TABLE = msg.xpTable;
@@ -378,6 +402,101 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       }))).then(() => respond({ ok: true, checked: goalIds.length }));
       break;
     }
+
+    case 'CANCEL_GAME_QUEUE': {
+      queueSetCancelled = true;
+      respond({ ok: true });
+      break;
+    }
+
+    case 'SET_GAME_QUEUE': {
+      const steps = Array.isArray(msg.steps) ? msg.steps : [];
+      const autoStart = msg.autoStart === true;
+
+      if (state.microscopeTabId == null) {
+        respond({ ok: false, reason: 'not-connected' });
+        break;
+      }
+      if (state.mirroredState.meta?.isMember !== true) {
+        respond({ ok: false, reason: 'not-member' });
+        break;
+      }
+      if (steps.length === 0) {
+        respond({ ok: false, reason: 'no-steps' });
+        break;
+      }
+
+      queueSetCancelled = false;
+
+      const me = state.mirroredState.me;
+      const existingQueue = me?.activityQueue ?? [];
+      const isRunning = me?.activityQueueRunning === true;
+
+      const run = async () => {
+        function pollUntil(condition, timeoutMs = 6000) {
+          return new Promise((resolve) => {
+            const deadline = Date.now() + timeoutMs;
+            const check = () => {
+              if (queueSetCancelled || condition() || Date.now() >= deadline) resolve();
+              else setTimeout(check, 100);
+            };
+            setTimeout(check, 100);
+          });
+        }
+
+        if (isRunning) {
+          await emitGameInputSequence([{ type: 'stop-activity' }]);
+          await pollUntil(() => state.mirroredState.me?.activityQueueRunning !== true);
+          if (queueSetCancelled) { respond({ ok: false, reason: 'cancelled' }); return; }
+        }
+
+        // Remove one slot at a time, confirming each removal before the next.
+        let currentLen = existingQueue.length;
+        for (let i = currentLen - 1; i >= 0; i--) {
+          if (queueSetCancelled) { respond({ ok: false, reason: 'cancelled' }); return; }
+          await emitGameInputSequence([{ type: 'activity-queue-remove', index: i }]);
+          await pollUntil(() => (state.mirroredState.me?.activityQueue?.length ?? 0) < currentLen);
+          currentLen = state.mirroredState.me?.activityQueue?.length ?? 0;
+        }
+        // Final guard: don't add until the queue is fully empty.
+        if (queueSetCancelled) { respond({ ok: false, reason: 'cancelled' }); return; }
+        await pollUntil(() => (state.mirroredState.me?.activityQueue?.length ?? 0) === 0);
+
+        // Add one step at a time, confirming each addition before the next.
+        let addedLen = 0;
+        for (const step of steps) {
+          if (queueSetCancelled) { respond({ ok: false, reason: 'cancelled' }); return; }
+          await emitGameInputSequence([{ type: 'activity-queue-add', step }]);
+          addedLen++;
+          await pollUntil(() => (state.mirroredState.me?.activityQueue?.length ?? 0) >= addedLen);
+        }
+
+        if (queueSetCancelled) { respond({ ok: false, reason: 'cancelled' }); return; }
+
+        if (autoStart) {
+          await new Promise(r => setTimeout(r, 500));
+          await emitGameInputSequence([{ type: 'activity-queue-start' }]);
+        }
+
+        const newQueue = state.mirroredState.me?.activityQueue ?? [];
+        const unplacedCount = Math.max(0, steps.length - newQueue.length);
+        respond({ ok: true, addedCount: steps.length - unplacedCount, unplacedCount });
+      };
+
+      run().catch(() => respond({ ok: false, reason: 'error' }));
+      break;
+    }
+
+    case 'SET_ZONE_PREFERENCE': {
+      const { activityId, entityId, zoneId } = msg;
+      const next = mergeZonePreference(state.learnedZonePreferences, { activityId, entityId, zoneId });
+      if (next !== state.learnedZonePreferences) {
+        state.learnedZonePreferences = next;
+        saveZonePreferences(next);
+      }
+      respond({ ok: true });
+      break;
+    }
   }
 
   return true;
@@ -402,6 +521,7 @@ function handleServerFrame(frame) {
   const newAct = state.mirroredState.me?.activity;
   // Snapshot the previous work activity ID before rememberWorkActivity updates it
   rememberWorkActivity(newAct);
+  recordZonePreferenceFromActivity(newAct);
   const newWorkActivityId = getActivityId(getEtaActivity(newAct));
   if (prevWorkActivityId && prevWorkActivityId !== newWorkActivityId) {
     cancelAllGoalNags('activity-changed', {
@@ -442,6 +562,27 @@ function handleServerFrame(frame) {
   detectMaterialRunout();
   detectSkillLevelReached();
   detectCombatConsumableRunout(prevMe, state.mirroredState.me);
+}
+
+// Records the zone and entity for real work activities observed in the game
+// so the queue builder can pre-fill location choices for future goals.
+// Only runs for genuine work activities — travel and banking are excluded by
+// rememberWorkActivity's isWorkActivityId gate, mirrored here.
+function recordZonePreferenceFromActivity(act) {
+  const actId = getActivityId(act);
+  if (!isWorkActivityId(actId)) return;
+  const zoneId = getActivityZone(act);
+  if (!zoneId) return;
+  const entityId = state.ACTIVITY_DEFS[actId]?.entity ?? null;
+  const next = mergeZonePreference(state.learnedZonePreferences, {
+    activityId: actId,
+    entityId,
+    zoneId,
+  });
+  if (next !== state.learnedZonePreferences) {
+    state.learnedZonePreferences = next;
+    saveZonePreferences(next);
+  }
 }
 
 function handleClientFrame(frame) {
@@ -812,6 +953,9 @@ function resetTestState() {
   state.BUNDLED_ACTIVITY_DEFS = {};
   state.ITEM_TRADEABILITY = {};
   state.ZONE_DATA = {};
+  state.ZONE_DEFINITIONS = {};
+  state.SKILL_BY_ACTIVITY = {};
+  state.learnedZonePreferences = { byActivityId: {}, byEntityId: {} };
   state.XP_TABLE = computeMicroscapeXpTable();
   state.mirroredState = {};
   state.prevActivityId = undefined;
@@ -857,6 +1001,9 @@ function setTestState({
   itemTradeability,
   xpRateSamples,
   zoneData,
+  zoneDefinitions,
+  skillByActivity,
+  learnedZonePreferences,
   xpTable,
   state: gameState,
   lastWorkAct,
@@ -867,6 +1014,9 @@ function setTestState({
   if (itemTradeability) state.ITEM_TRADEABILITY = itemTradeability;
   if (xpRateSamples) state.xpRateSamples = xpRateSamples;
   if (zoneData) state.ZONE_DATA = zoneData;
+  if (zoneDefinitions) state.ZONE_DEFINITIONS = zoneDefinitions;
+  if (skillByActivity) state.SKILL_BY_ACTIVITY = skillByActivity;
+  if (learnedZonePreferences) state.learnedZonePreferences = learnedZonePreferences;
   if (xpTable) state.XP_TABLE = xpTable;
   if (gameState) state.mirroredState = gameState;
   if (lastWorkAct !== undefined) state.lastWorkActivity = lastWorkAct;

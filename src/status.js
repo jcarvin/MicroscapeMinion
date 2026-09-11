@@ -253,8 +253,17 @@ export function buildStatus() {
       || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
   );
 
+  const isMember = state.mirroredState.meta?.isMember === true;
+  const gameQueue = {
+    steps: me?.activityQueue ?? [],
+    running: me?.activityQueueRunning === true,
+    hasFallback: Boolean(me?.fallbackStep),
+  };
+
   return {
     connected: state.microscopeTabId !== null,
+    isMember,
+    gameQueue,
     activity: actDisplay,
     idle: liveAct === null && state.prevActivityId !== undefined,
     tickMs: state.observedTickMs,
@@ -271,5 +280,10 @@ export function buildStatus() {
     tickLog: state.tickLog,
     etaDebugLogVersion: ETA_DEBUG_LOG_VERSION,
     etaDebugLog: state.etaDebugLog,
+    activityDefs: state.ACTIVITY_DEFS,
+    zoneDefinitions: state.ZONE_DEFINITIONS,
+    skillByActivity: state.SKILL_BY_ACTIVITY,
+    learnedZonePreferences: state.learnedZonePreferences,
+    currentZoneId: me?.pos?.map ?? null,
   };
 }

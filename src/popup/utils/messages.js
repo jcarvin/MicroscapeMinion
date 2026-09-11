@@ -16,3 +16,7 @@ export const clearConsumableNotify   = (itemId)  => send({ type: 'CLEAR_CONSUMAB
 export const setNotificationsEnabled = (enabled) => send({ type: 'SET_NOTIFICATIONS_ENABLED', enabled });
 export const sendTestNotification = () => send({ type: 'TEST_NOTIFICATION' });
 export const checkGoalNagsNow = () => send({ type: 'DEBUG_CHECK_GOAL_NAGS' });
+export const setGameQueue    = (steps, autoStart) => send({ type: 'SET_GAME_QUEUE', steps, autoStart });
+export const cancelGameQueue = ()                 => send({ type: 'CANCEL_GAME_QUEUE' });
+export const setZonePreference = (activityId, entityId, zoneId) =>
+  send({ type: 'SET_ZONE_PREFERENCE', activityId, entityId, zoneId });

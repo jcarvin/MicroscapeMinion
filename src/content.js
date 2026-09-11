@@ -15,8 +15,12 @@ window.addEventListener('message', (evt) => {
 
 // ── Receive commands from background ─────────────────────────────────────────
 
+// Uses __mmCmd (not __mm) to avoid the upward relay above echoing commands back.
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === 'PLAY_CHIME') playChime(msg.variant ?? 'default');
+  if (msg?.type === 'MM_EMIT_INPUT') {
+    window.postMessage({ __mmCmd: true, type: 'EMIT_INPUT', payload: msg.payload }, '*');
+  }
 });
 
 // ── Audio chime (generated via Web Audio — no bundled asset needed) ──────────

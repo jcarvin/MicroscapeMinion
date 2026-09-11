@@ -88,6 +88,14 @@ export default function App() {
         <GoalSection
           goalItems={status?.goalItems ?? []}
           goalStatuses={status && status.goalsLoaded !== false ? status.goalStatuses : null}
+          isMember={status?.isMember ?? false}
+          connected={status?.connected ?? false}
+          gameQueue={status?.gameQueue}
+          activityDefs={status?.activityDefs}
+          skillByActivity={status?.skillByActivity}
+          zoneDefinitions={status?.zoneDefinitions}
+          learnedZonePreferences={status?.learnedZonePreferences}
+          currentZoneId={status?.currentZoneId}
         />
         <MaterialSection
           runoutStatus={status?.runoutStatus ?? null}
