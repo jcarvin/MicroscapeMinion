@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="description" content="An unofficial animated gallery of Microscape pet sprites.">
+  <title>Unofficial Microscape Pet Gallery</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #10231b; color: #f4e6c7; }
+    header { position: sticky; top: 0; z-index: 2; padding: 18px 24px; background: #10231beF; border-bottom: 1px solid #755f3c; backdrop-filter: blur(8px); }
+    h1, h2, p { margin: 0; }
+    h1 { font-size: 22px; }
+    header p { margin-top: 7px; color: #c9b992; font-size: 13px; }
+    main { max-width: 1400px; margin: auto; padding: 24px; }
+    section + section { margin-top: 38px; }
+    h2 { margin-bottom: 14px; color: #e8c978; font-size: 18px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+    .card { overflow: hidden; background: #1a3528; border: 1px solid #755f3c; border-radius: 8px; box-shadow: 0 4px 14px #0005; }
+    .stage { position: relative; height: 260px; overflow: hidden; background-color: #244a38; background-image: linear-gradient(45deg, #0001 25%, transparent 25%), linear-gradient(-45deg, #0001 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #0001 75%), linear-gradient(-45deg, transparent 75%, #0001 75%); background-size: 32px 32px; background-position: 0 0, 0 16px, 16px -16px, -16px 0; }
+    .viewport { position: absolute; left: 50%; top: 50%; width: 256px; height: 256px; overflow: hidden; transform: translate(-50%, -50%); }
+    .sheet { position: absolute; top: 0; height: 256px; max-width: none; image-rendering: pixelated; }
+    .meta { position: relative; min-height: 96px; padding: 14px 16px 15px; }
+    .name { display: flex; align-items: center; gap: 9px; font-size: 17px; font-weight: 700; color: #fff4d9; }
+    .icon { width: 48px; height: 48px; image-rendering: pixelated; }
+    .description { margin-top: 8px; color: #cfbea1; font-family: system-ui, sans-serif; font-size: 13px; line-height: 1.4; }
+    .hint { position: absolute; right: 9px; top: 9px; padding: 4px 6px; background: #10231bcc; color: #d7c69e; border-radius: 4px; font: 11px system-ui, sans-serif; }
+    .paused .hint::after { content: "Paused"; }
+    .card:not(.paused) .hint::after { content: "Click to pause"; }
+    a { color: #e8c978; }
+    footer { max-width: 1400px; margin: 12px auto 0; padding: 0 24px 30px; color: #a89b80; font: 12px/1.5 system-ui, sans-serif; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Unofficial Microscape pet gallery</h1>
+    <p>Sprites extracted from the live game bundle on 2026-09-10. Animations are shown at 2× game size.</p>
+  </header>
+  <main>
+    <section>
+      <h2>Members-only pets — Otis's capybaras</h2>
+      <div class="grid" id="members"></div>
+    </section>
+    <section>
+      <h2>Standard pets</h2>
+      <div class="grid" id="standard"></div>
+    </section>
+  </main>
+  <footer>
+    Unofficial fan-made reference. Microscape and its artwork belong to its creators.
+    <a href="https://microscape.cc/play/">Play Microscape</a> ·
+    <a href="https://github.com/jcarvin/MicroscapeMinion">Microscape Minion on GitHub</a>
+  </footer>
+  <script>
+    const pets = [
+      { id: 'otter', name: 'Otter', member: true, frames: 26, duration: 250, description: 'An unbothered capybara that likes to sit beside people who fish.' },
+      { id: 'clement', name: 'Clement', member: true, frames: 26, duration: 250, description: 'An off-white capybara named by the monks.' },
+      { id: 'stump', name: 'Stump', member: true, frames: 26, duration: 250, description: 'An olive brown capybara, easily mistaken for undergrowth until it moves.' },
+      { id: 'cinder', name: 'Cinder', member: true, frames: 26, duration: 250, description: 'An orange capybara, always warm to the touch.' },
+      { id: 'biscuit', name: 'Biscuit', member: true, frames: 26, duration: 250, description: 'A pale golden capybara that smells faintly of fresh bread.' },
+      { id: 'pebble', name: 'Pebble', member: true, frames: 26, duration: 250, description: 'A gray capybara that holds perfectly still and pretends to be a boulder.' },
+      { id: 'smudge', name: 'Smudge', member: true, frames: 26, duration: 250, description: 'A coal black capybara. Loves to nap by the forge.' },
+      { id: 'stitch', name: 'Stitch', member: true, frames: 26, duration: 250, description: 'A taupe capybara with an eye for good leather.' },
+      { id: 'merlin', name: 'Merlin', member: true, frames: 26, duration: 250, description: 'A silvery capybara with the barest blue cast, calm even around sparks.' },
+      { id: 'quill', name: 'Quill', member: true, frames: 26, duration: 250, description: 'A wheat gold capybara that dozes in the pile of arrow shavings.' },
+      { id: 'sage', name: 'Sage', member: true, frames: 26, duration: 250, description: 'A moss brown capybara, smells of every herb!' },
+      { id: 'bog', name: 'Bog', frames: 16, duration: 200, description: 'A loyal frog found in the swamps.' },
+      { id: 'golem-core', name: 'Golem Core', frames: 9, duration: 300, sequence: [1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8], description: 'A small golem fragment found deep within the mines.' },
+      { id: 'tinderling', name: 'Tinderling', frames: 9, duration: 200, sequence: [1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8], description: 'A small floating flame that drifts beside you.' },
+      { id: 'pickles', name: 'Pickles', frames: 4, duration: 200, sequence: [1,2,3,1,2,3], description: 'A scruffy cat that lingers near campfires, waiting for scraps.' },
+      { id: 'scoop', name: 'Scoop', frames: 4, duration: 200, sequence: [1,2,3,1,2,3], description: 'A curious platypus that waddles after you, bill first.' },
+      { id: 'riddle', name: 'Riddle', frames: 13, duration: 200, description: 'An old tome whose pages flutter with excitement.' },
+      { id: 'fibs', name: 'Fibs', frames: 17, duration: 150, description: 'A squirrel that chittered at you until you fed it.' },
+      { id: 'winkle', name: 'Winkle', frames: 8, duration: 200, sequence: [1,2,3,4,5,6,7,1,2,3,4,5,6,7], description: 'A shimmering blue butterfly.' },
+      { id: 'peace-moth', name: 'Peace Moth', frames: 8, duration: 250, sequence: [1,2,3,4,5,6,7,1,2,3,4,5,6,7], description: 'A pale moth that seems to glow faintly in the dark.' },
+      { id: 'hubble', name: 'Hubble', frames: 11, duration: 250, description: 'A bubbly slime that wobbles along beside you.' },
+      { id: 'hilda', name: 'Hilda', frames: 9, duration: 200, description: 'An enchanted hammer that drifts at your side.' },
+      { id: 'scales', name: 'Scales', frames: 7, duration: 200, description: 'A harmless dragon whelp—or so it appears.' },
+      { id: 'beatrix', name: 'Beatrix', frames: 8, duration: 200, description: 'A single loyal bee who hums along beside you.' }
+    ];
+
+    const timers = [];
+
+    function makeCard(pet) {
+      const card = document.createElement('article');
+      card.className = 'card';
+      const sequence = pet.sequence || Array.from({ length: pet.frames - 1 }, (_, i) => i + 1);
+      card.innerHTML = `
+        <div class="stage">
+          <span class="hint"></span>
+          <div class="viewport"><img class="sheet" src="assets/world/${pet.id}.png" alt="${pet.name} animation sprite sheet"></div>
+        </div>
+        <div class="meta">
+          <div class="name"><img class="icon" src="assets/icons/${pet.id}.png" alt="">${pet.name}</div>
+          <p class="description">${pet.description}</p>
+        </div>`;
+      const sheet = card.querySelector('.sheet');
+      let position = 0;
+      let paused = false;
+      sheet.style.left = `${-sequence[0] * 256}px`;
+      timers.push(setInterval(() => {
+        if (paused) return;
+        position = (position + 1) % sequence.length;
+        sheet.style.left = `${-sequence[position] * 256}px`;
+      }, pet.duration));
+      card.addEventListener('click', () => {
+        paused = !paused;
+        card.classList.toggle('paused', paused);
+      });
+      return card;
+    }
+
+    for (const pet of pets) {
+      document.getElementById(pet.member ? 'members' : 'standard').append(makeCard(pet));
+    }
+  </script>
+</body>
+</html>

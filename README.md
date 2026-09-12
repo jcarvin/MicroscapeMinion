@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.28
+
+- Add an unofficial animated Microscape pet gallery, including all standard and members-only pet sprites, deployed as a static GitHub Pages site.
+
 ### v0.1.27
 
 - New (members): **Set Queue** button in the Goal Tracker header translates your ordered goals into in-game activity queue steps. The modal shows a preview, lets you choose a location for any step that needs one, and remembers your choices. Non-members do not see the button. The extension now sends input to the game only when you explicitly press Confirm in the Set Queue dialog.
