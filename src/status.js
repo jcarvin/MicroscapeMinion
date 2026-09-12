@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { ETA_DEBUG_LOG_VERSION } from './constants.js';
+import { computePlayerCombatLevel } from './drop-sources.js';
 import {
   getActivityId,
   getActivitySkill,
@@ -260,6 +261,18 @@ export function buildStatus() {
     hasFallback: Boolean(me?.fallbackStep),
   };
 
+  const playerCombatLevel = computePlayerCombatLevel(me?.exp ?? null, state.XP_TABLE);
+
+  const playerSkillLevels = {};
+  if (state.XP_TABLE && me?.exp) {
+    const xpTable = state.XP_TABLE;
+    for (const [skill, xp] of Object.entries(me.exp)) {
+      for (let lvl = xpTable.length - 1; lvl >= 1; lvl--) {
+        if ((xpTable[lvl] ?? 0) <= xp) { playerSkillLevels[skill] = lvl; break; }
+      }
+    }
+  }
+
   return {
     connected: state.microscopeTabId !== null,
     isMember,
@@ -285,5 +298,9 @@ export function buildStatus() {
     skillByActivity: state.SKILL_BY_ACTIVITY,
     learnedZonePreferences: state.learnedZonePreferences,
     currentZoneId: me?.pos?.map ?? null,
+    combatSkills: state.COMBAT_SKILLS,
+    combatSkillPreference: me?.preferences?.combatSkill ?? null,
+    playerCombatLevel,
+    playerSkillLevels,
   };
 }

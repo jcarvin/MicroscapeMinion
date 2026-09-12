@@ -73,6 +73,32 @@ describe('findZoneCandidatesForEntity', () => {
   it('returns empty array when zoneDefinitions is falsy', () => {
     expect(findZoneCandidatesForEntity({ entityId: 'fire', zoneDefinitions: null, currentZoneId: null })).toEqual([]);
   });
+
+  it('includes dungeon zones when includeDungeonZones is true', () => {
+    const candidates = findZoneCandidatesForEntity({
+      entityId: 'anvil',
+      zoneDefinitions: ZONE_DEFINITIONS,
+      currentZoneId: null,
+      includeDungeonZones: true,
+    });
+    const ids = candidates.map(c => c.zoneId);
+    expect(ids).toContain('dungeonForge');
+    expect(ids).toContain('townSquare');
+    expect(ids).toContain('workshop');
+  });
+
+  it('mob ids in entities object resolve zones', () => {
+    const zoneWithMob = {
+      ...ZONE_DEFINITIONS,
+      mobZone: { name: 'Mob Zone', mapPos: [4, 4], entities: { 'giant-rat': {}, 'skeleton': {} }, isDungeon: false, requiredItem: null },
+    };
+    const candidates = findZoneCandidatesForEntity({
+      entityId: 'giant-rat',
+      zoneDefinitions: zoneWithMob,
+      currentZoneId: null,
+    });
+    expect(candidates.map(c => c.zoneId)).toContain('mobZone');
+  });
 });
 
 describe('resolveZoneForActivity — preference precedence', () => {

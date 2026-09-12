@@ -7,9 +7,12 @@
 //
 // Goals are included only when:
 //   - goalPlan.activityId is set (has a concrete activity recommendation)
-//   - goalPlan.chanceBased is not true (drops goals can't be queued reliably)
 //   - goal is not completed, not pending, and not singleExecution
 //   - goal.itemId is present (needed for the items stop condition)
+//
+// Chance-based (Drops) goals build a combat step with the best available
+// monster as the default. The modal lets the user change monster and combat
+// skill before confirming.
 //
 // Zone resolution is delegated to zone-resolver.js. Steps with unresolved
 // zones are returned with zoneId: null and their candidates so the modal can
@@ -17,6 +20,11 @@
 
 import { inferActivitySkill } from './goal-planner.js';
 import { findZoneCandidatesForEntity, resolveZoneForActivity } from './zone-resolver.js';
+import {
+  buildDropSourceCandidates,
+  selectDefaultDropSource,
+  combatSkillOptionsForSource,
+} from './drop-sources.js';
 
 export function activityQueueStepFromGoalPlan({
   goal,
@@ -24,8 +32,10 @@ export function activityQueueStepFromGoalPlan({
   activityDefinition,
   skillId,
   zoneId,
+  activityId,
 }) {
   const isCombat = Boolean(activityDefinition?.mob);
+  const resolvedActivityId = activityId ?? goalPlan.activityId;
   const stop = {
     kind: 'items',
     itemId: goal.itemId,
@@ -34,9 +44,9 @@ export function activityQueueStepFromGoalPlan({
   };
 
   if (isCombat) {
-    return { type: 'combat', zone: zoneId, combatSkill: skillId, activity: goalPlan.activityId, stop };
+    return { type: 'combat', zone: zoneId, combatSkill: skillId, activity: resolvedActivityId, stop };
   }
-  return { type: 'skill', zone: zoneId, skill: skillId, activity: goalPlan.activityId, stop };
+  return { type: 'skill', zone: zoneId, skill: skillId, activity: resolvedActivityId, stop };
 }
 
 export function buildActivityQueueSteps({
@@ -46,6 +56,9 @@ export function buildActivityQueueSteps({
   zoneDefinitions,
   learnedZonePreferences,
   currentZoneId,
+  combatSkills,
+  combatSkillPreference,
+  playerCombatLevel,
 }) {
   const steps = [];
   const skippedGoals = [];
@@ -53,10 +66,6 @@ export function buildActivityQueueSteps({
   for (const { goal, planning: goalPlan } of goalStatuses ?? []) {
     if (!goalPlan?.activityId) {
       skippedGoals.push({ goal, reason: 'no-activity' });
-      continue;
-    }
-    if (goalPlan.chanceBased === true) {
-      skippedGoals.push({ goal, reason: 'chance-based' });
       continue;
     }
     if (goal.completed) {
@@ -69,6 +78,59 @@ export function buildActivityQueueSteps({
     }
     if (!goal.itemId) {
       skippedGoals.push({ goal, reason: 'no-item-id' });
+      continue;
+    }
+
+    // Chance-based (drops) goals: build a combat step with drop source selection.
+    if (goalPlan.chanceBased === true) {
+      const dropSourceCandidates = buildDropSourceCandidates({
+        itemId: goal.itemId,
+        activityDefs,
+        zoneDefinitions,
+        currentZoneId,
+        skillByActivity,
+      });
+
+      if (dropSourceCandidates.length === 0) {
+        skippedGoals.push({ goal, reason: 'no-activity' });
+        continue;
+      }
+
+      const defaultSource = selectDefaultDropSource({ candidates: dropSourceCandidates, playerCombatLevel });
+      const selectedActivityId = defaultSource?.activityId ?? null;
+      const activityDefinition = selectedActivityId ? (activityDefs?.[selectedActivityId] ?? null) : null;
+
+      const skillOptions = combatSkillOptionsForSource(defaultSource, combatSkills ?? []);
+      const preferredSkill = combatSkillPreference ?? skillOptions[0]?.id ?? null;
+      const combatSkillId = skillOptions.some(s => s.id === preferredSkill)
+        ? preferredSkill
+        : (skillOptions[0]?.id ?? null);
+
+      const entityId = defaultSource?.entityId ?? null;
+      const zoneCandidates = defaultSource?.zoneCandidates ?? [];
+
+      const { zoneId, resolutionSource } = resolveZoneForActivity({
+        entityId,
+        activityId: selectedActivityId,
+        currentZoneId,
+        learnedZonePreferences,
+        zoneCandidates,
+      });
+
+      steps.push({
+        goal,
+        goalPlan,
+        activityDefinition,
+        skillId: combatSkillId,
+        zoneId,
+        resolutionSource,
+        zoneCandidates,
+        isChanceBased: true,
+        dropSourceCandidates,
+        selectedActivityId,
+        combatSkillId,
+        combatSkillOptions: skillOptions,
+      });
       continue;
     }
 

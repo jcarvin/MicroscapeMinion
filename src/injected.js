@@ -124,6 +124,7 @@
       // so the cached ZONE_DATA from a prior successful parse is preserved.
       const zoneDefinitionsResult = parseZoneDefinitions(bundle);
       const skillByActivityResult = parseSkillActivityIndex(bundle);
+      const combatSkillsResult = parseCombatSkills(bundle);
 
       const msg = {
         __mm: true,
@@ -146,6 +147,10 @@
 
       if (skillByActivityResult && Object.keys(skillByActivityResult).length > 0) {
         msg.skillByActivity = skillByActivityResult;
+      }
+
+      if (combatSkillsResult && combatSkillsResult.length > 0) {
+        msg.combatSkills = combatSkillsResult;
       }
 
       if (Object.keys(defs).length > 0) {
@@ -173,16 +178,32 @@
       const durationMs = (parseInt(m[4], 10) + 6) * 2000;
       const entity = m[5];
       const changes = {};
+      const rareDrops = {};
       for (const part of m[6].split(',')) {
         const colon = part.indexOf(':');
         if (colon < 0) continue;
         const k = part.slice(0, colon).trim();
         const v = part.slice(colon + 1).trim();
-        if (!k || v.includes('/')) continue; // skip pet drop odds (e.g. 1/500)
+        if (!k) continue;
+        if (v.includes('/')) {
+          // qty/denom format — treat as rare drop only when denom is a power of 2.
+          const slash = v.indexOf('/');
+          const qty = parseInt(v.slice(0, slash), 10);
+          const denom = parseInt(v.slice(slash + 1), 10);
+          if (Number.isFinite(qty) && Number.isFinite(denom) && denom > 0) {
+            const rarity = Math.log2(denom);
+            if (Number.isInteger(rarity)) rareDrops[k] = { quantity: qty, rarity };
+          }
+          continue;
+        }
         const n = parseInt(v, 10);
         if (!isNaN(n)) changes[k] = n;
       }
       defs[id] = { durationMs, level, xpPerCycle, entity, inventoryChanges: changes };
+      if (Object.keys(rareDrops).length > 0) {
+        defs[id].dropItems = Object.fromEntries(Object.entries(rareDrops).map(([k, v]) => [k, v.quantity]));
+        defs[id].dropRarity = Object.fromEntries(Object.entries(rareDrops).map(([k, v]) => [k, v.rarity]));
+      }
     }
 
     // Piety skill activities (bury-bones etc.) have entity before exp/duration/level
@@ -199,19 +220,73 @@
       const durationMs = (parseInt(m[4], 10) + 6) * 2000;
       const level = parseInt(m[5], 10);
       const changes = {};
+      const rareDrops = {};
       for (const part of m[6].split(',')) {
         const colon = part.indexOf(':');
         if (colon < 0) continue;
         const k = part.slice(0, colon).trim();
         const v = part.slice(colon + 1).trim();
-        if (!k || v.includes('/')) continue;
+        if (!k) continue;
+        if (v.includes('/')) {
+          const slash = v.indexOf('/');
+          const qty = parseInt(v.slice(0, slash), 10);
+          const denom = parseInt(v.slice(slash + 1), 10);
+          if (Number.isFinite(qty) && Number.isFinite(denom) && denom > 0) {
+            const rarity = Math.log2(denom);
+            if (Number.isInteger(rarity)) rareDrops[k] = { quantity: qty, rarity };
+          }
+          continue;
+        }
         const n = parseInt(v, 10);
         if (!isNaN(n)) changes[k] = n;
       }
       defs[id] = { durationMs, level, xpPerCycle, entity, inventoryChanges: changes };
+      if (Object.keys(rareDrops).length > 0) {
+        defs[id].dropItems = Object.fromEntries(Object.entries(rareDrops).map(([k, v]) => [k, v.quantity]));
+        defs[id].dropRarity = Object.fromEntries(Object.entries(rareDrops).map(([k, v]) => [k, v.rarity]));
+      }
+    }
+
+    // Augment skill activity defs that have a `drops:` field (e.g. fishing rare drops).
+    // We re-scan with findMatchingBrace so we get the full object, then extract drops.
+    const augRe = /\{\s*id:\s*`([^`]+)`/g;
+    while ((m = augRe.exec(bundle)) !== null) {
+      const id = m[1];
+      if (!(id in defs) || defs[id].mob) continue; // skip unknown or already-combat entries
+      const end = findMatchingBrace(bundle, m.index);
+      if (end < 0) continue;
+      const body = bundle.slice(m.index, end + 1);
+      // Extract name regardless of whether drops are present.
+      const nameM = body.match(/\bname:\s*`([^`]+)`/);
+      if (nameM && !defs[id].name) defs[id].name = nameM[1];
+      const dropsBody = extractObjectProperty(body, 'drops');
+      if (!dropsBody) continue;
+      const richDrops = parseDropItems(dropsBody);
+      const keys = Object.keys(richDrops);
+      if (keys.length === 0) continue;
+      if (!defs[id].dropItems) {
+        defs[id].dropItems = Object.fromEntries(keys.map(k => [k, richDrops[k].quantity]));
+        defs[id].dropRarity = Object.fromEntries(keys.map(k => [k, richDrops[k].rarity]));
+      }
     }
 
     const mobs = parseMobDefs(bundle);
+
+    // For skill activities (fishing, etc.) whose entity has a drops table,
+    // copy entity-level drops into the activity def so buildDropSourceCandidates
+    // can surface them alongside combat sources. parseMobDefs already picks up
+    // any object with `drops:` in its body, so fish/resource entities land in mobs.
+    for (const [actId, def] of Object.entries(defs)) {
+      if (def.mob || !def.entity || def.dropItems) continue;
+      const entityDef = mobs[def.entity];
+      if (!entityDef?.drops) continue;
+      const richDrops = entityDef.drops;
+      const keys = Object.keys(richDrops);
+      if (keys.length === 0) continue;
+      def.dropItems = Object.fromEntries(keys.map(k => [k, richDrops[k].quantity]));
+      def.dropRarity = Object.fromEntries(keys.map(k => [k, richDrops[k].rarity]));
+    }
+
     // Combat activity fields change ordering more often than skilling fields.
     // Parse the complete object so numeric/boolean fields between id, mob, and
     // level do not make its drop route disappear from the goal source selector.
@@ -226,13 +301,28 @@
       const id = m[1];
       const level = parseInt(levelValue, 10);
       const mob = mobs[mobId];
+      const nameMatch = body.match(/\bname:\s*`([^`]+)`/);
+      // mob.drops is the rich {itemId:{quantity,rarity}} format from parseMobDefs
+      const richDrops = mob?.drops ?? {};
+      const dropItems = Object.fromEntries(
+        Object.entries(richDrops).map(([k, v]) => [k, typeof v === 'object' ? v.quantity : v])
+      );
+      const dropRarity = Object.fromEntries(
+        Object.entries(richDrops).map(([k, v]) => [k, typeof v === 'object' ? v.rarity : 0])
+      );
       defs[id] = {
         durationMs: mob?.speed ? mob.speed * 2000 : 0,
         xpPerCycle: 0,
         level,
         inventoryChanges: {},
         mob: mobId,
-        dropItems: mob?.drops ?? {},
+        name: nameMatch?.[1] ?? mobId.replace(/-/g, ' '),
+        dropItems,
+        dropRarity,
+        mobCombatLevel: computeMobCombatLevel(mob?.stats),
+        mobMinimumCombatLevel: mob?.minimumCombatLevel ?? 0,
+        mobRequiredItem: mob?.requiredItem ?? null,
+        mobSafeSpot: mob?.safeSpot ?? false,
       };
     }
 
@@ -256,12 +346,36 @@
 
       const id = m[1];
       const speedMatch = body.match(/speed:\s*(\d+)/);
-      const safeMatch = body.match(/safeVersionOf:\s*`([^`]+)`/);
+      const safeVersionOfMatch = body.match(/safeVersionOf:\s*`([^`]+)`/);
+      const safeSpot = /\bsafeSpot:\s*(?:true|!0)/.test(body);
+      const minCombatLevelMatch = body.match(/\bminimumCombatLevel:\s*(\d+)/);
+      const requiredItemMatch = body.match(/\brequiredItem:\s*`([^`]+)`/);
+
+      const statsBody = extractObjectProperty(body, 'stats');
+      let stats = template?.stats ?? null;
+      if (statsBody) {
+        const atk = statsBody.match(/\battack:\s*(\d+)/);
+        const str = statsBody.match(/\bstrength:\s*(\d+)/);
+        const def = statsBody.match(/\bdefense:\s*(\d+)/);
+        if (atk || str || def) {
+          stats = {
+            attack: atk ? parseInt(atk[1], 10) : 0,
+            strength: str ? parseInt(str[1], 10) : 0,
+            defense: def ? parseInt(def[1], 10) : 0,
+          };
+        }
+      }
+
       const dropsBody = extractObjectProperty(body, 'drops');
+      // parseDropItems returns {itemId:{quantity,rarity}} rich format
       mobs[id] = {
-        speed: speedMatch ? parseInt(speedMatch[1], 10) : template?.speed ?? null,
-        safeVersionOf: safeMatch?.[1] ?? null,
-        drops: dropsBody ? parseDropItems(dropsBody) : template?.drops ?? null,
+        speed: speedMatch ? parseInt(speedMatch[1], 10) : (template?.speed ?? null),
+        safeVersionOf: safeVersionOfMatch?.[1] ?? null,
+        safeSpot,
+        minimumCombatLevel: minCombatLevelMatch ? parseInt(minCombatLevelMatch[1], 10) : (template?.minimumCombatLevel ?? 0),
+        requiredItem: requiredItemMatch?.[1] ?? (template?.requiredItem ?? null),
+        stats,
+        drops: dropsBody ? parseDropItems(dropsBody) : (template?.drops ?? null),
       };
     }
 
@@ -287,13 +401,42 @@
       if (!body.includes('drops:') || (!body.includes('enemyType:') && !body.includes('stats:'))) continue;
 
       const speedMatch = body.match(/speed:\s*(\d+)/);
+      const minCombatLevelMatch = body.match(/\bminimumCombatLevel:\s*(\d+)/);
+      const requiredItemMatch = body.match(/\brequiredItem:\s*`([^`]+)`/);
+      const safeSpot = /\bsafeSpot:\s*(?:true|!0)/.test(body);
+
+      const statsBody = extractObjectProperty(body, 'stats');
+      let stats = null;
+      if (statsBody) {
+        const atk = statsBody.match(/\battack:\s*(\d+)/);
+        const str = statsBody.match(/\bstrength:\s*(\d+)/);
+        const def = statsBody.match(/\bdefense:\s*(\d+)/);
+        if (atk || str || def) {
+          stats = {
+            attack: atk ? parseInt(atk[1], 10) : 0,
+            strength: str ? parseInt(str[1], 10) : 0,
+            defense: def ? parseInt(def[1], 10) : 0,
+          };
+        }
+      }
+
       const dropsBody = extractObjectProperty(body, 'drops');
       templates[m[1]] = {
         speed: speedMatch ? parseInt(speedMatch[1], 10) : null,
+        minimumCombatLevel: minCombatLevelMatch ? parseInt(minCombatLevelMatch[1], 10) : 0,
+        requiredItem: requiredItemMatch?.[1] ?? null,
+        safeSpot,
+        stats,
         drops: dropsBody ? parseDropItems(dropsBody) : {},
       };
     }
     return templates;
+  }
+
+  function computeMobCombatLevel(stats) {
+    if (!stats) return null;
+    const { attack = 0, strength = 0, defense = 0 } = stats;
+    return Math.max(1, Math.floor(((attack + strength) / 2 + defense) / 2));
   }
 
   function extractObjectProperty(source, name) {
@@ -307,15 +450,44 @@
     return source.slice(openIndex + 1, closeIndex);
   }
 
+  // Returns {itemId: {quantity, rarity}} — the rich drop format.
+  // Callers that need the legacy {itemId: quantity} shape transform via
+  // Object.fromEntries(Object.entries(drops).map(([k,v]) => [k, v.quantity])).
   function parseDropItems(body) {
     const drops = {};
-    const re = /([A-Za-z_$][\w$]*):\s*\{\s*quantity:\s*([^,}]+)/g;
+    const re = /([A-Za-z_$][\w$]*):\s*\{([^}]+)\}/g;
     let m;
     while ((m = re.exec(body)) !== null) {
-      const quantity = Number(m[2]);
-      if (Number.isFinite(quantity) && quantity > 0) drops[m[1]] = quantity;
+      const itemId = m[1];
+      const props = m[2];
+      const qtyMatch = props.match(/\bquantity:\s*([^,}\s]+)/);
+      if (!qtyMatch) continue;
+      const quantity = Number(qtyMatch[1]);
+      if (!Number.isFinite(quantity) || quantity <= 0) continue;
+      const rarityMatch = props.match(/\brarity:\s*(\d+)/);
+      const rarity = rarityMatch ? parseInt(rarityMatch[1], 10) : 0;
+      drops[itemId] = { quantity, rarity };
     }
     return drops;
+  }
+
+  function parseCombatSkills(bundle) {
+    const skills = [];
+    const seen = new Set();
+    const re = /\{\s*id:\s*`([^`]+)`/g;
+    let m;
+    while ((m = re.exec(bundle)) !== null) {
+      const end = findMatchingBrace(bundle, m.index);
+      if (end < 0) continue;
+      const body = bundle.slice(m.index, end + 1);
+      if (!/\bisCombatSkill:\s*(?:true|!0)/.test(body)) continue;
+      const id = m[1];
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const nameMatch = body.match(/\bname:\s*`([^`]+)`/);
+      skills.push({ id, name: nameMatch?.[1] ?? id });
+    }
+    return skills;
   }
 
   function findMatchingBrace(source, openIndex) {
@@ -649,5 +821,8 @@
     window.__MM_TEST_HOOKS__.findMapDefinitionObject = findMapDefinitionObject;
     window.__MM_TEST_HOOKS__.parseZoneDefinitions = parseZoneDefinitions;
     window.__MM_TEST_HOOKS__.parseSkillActivityIndex = parseSkillActivityIndex;
+    window.__MM_TEST_HOOKS__.parseMobDefs = parseMobDefs;
+    window.__MM_TEST_HOOKS__.parseDropItems = parseDropItems;
+    window.__MM_TEST_HOOKS__.parseCombatSkills = parseCombatSkills;
   }
 })();

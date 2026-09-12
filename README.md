@@ -101,6 +101,16 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.29
+
+- New (members): **Skill activities now appear as drop sources.** Items obtainable as rare drops from skilling activities (e.g. Snape Grass from Trout or Salmon fishing) now appear in the Set Queue source picker alongside combat options. The picker shows the required skill level for each activity, highlighted in red when the player's current level is too low.
+- Fix: the source picker now correctly selects the default monster based on the player's actual combat level, excluding mobs whose level exceeds the player's even when no explicit dungeon gate is set (e.g. Druid Warrior no longer defaults for low-level players).
+- Fix: all source options now show their level requirement in the hint consistently, not only entries where the player is under-leveled.
+
+### v0.1.28
+
+- New (members): **Drops goals are now queueable.** Goals for items obtained as monster drops (e.g. "Bones ×100") now appear in the Set Queue preview as a combat step. Pick which monster to fight and which combat skill to train; the queue runs until your inventory reaches the target count. Monsters are ranked by best drop chance. Melee skills are hidden for safe-spot mobs.
+
 ### v0.1.27
 
 - New (members): **Set Queue** button in the Goal Tracker header translates your ordered goals into in-game activity queue steps. The modal shows a preview, lets you choose a location for any step that needs one, and remembers your choices. Non-members do not see the button. The extension now sends input to the game only when you explicitly press Confirm in the Set Queue dialog.

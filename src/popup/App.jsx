@@ -96,6 +96,10 @@ export default function App() {
           zoneDefinitions={status?.zoneDefinitions}
           learnedZonePreferences={status?.learnedZonePreferences}
           currentZoneId={status?.currentZoneId}
+          combatSkills={status?.combatSkills ?? []}
+          combatSkillPreference={status?.combatSkillPreference ?? null}
+          playerCombatLevel={status?.playerCombatLevel ?? null}
+          playerSkillLevels={status?.playerSkillLevels ?? {}}
         />
         <MaterialSection
           runoutStatus={status?.runoutStatus ?? null}

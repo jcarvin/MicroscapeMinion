@@ -26,7 +26,15 @@ const EmptyNote = styled.div`
   padding: 8px 0;
 `;
 
-export default function QueueStepList({ steps, onSelectZone, writeZonePreference }) {
+export default function QueueStepList({
+  steps,
+  onSelectZone,
+  writeZonePreference,
+  onSelectDropSource,
+  onSelectCombatSkill,
+  playerCombatLevel,
+  playerSkillLevels,
+}) {
   if (!steps || steps.length === 0) {
     return <EmptyNote>No queueable goals found.</EmptyNote>;
   }
@@ -45,6 +53,10 @@ export default function QueueStepList({ steps, onSelectZone, writeZonePreference
             stepIndex={index}
             onSelectZone={onSelectZone}
             writeZonePreference={writeZonePreference}
+            onSelectDropSource={onSelectDropSource}
+            onSelectCombatSkill={onSelectCombatSkill}
+            playerCombatLevel={playerCombatLevel}
+            playerSkillLevels={playerSkillLevels ?? {}}
           />
         ))}
       </Wrap>

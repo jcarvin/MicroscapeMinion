@@ -27,6 +27,10 @@ export default function GoalSection({
   zoneDefinitions,
   learnedZonePreferences,
   currentZoneId,
+  combatSkills,
+  combatSkillPreference,
+  playerCombatLevel,
+  playerSkillLevels,
 }) {
   const {
     rows,
@@ -55,6 +59,8 @@ export default function GoalSection({
     autoStart,
     setAutoStart,
     setStepZone,
+    setStepDropSource,
+    setStepCombatSkill,
     confirm,
     cancelSubmit,
     resetOverrides,
@@ -66,6 +72,9 @@ export default function GoalSection({
     zoneDefinitions,
     learnedZonePreferences,
     currentZoneId,
+    combatSkills,
+    combatSkillPreference,
+    playerCombatLevel,
   });
 
   function handleOpenDialog() {
@@ -149,6 +158,10 @@ export default function GoalSection({
           gameQueue={gameQueue}
           onSelectZone={setStepZone}
           writeZonePreference={writeZonePreference}
+          onSelectDropSource={setStepDropSource}
+          onSelectCombatSkill={setStepCombatSkill}
+          playerCombatLevel={playerCombatLevel}
+          playerSkillLevels={playerSkillLevels}
           isSubmitting={isSubmitting}
           onConfirm={async () => { const result = await confirm(); if (result?.ok !== false) setShowDialog(false); }}
           onCancel={() => { cancelSubmit(); setShowDialog(false); }}
