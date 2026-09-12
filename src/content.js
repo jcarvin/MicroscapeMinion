@@ -28,6 +28,7 @@ chrome.runtime.onMessage.addListener((msg) => {
 function playChime(variant) {
   try {
     const ctx = new AudioContext();
+    if (ctx.state === 'suspended') { ctx.close(); return; }
 
     // Two-note ascending chime for 'idle' / 'goal'; descending for 'runout'
     const notes = variant === 'runout'
