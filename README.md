@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.31
+
+- Fix: shorten manifest description to comply with the 132-character Chrome Web Store limit.
+
 ### v0.1.30
 
 - Fix: notification chime no longer logs an "AudioContext was not allowed to start" browser warning when the Microscape tab has not yet received a user gesture.
