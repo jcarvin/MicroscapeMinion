@@ -186,13 +186,13 @@
         const v = part.slice(colon + 1).trim();
         if (!k) continue;
         if (v.includes('/')) {
-          // qty/denom format — treat as rare drop only when denom is a power of 2.
+          // qty/denom format — store raw denominator for any valid fraction.
+          // Use Number() not parseInt so scientific notation (e.g. 1e3) parses correctly.
           const slash = v.indexOf('/');
           const qty = parseInt(v.slice(0, slash), 10);
-          const denom = parseInt(v.slice(slash + 1), 10);
+          const denom = Number(v.slice(slash + 1));
           if (Number.isFinite(qty) && Number.isFinite(denom) && denom > 0) {
-            const rarity = Math.log2(denom);
-            if (Number.isInteger(rarity)) rareDrops[k] = { quantity: qty, rarity };
+            rareDrops[k] = { quantity: qty, denom };
           }
           continue;
         }
@@ -202,7 +202,7 @@
       defs[id] = { durationMs, level, xpPerCycle, entity, inventoryChanges: changes };
       if (Object.keys(rareDrops).length > 0) {
         defs[id].dropItems = Object.fromEntries(Object.entries(rareDrops).map(([k, v]) => [k, v.quantity]));
-        defs[id].dropRarity = Object.fromEntries(Object.entries(rareDrops).map(([k, v]) => [k, v.rarity]));
+        defs[id].dropOdds = Object.fromEntries(Object.entries(rareDrops).map(([k, v]) => [k, v.denom]));
       }
     }
 
@@ -230,10 +230,9 @@
         if (v.includes('/')) {
           const slash = v.indexOf('/');
           const qty = parseInt(v.slice(0, slash), 10);
-          const denom = parseInt(v.slice(slash + 1), 10);
+          const denom = Number(v.slice(slash + 1));
           if (Number.isFinite(qty) && Number.isFinite(denom) && denom > 0) {
-            const rarity = Math.log2(denom);
-            if (Number.isInteger(rarity)) rareDrops[k] = { quantity: qty, rarity };
+            rareDrops[k] = { quantity: qty, denom };
           }
           continue;
         }
@@ -243,7 +242,7 @@
       defs[id] = { durationMs, level, xpPerCycle, entity, inventoryChanges: changes };
       if (Object.keys(rareDrops).length > 0) {
         defs[id].dropItems = Object.fromEntries(Object.entries(rareDrops).map(([k, v]) => [k, v.quantity]));
-        defs[id].dropRarity = Object.fromEntries(Object.entries(rareDrops).map(([k, v]) => [k, v.rarity]));
+        defs[id].dropOdds = Object.fromEntries(Object.entries(rareDrops).map(([k, v]) => [k, v.denom]));
       }
     }
 

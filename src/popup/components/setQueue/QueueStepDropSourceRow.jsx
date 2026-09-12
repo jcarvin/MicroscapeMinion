@@ -43,17 +43,18 @@ export default function QueueStepDropSourceRow({
 
     let hint;
     let hintWarn = false;
+    const chanceLabel = candidate.dropChanceLabel ?? null;
     if (isCombatCandidate) {
-      hint = candidate.mobCombatLevel != null
-        ? `${candidate.dropChanceLabel} · lv ${candidate.mobCombatLevel}`
-        : candidate.dropChanceLabel;
       if (isRequiresItem) { hint = `needs ${candidate.mobRequiredItem}`; hintWarn = true; }
       else if (isRequiresLevel) { hint = `needs lv ${candidate.mobMinimumCombatLevel}`; hintWarn = true; }
+      else if (candidate.mobCombatLevel != null)
+        hint = chanceLabel != null ? `${chanceLabel} · lv ${candidate.mobCombatLevel}` : `lv ${candidate.mobCombatLevel}`;
+      else hint = chanceLabel ?? undefined;
     } else {
-      hint = candidate.activityLevel > 0
-        ? `${candidate.dropChanceLabel} · lv ${candidate.activityLevel}`
-        : candidate.dropChanceLabel;
       if (isUnderSkillLevel) hintWarn = true;
+      if (candidate.activityLevel > 0)
+        hint = chanceLabel != null ? `${chanceLabel} · lv ${candidate.activityLevel}` : `lv ${candidate.activityLevel}`;
+      else hint = chanceLabel ?? undefined;
     }
 
     return {

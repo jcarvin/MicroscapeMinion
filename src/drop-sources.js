@@ -36,6 +36,27 @@ export function computePlayerCombatLevel(skillExp, xpTable) {
   return Math.floor((offensivePart + defense) / 2);
 }
 
+// Computes a human-readable drop chance label and a numeric sort key for a candidate.
+// Prefers raw-denominator dropOdds (from inventoryChanges fractions) over the log2
+// dropRarity system used by mob drops. Returns null label when neither is available.
+function resolveDropChance(def, itemId) {
+  const odds = def.dropOdds?.[itemId];
+  if (odds != null) {
+    return {
+      dropChanceLabel: odds === 1 ? 'always' : `1 in ${odds}`,
+      rarity: odds, // raw denominator; larger = rarer, consistent with sort ordering
+    };
+  }
+  const rarityExp = def.dropRarity?.[itemId];
+  if (rarityExp != null) {
+    return {
+      dropChanceLabel: formatDropChance(rarityExp),
+      rarity: Math.pow(2, rarityExp),
+    };
+  }
+  return { dropChanceLabel: null, rarity: 0 };
+}
+
 // Builds one entry per activity (combat or skill) whose dropItems contains itemId.
 // Combat zone lookup uses includeDungeonZones:true; skill activities don't restrict zones.
 // All candidates carry entityId for zone resolution (= mobId for combat, entity for skill).
@@ -43,8 +64,6 @@ export function buildDropSourceCandidates({ itemId, activityDefs, zoneDefinition
   const candidates = [];
   for (const [activityId, def] of Object.entries(activityDefs ?? {})) {
     if (!def.dropItems?.[itemId]) continue;
-
-    const rarity = def.dropRarity?.[itemId] ?? 0;
 
     if (def.mob) {
       // Combat activity
@@ -55,6 +74,7 @@ export function buildDropSourceCandidates({ itemId, activityDefs, zoneDefinition
         currentZoneId,
         includeDungeonZones: true,
       });
+      const { dropChanceLabel, rarity } = resolveDropChance(def, itemId);
       // 'requires-item': mob requires a specific held item (game's IK check).
       // 'requires-level': mob's minimumCombatLevel exceeds the player's level —
       //   computed at selection time in selectDefaultDropSource.
@@ -69,7 +89,7 @@ export function buildDropSourceCandidates({ itemId, activityDefs, zoneDefinition
         activityLevel: 0,
         quantity: def.dropItems[itemId],
         rarity,
-        dropChanceLabel: formatDropChance(rarity),
+        dropChanceLabel,
         mobCombatLevel: def.mobCombatLevel ?? null,
         mobMinimumCombatLevel: def.mobMinimumCombatLevel ?? 0,
         mobRequiredItem: def.mobRequiredItem ?? null,
@@ -86,6 +106,7 @@ export function buildDropSourceCandidates({ itemId, activityDefs, zoneDefinition
         currentZoneId,
         includeDungeonZones: false,
       });
+      const { dropChanceLabel, rarity } = resolveDropChance(def, itemId);
       candidates.push({
         activityId,
         activityName: def.name ?? activityId.replace(/-/g, ' '),
@@ -96,7 +117,7 @@ export function buildDropSourceCandidates({ itemId, activityDefs, zoneDefinition
         activityLevel: def.level ?? 0,
         quantity: def.dropItems[itemId],
         rarity,
-        dropChanceLabel: formatDropChance(rarity),
+        dropChanceLabel,
         mobCombatLevel: null,
         mobMinimumCombatLevel: 0,
         mobRequiredItem: null,
