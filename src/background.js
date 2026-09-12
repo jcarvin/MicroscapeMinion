@@ -82,7 +82,7 @@ const goalsReady = new Promise((resolve) => { resolveGoalsReady = resolve; });
 const goalNagStartupReady = Promise.all([activityDefsReady, goalsReady]);
 
 chrome.storage.local.get(
-  ['activityDefs', 'zoneData', 'zoneDefinitions', 'skillByActivity', 'xpTable', 'skillNotifyTarget', ETA_CALIBRATION_CACHE_KEY, 'consumableNotifyItems', 'notificationsEnabled'],
+  ['activityDefs', 'zoneData', 'zoneDefinitions', 'skillByActivity', 'combatSkills', 'xpTable', 'skillNotifyTarget', ETA_CALIBRATION_CACHE_KEY, 'consumableNotifyItems', 'notificationsEnabled'],
   (res) => {
     loadZonePreferences((prefs) => { state.learnedZonePreferences = prefs; });
     fetch(chrome.runtime.getURL('src/activity-defs.json'))
@@ -122,6 +122,7 @@ chrome.storage.local.get(
     if (res.zoneData) state.ZONE_DATA = res.zoneData;
     if (res.zoneDefinitions && Object.keys(res.zoneDefinitions).length > 0) state.ZONE_DEFINITIONS = res.zoneDefinitions;
     if (res.skillByActivity && Object.keys(res.skillByActivity).length > 0) state.SKILL_BY_ACTIVITY = res.skillByActivity;
+    if (Array.isArray(res.combatSkills) && res.combatSkills.length > 0) state.COMBAT_SKILLS = res.combatSkills;
     if (isValidXpTable(res.xpTable)) state.XP_TABLE = res.xpTable;
     if (res.skillNotifyTarget) state.skillNotifyTarget = res.skillNotifyTarget;
     if (Array.isArray(res.consumableNotifyItems)) {
@@ -223,6 +224,10 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       if (msg.skillByActivity && Object.keys(msg.skillByActivity).length > 0) {
         state.SKILL_BY_ACTIVITY = msg.skillByActivity;
         toCache.skillByActivity = msg.skillByActivity;
+      }
+      if (Array.isArray(msg.combatSkills) && msg.combatSkills.length > 0) {
+        state.COMBAT_SKILLS = msg.combatSkills;
+        toCache.combatSkills = msg.combatSkills;
       }
       if (isValidXpTable(msg.xpTable)) {
         state.XP_TABLE = msg.xpTable;
@@ -955,6 +960,7 @@ function resetTestState() {
   state.ZONE_DATA = {};
   state.ZONE_DEFINITIONS = {};
   state.SKILL_BY_ACTIVITY = {};
+  state.COMBAT_SKILLS = [];
   state.learnedZonePreferences = { byActivityId: {}, byEntityId: {} };
   state.XP_TABLE = computeMicroscapeXpTable();
   state.mirroredState = {};
@@ -1003,6 +1009,7 @@ function setTestState({
   zoneData,
   zoneDefinitions,
   skillByActivity,
+  combatSkills,
   learnedZonePreferences,
   xpTable,
   state: gameState,
@@ -1016,6 +1023,7 @@ function setTestState({
   if (zoneData) state.ZONE_DATA = zoneData;
   if (zoneDefinitions) state.ZONE_DEFINITIONS = zoneDefinitions;
   if (skillByActivity) state.SKILL_BY_ACTIVITY = skillByActivity;
+  if (combatSkills) state.COMBAT_SKILLS = combatSkills;
   if (learnedZonePreferences) state.learnedZonePreferences = learnedZonePreferences;
   if (xpTable) state.XP_TABLE = xpTable;
   if (gameState) state.mirroredState = gameState;

@@ -17,7 +17,6 @@ const SkipRow = styled.div`
 
 const REASON_LABELS = {
   'no-activity':      'no activity planned',
-  'chance-based':     'drops goal (not queueable)',
   'completed':        'already completed',
   'pending':          'pending materials',
   'no-item-id':       'item ID unknown',

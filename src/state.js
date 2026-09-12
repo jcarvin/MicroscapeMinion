@@ -7,6 +7,7 @@ export const state = {
   ZONE_DATA: {},
   ZONE_DEFINITIONS: {},
   SKILL_BY_ACTIVITY: {},
+  COMBAT_SKILLS: [],
   learnedZonePreferences: { byActivityId: {}, byEntityId: {} },
   XP_TABLE: computeMicroscapeXpTable(),
 

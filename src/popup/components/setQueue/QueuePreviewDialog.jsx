@@ -116,6 +116,10 @@ export default function QueuePreviewDialog({
   gameQueue,
   onSelectZone,
   writeZonePreference,
+  onSelectDropSource,
+  onSelectCombatSkill,
+  playerCombatLevel,
+  playerSkillLevels,
   isSubmitting,
   onConfirm,
   onCancel,
@@ -148,6 +152,10 @@ export default function QueuePreviewDialog({
           steps={steps}
           onSelectZone={onSelectZone}
           writeZonePreference={writeZonePreference}
+          onSelectDropSource={onSelectDropSource}
+          onSelectCombatSkill={onSelectCombatSkill}
+          playerCombatLevel={playerCombatLevel}
+          playerSkillLevels={playerSkillLevels}
         />
 
         <QueueSkippedGoalList skippedGoals={skippedGoals} />

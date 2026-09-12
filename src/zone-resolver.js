@@ -13,15 +13,17 @@ function chebyshevDistance(a, b) {
   return Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]));
 }
 
-export function findZoneCandidatesForEntity({ entityId, zoneDefinitions, currentZoneId }) {
+export function findZoneCandidatesForEntity({ entityId, zoneDefinitions, currentZoneId, includeDungeonZones = false }) {
   if (!entityId || !zoneDefinitions) return [];
 
   const currentMapPos = zoneDefinitions[currentZoneId]?.mapPos ?? null;
   const candidates = [];
 
   for (const [zoneId, def] of Object.entries(zoneDefinitions)) {
-    if (!def.entities?.includes(entityId)) continue;
-    if (def.isDungeon) continue;
+    const ents = def.entities;
+    const hasEntity = Array.isArray(ents) ? ents.includes(entityId) : (ents != null && entityId in ents);
+    if (!hasEntity) continue;
+    if (!includeDungeonZones && def.isDungeon) continue;
     if (def.requiredItem) continue;
     const distance = chebyshevDistance(currentMapPos, def.mapPos);
     candidates.push({ zoneId, zoneName: def.name ?? zoneId, distance });

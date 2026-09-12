@@ -4,18 +4,41 @@ import { buildActivityQueueSteps, activityQueueStepFromGoalPlan } from '../src/q
 const ZONE_DEFINITIONS = {
   kitchen: { name: 'Kitchen', mapPos: [3, 3], entities: ['fire'], isDungeon: false, requiredItem: null },
   smithy: { name: 'Smithy', mapPos: [5, 5], entities: ['furnace'], isDungeon: false, requiredItem: null },
+  swamp: { name: 'Swamp', mapPos: [1, 1], entities: ['giant-rat'], isDungeon: false, requiredItem: null },
 };
 
 const ACTIVITY_DEFS = {
   'cook-shrimp': { entity: 'fire', level: 1, xpPerCycle: 30, durationMs: 18000, inventoryChanges: { rawShrimp: -1, shrimpMeat: 1 } },
   'smelt-iron': { entity: 'furnace', level: 15, xpPerCycle: 56, durationMs: 24000, inventoryChanges: { ironOre: -1, ironBar: 1 } },
-  'fight-rat': { mob: 'rat', level: 1, xpPerCycle: 0, durationMs: 8000, inventoryChanges: {} },
+  'fight-giant-rat': {
+    mob: 'giant-rat', level: 1, xpPerCycle: 0, durationMs: 8000, inventoryChanges: {},
+    name: 'giant rat',
+    dropItems: { bones: 1 },
+    dropRarity: { bones: 1 },
+    mobCombatLevel: 3,
+    mobMinimumCombatLevel: 0,
+    mobRequiredItem: null,
+    mobSafeSpot: false,
+  },
 };
+
+const COMBAT_SKILLS = [
+  { id: 'attack', name: 'Attack' },
+  { id: 'strength', name: 'Strength' },
+  { id: 'defense', name: 'Defense' },
+];
 
 const SKILL_BY_ACTIVITY = {
   'cook-shrimp': 'cooking',
   'smelt-iron': 'smithing',
 };
+
+function makeChanceGoalStatus({ goalId, itemId, itemName, targetCount } = {}) {
+  return {
+    goal: { id: goalId ?? itemId, itemId: itemId ?? null, itemName: itemName ?? itemId, targetCount: targetCount ?? 100 },
+    planning: { goalId: goalId ?? itemId, itemId: itemId ?? null, activityId: 'fight-giant-rat', chanceBased: true, pending: false },
+  };
+}
 
 const LEARNED_PREFS = {
   byActivityId: { 'cook-shrimp': 'kitchen' },
@@ -86,8 +109,8 @@ describe('buildActivityQueueSteps — exclusion', () => {
     expect(skippedGoals[0].reason).toBe('no-activity');
   });
 
-  it('skips chance-based (drops) goals', () => {
-    const goalStatuses = [makeGoalStatus({ itemId: 'bones', activityId: 'fight-rat', chanceBased: true })];
+  it('includes chance-based (drops) goals as combat steps with isChanceBased flag', () => {
+    const goalStatuses = [makeChanceGoalStatus({ itemId: 'bones' })];
     const { steps, skippedGoals } = buildActivityQueueSteps({
       goalStatuses,
       activityDefs: ACTIVITY_DEFS,
@@ -95,9 +118,63 @@ describe('buildActivityQueueSteps — exclusion', () => {
       zoneDefinitions: ZONE_DEFINITIONS,
       learnedZonePreferences: LEARNED_PREFS,
       currentZoneId: null,
+      combatSkills: COMBAT_SKILLS,
+      combatSkillPreference: 'attack',
+      playerCombatLevel: 10,
+    });
+    expect(skippedGoals).toHaveLength(0);
+    expect(steps).toHaveLength(1);
+    expect(steps[0].isChanceBased).toBe(true);
+    expect(steps[0].selectedActivityId).toBe('fight-giant-rat');
+    expect(steps[0].combatSkillId).toBe('attack');
+    expect(steps[0].dropSourceCandidates).toHaveLength(1);
+  });
+
+  it('skips drops goal when no fight activity drops that item', () => {
+    const goalStatuses = [makeChanceGoalStatus({ itemId: 'silverOre' })];
+    const { steps, skippedGoals } = buildActivityQueueSteps({
+      goalStatuses,
+      activityDefs: ACTIVITY_DEFS,
+      skillByActivity: SKILL_BY_ACTIVITY,
+      zoneDefinitions: ZONE_DEFINITIONS,
+      learnedZonePreferences: LEARNED_PREFS,
+      currentZoneId: null,
+      combatSkills: COMBAT_SKILLS,
+      playerCombatLevel: 10,
     });
     expect(steps).toHaveLength(0);
-    expect(skippedGoals[0].reason).toBe('chance-based');
+    expect(skippedGoals[0].reason).toBe('no-activity');
+  });
+
+  it('emits the correct game step shape for a drops goal', () => {
+    const goalStatuses = [makeChanceGoalStatus({ itemId: 'bones', targetCount: 100 })];
+    const { steps } = buildActivityQueueSteps({
+      goalStatuses,
+      activityDefs: ACTIVITY_DEFS,
+      skillByActivity: SKILL_BY_ACTIVITY,
+      zoneDefinitions: ZONE_DEFINITIONS,
+      learnedZonePreferences: LEARNED_PREFS,
+      currentZoneId: null,
+      combatSkills: COMBAT_SKILLS,
+      combatSkillPreference: 'attack',
+      playerCombatLevel: 10,
+    });
+    const step = steps[0];
+    const gameStep = activityQueueStepFromGoalPlan({
+      goal: step.goal,
+      goalPlan: step.goalPlan,
+      activityDefinition: step.activityDefinition,
+      skillId: step.combatSkillId,
+      zoneId: 'swamp',
+      activityId: step.selectedActivityId,
+    });
+    expect(gameStep).toEqual({
+      type: 'combat',
+      zone: 'swamp',
+      combatSkill: 'attack',
+      activity: 'fight-giant-rat',
+      stop: { kind: 'items', itemId: 'bones', goal: 100, op: 'gte' },
+    });
   });
 
   it('skips completed goals', () => {

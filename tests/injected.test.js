@@ -183,6 +183,130 @@ describe('injected activity definition parser', () => {
     `;
     expect(parseActivityDefs(bundle)['bury-bones']).toMatchObject({ entity: 'bones' });
   });
+
+  it('captures drop rarity on fight activity defs', async () => {
+    const parseActivityDefs = await loadInjectedParser();
+    const bundle = `
+      {
+        id: \`giant-rat\`,
+        enemyType: \`creature\`,
+        speed: 3,
+        stats: { hp: 10, attack: 5, strength: 5, defense: 3 },
+        drops: { bones: { quantity: 1, rarity: 1 }, rawMeat: { quantity: 1, rarity: 2 } }
+      }
+      { id: \`fight-giant-rat\`, name: \`giant rat\`, mob: \`giant-rat\`, level: 1 }
+    `;
+    const def = parseActivityDefs(bundle)['fight-giant-rat'];
+    expect(def.dropItems).toEqual({ bones: 1, rawMeat: 1 });
+    expect(def.dropRarity).toEqual({ bones: 1, rawMeat: 2 });
+  });
+
+  it('captures mob stats and computes mobCombatLevel on fight defs', async () => {
+    const parseActivityDefs = await loadInjectedParser();
+    const bundle = `
+      {
+        id: \`troll\`,
+        enemyType: \`creature\`,
+        speed: 5,
+        stats: { hp: 50, attack: 10, strength: 8, defense: 6 },
+        drops: { bones: { quantity: 1, rarity: 0 } }
+      }
+      { id: \`fight-troll\`, name: \`troll\`, mob: \`troll\`, level: 20 }
+    `;
+    const def = parseActivityDefs(bundle)['fight-troll'];
+    // mobCombatLevel = max(1, floor(((10+8)/2 + 6) / 2)) = floor((9+6)/2) = floor(7.5) = 7
+    expect(def.mobCombatLevel).toBe(7);
+    expect(def.name).toBe('troll');
+  });
+
+  it('captures mobMinimumCombatLevel on fight defs', async () => {
+    const parseActivityDefs = await loadInjectedParser();
+    const bundle = `
+      {
+        id: \`demon\`,
+        enemyType: \`creature\`,
+        speed: 5,
+        minimumCombatLevel: 40,
+        stats: { hp: 100, attack: 30, strength: 30, defense: 20 },
+        drops: { bones: { quantity: 1, rarity: 0 } }
+      }
+      { id: \`fight-demon\`, name: \`demon\`, mob: \`demon\`, level: 60 }
+    `;
+    const def = parseActivityDefs(bundle)['fight-demon'];
+    expect(def.mobMinimumCombatLevel).toBe(40);
+  });
+
+  it('captures mobSafeSpot on fight defs', async () => {
+    const parseActivityDefs = await loadInjectedParser();
+    const bundle = `
+      {
+        id: \`croc-safe\`,
+        enemyType: \`creature\`,
+        speed: 4,
+        safeSpot:!0,
+        stats: { hp: 40, attack: 12, strength: 12, defense: 8 },
+        drops: { bones: { quantity: 1, rarity: 1 } }
+      }
+      { id: \`fight-croc-safe\`, name: \`crocodile\`, mob: \`croc-safe\`, level: 30 }
+    `;
+    const def = parseActivityDefs(bundle)['fight-croc-safe'];
+    expect(def.mobSafeSpot).toBe(true);
+  });
+});
+
+describe('parseCombatSkills', () => {
+  afterEach(() => {
+    delete window.__MM_TEST_HOOKS__;
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('parses skills with isCombatSkill:!0 (minified form)', async () => {
+    const { parseCombatSkills } = await loadInjectedHooks();
+    const bundle = `
+      { id: \`attack\`, name: \`Attack\`, isCombatSkill:!0, activities: dh }
+      { id: \`strength\`, name: \`Strength\`, isCombatSkill:!0, activities: dh }
+      { id: \`cooking\`, name: \`Cooking\`, activities: [\`cook-shrimp\`] }
+    `;
+    const skills = parseCombatSkills(bundle);
+    expect(skills.map(s => s.id)).toContain('attack');
+    expect(skills.map(s => s.id)).toContain('strength');
+    expect(skills.map(s => s.id)).not.toContain('cooking');
+  });
+
+  it('captures skill name from the def', async () => {
+    const { parseCombatSkills } = await loadInjectedHooks();
+    const bundle = `{ id: \`evilMagic\`, name: \`Evil Magic\`, isCombatSkill:!0, activities: dh }`;
+    const skills = parseCombatSkills(bundle);
+    expect(skills[0]).toEqual({ id: 'evilMagic', name: 'Evil Magic' });
+  });
+
+  it('does not duplicate skills appearing multiple times', async () => {
+    const { parseCombatSkills } = await loadInjectedHooks();
+    const bundle = `
+      { id: \`attack\`, name: \`Attack\`, isCombatSkill:!0, activities: dh }
+      { id: \`attack\`, name: \`Attack\`, isCombatSkill:!0, activities: dh }
+    `;
+    const skills = parseCombatSkills(bundle);
+    expect(skills.filter(s => s.id === 'attack')).toHaveLength(1);
+  });
+});
+
+describe('parseDropItems', () => {
+  afterEach(() => {
+    delete window.__MM_TEST_HOOKS__;
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('returns rich {quantity, rarity} objects', async () => {
+    const { parseDropItems } = await loadInjectedHooks();
+    const body = `bones: { quantity: 1, rarity: 0 }, ironArmor: { quantity: 1, rarity: 7 }`;
+    expect(parseDropItems(body)).toEqual({
+      bones: { quantity: 1, rarity: 0 },
+      ironArmor: { quantity: 1, rarity: 7 },
+    });
+  });
 });
 
 describe('injected zone definition parser', () => {
