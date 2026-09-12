@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.30
+
+- Fix: notification chime no longer logs an "AudioContext was not allowed to start" browser warning when the Microscape tab has not yet received a user gesture.
+
 ### v0.1.29
 
 - New (members): **Skill activities now appear as drop sources.** Items obtainable as rare drops from skilling activities (e.g. Snape Grass from Trout or Salmon fishing) now appear in the Set Queue source picker alongside combat options. The picker shows the required skill level for each activity, highlighted in red when the player's current level is too low.
