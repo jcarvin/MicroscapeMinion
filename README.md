@@ -106,10 +106,11 @@ Microscape Minion will appear in your extensions list and remain installed perma
 - New (members): **Skill activities now appear as drop sources.** Items obtainable as rare drops from skilling activities (e.g. Snape Grass from Trout or Salmon fishing) now appear in the Set Queue source picker alongside combat options. The picker shows the required skill level for each activity, highlighted in red when the player's current level is too low.
 - Fix: the source picker now correctly selects the default monster based on the player's actual combat level, excluding mobs whose level exceeds the player's even when no explicit dungeon gate is set (e.g. Druid Warrior no longer defaults for low-level players).
 - Fix: all source options now show their level requirement in the hint consistently, not only entries where the player is under-leveled.
+- Fix: drop chance for gem drops from mining (Uncut Diamond, etc.) now correctly shows "1 in 1000" instead of "always". The game bundle uses scientific notation (1e3) which parseInt truncated to 1.
 
 ### v0.1.28
 
-- New (members): **Drops goals are now queueable.** Goals for items obtained as monster drops (e.g. "Bones ×100") now appear in the Set Queue preview as a combat step. Pick which monster to fight and which combat skill to train; the queue runs until your inventory reaches the target count. Monsters are ranked by best drop chance. Melee skills are hidden for safe-spot mobs.
+- Add an unofficial animated Microscape pet gallery, including all standard and members-only pet sprites, deployed as a static GitHub Pages site.
 
 ### v0.1.27
 
