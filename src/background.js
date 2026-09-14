@@ -52,6 +52,7 @@ import {
 } from './goal-planner.js';
 import {
   detectCombatConsumableRunout,
+  detectFallbackTransition,
   detectIdleTransition,
   detectMaterialRunout,
   detectSkillLevelReached,
@@ -562,6 +563,7 @@ function handleServerFrame(frame) {
   pushTickEntry(preSnap, postSnap);
   safelyPushEtaDebugEntry({ preSnap, postSnap, prevAct, newAct, prevMe, newMe: state.mirroredState.me, now });
 
+  detectFallbackTransition();
   detectIdleTransition();
   detectGoalReached();
   detectMaterialRunout();
@@ -602,6 +604,7 @@ function handleClientFrame(frame) {
   state.lastWorkActivity = null;
   chrome.storage.session.remove('lastWorkActivity');
   cancelAllGoalNags('activity-stopped');
+  detectFallbackTransition();
   detectIdleTransition();
   detectMaterialRunout();
 }

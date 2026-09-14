@@ -101,6 +101,11 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.32
+
+- New (members): **Fallback activity notification.** When your activity queue finishes and the game switches to your configured fallback activity (instead of going idle), you now receive a one-time OS notification — "Microscape: Fallback active!" — so you know the queue has run out of steps.
+- New: **Total ETA in the Goal Tracker.** When two or more incomplete goals have ETAs, a running total now appears below the goal list, summing the active goal's live ETA and each other goal's preliminary ETA. A `+` suffix is shown when some ETAs are still warming up.
+
 ### v0.1.31
 
 - Fix: shorten manifest description to comply with the 132-character Chrome Web Store limit.
