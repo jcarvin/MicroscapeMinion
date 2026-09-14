@@ -346,3 +346,10 @@ export const GoalLevelProjection = styled.div`
   color: ${({ theme }) => theme.brown500};
   font-size: 10px;
 `;
+
+export const TotalEtaRow = styled.div`
+  padding: 4px 4px 0;
+  font-size: 11px;
+  color: ${({ theme }) => theme.brown700};
+  text-align: right;
+`;

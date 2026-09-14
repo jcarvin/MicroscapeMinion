@@ -24,6 +24,21 @@ export function detectCombatConsumableRunout(prevMe, newMe) {
   }
 }
 
+export function detectFallbackTransition() {
+  const me = state.mirroredState.me;
+  if (!me || me.activityQueueRunning !== true) return;
+  const fallbackStep = me.fallbackStep;
+  if (!fallbackStep) return;
+  const fallbackId = getActivityId(fallbackStep);
+  if (!fallbackId) return;
+  const actId = getActivityId(me.activity ?? null);
+  if (actId === fallbackId && state.prevActivityId !== fallbackId) {
+    const label = fallbackId.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+    fireNotification('fallback', 'Microscape: Fallback active!', `Switched to ${label}.`);
+    sendChime('default');
+  }
+}
+
 export function detectIdleTransition() {
   const me = state.mirroredState.me;
   if (!me) return;

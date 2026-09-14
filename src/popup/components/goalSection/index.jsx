@@ -1,10 +1,12 @@
 import { Fragment, useState } from 'react';
 import styled from 'styled-components';
+import { formatDuration } from '../../utils/format';
 import { CardLabel, SectionWrapper } from '../Shared';
 import InsertDivider from './InsertDivider';
 import GoalRowItem from './GoalRowItem';
-import { GoalAddBtn, GoalHeading, GoalList } from './GoalSection.styles';
+import { GoalAddBtn, GoalHeading, GoalList, TotalEtaRow } from './GoalSection.styles';
 import useGoalRows from './useGoalRows';
+import { resolveGoalEta } from './goalUtils';
 import SetQueueButton from '../setQueue/SetQueueButton';
 import QueuePreviewDialog from '../setQueue/QueuePreviewDialog';
 import useActivityQueuePreview from '../../hooks/useActivityQueuePreview';
@@ -82,6 +84,18 @@ export default function GoalSection({
     setShowDialog(true);
   }
 
+  const incompleteStatuses = (goalStatuses ?? []).filter((s) => !s.goal.completed);
+  let totalEtaMs = 0;
+  let hasPartialEta = false;
+  for (const s of incompleteStatuses) {
+    const ms = s.relatedToActivity
+      ? resolveGoalEta(s).etaMs
+      : (s.preliminaryEta?.totalMs ?? null);
+    if (ms == null) { hasPartialEta = true; }
+    else { totalEtaMs += ms; }
+  }
+  const showTotalEta = incompleteStatuses.length >= 2 && (totalEtaMs > 0 || hasPartialEta);
+
   const statusesById = new Map((goalStatuses ?? []).map((s) => [s.goal.id, s]));
   const draggedIndex = rows.findIndex(({ id }) => id === drag.draggedId);
 
@@ -145,6 +159,12 @@ export default function GoalSection({
           <InsertDivider onInsert={() => insertRowAt(rows.length)} />
         )}
       </GoalList>
+
+      {showTotalEta && (
+        <TotalEtaRow>
+          Total: {totalEtaMs > 0 ? `~${formatDuration(totalEtaMs)}${hasPartialEta ? '+' : ''}` : '—'}
+        </TotalEtaRow>
+      )}
 
       {showDialog && (
         <QueuePreviewDialog
