@@ -263,6 +263,50 @@ describe('buildDependencyTree', () => {
     expect(withoutLive.activityId).toBe('craft-pot-unfired');
   });
 
+  it('bucket pool: no bucket purchase when player has enough total containers', () => {
+    // Player has 416 buckets + 84 waterBuckets = 500 total containers.
+    // shape-pot credits +bucket byproducts after its inputs resolve, making those
+    // buckets available for the second gather-water step (dough chain).
+    // Neither gather-water step should require buying new buckets.
+    const result = buildDependencyTree({
+      itemId: 'bread',
+      quantity: 454,
+      activityDefs: breadDefs,
+      ownedCounts: { grain: 109, pot: 155, bucket: 416, waterBucket: 84 },
+    });
+    function findNode(node, id, all = []) {
+      if (node.itemId === id) all.push(node);
+      for (const c of node.children) findNode(c, id, all);
+      return all;
+    }
+    // bucket must not appear as purchase-only anywhere (no new buckets need to be bought)
+    const bucketNodes = findNode(result, 'bucket');
+    expect(bucketNodes.length).toBeGreaterThan(0);
+    expect(bucketNodes.every((n) => n.status !== 'purchase-only')).toBe(true);
+    // Both waterBucket steps must be present and craftable (plan shows two gather steps)
+    const wbNodes = findNode(result, 'waterBucket');
+    const wbCraftable = wbNodes.filter((n) => n.status === 'craftable');
+    expect(wbCraftable.length).toBe(2);
+  });
+
+  it('bucket pool: shows purchase-only bucket when total pool is insufficient', () => {
+    // Player has only 50 total bucket containers — not enough for the 299-step.
+    const result = buildDependencyTree({
+      itemId: 'bread',
+      quantity: 454,
+      activityDefs: breadDefs,
+      ownedCounts: { grain: 109, pot: 155, bucket: 30, waterBucket: 20 },
+    });
+    function findNode(node, id, all = []) {
+      if (node.itemId === id) all.push(node);
+      for (const c of node.children) findNode(c, id, all);
+      return all;
+    }
+    // bucket should still appear as purchase-only since 50 < 299
+    const bucketNodes = findNode(result, 'bucket');
+    expect(bucketNodes.some((n) => n.status === 'purchase-only')).toBe(true);
+  });
+
   it('RC4: owned stock is debited so two sibling branches do not both claim the same units', () => {
     // Both grain and pot are needed for flourPot.  With 100 of each, one branch
     // should be sufficient and the other partially-needed.

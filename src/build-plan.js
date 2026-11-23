@@ -175,6 +175,15 @@ function resolveNode(itemId, quantity, ctx) {
         continue;
       }
 
+      // Credit byproduct outputs after all inputs are resolved.
+      // Returned containers (e.g. bucket from shape-pot) become available
+      // to sibling steps that resolve later in the dependency order.
+      for (const { itemId: byId, count } of recipe.outputs) {
+        if (byId !== itemId) {
+          ledger.set(byId, Math.max(0, (ledger.get(byId) ?? 0) + count * cycles));
+        }
+      }
+
       return {
         itemId,
         quantity,
