@@ -29,6 +29,7 @@
     .hint { position: absolute; right: 9px; top: 9px; padding: 4px 6px; background: #10231bcc; color: #d7c69e; border-radius: 4px; font: 11px system-ui, sans-serif; }
     .paused .hint::after { content: "Paused"; }
     .card:not(.paused) .hint::after { content: "Click to pause"; }
+    .beta-tag { display: inline-block; margin-left: 7px; padding: 2px 6px; background: #2a3a28; border: 1px solid #5a7a4a; border-radius: 3px; color: #8aaa6a; font: 600 10px system-ui, sans-serif; letter-spacing: 0.04em; vertical-align: middle; }
     a { color: #e8c978; }
     footer { max-width: 1400px; margin: 12px auto 0; padding: 0 24px 30px; color: #a89b80; font: 12px/1.5 system-ui, sans-serif; }
   </style>
@@ -36,7 +37,7 @@
 <body>
   <header>
     <h1>Unofficial Microscape pet gallery</h1>
-    <p>Sprites extracted from the live game bundle on 2026-09-10. Animations are shown at 2× game size.</p>
+    <p>Sprites extracted from the live game bundle on 2026-11-20. Animations are shown at 2× game size.</p>
   </header>
   <main>
     <section>
@@ -55,30 +56,41 @@
   </footer>
   <script>
     const pets = [
-      { id: 'otter', name: 'Otter', member: true, frames: 26, duration: 250, description: 'An unbothered capybara that likes to sit beside people who fish.' },
-      { id: 'clement', name: 'Clement', member: true, frames: 26, duration: 250, description: 'An off-white capybara named by the monks.' },
-      { id: 'stump', name: 'Stump', member: true, frames: 26, duration: 250, description: 'An olive brown capybara, easily mistaken for undergrowth until it moves.' },
-      { id: 'cinder', name: 'Cinder', member: true, frames: 26, duration: 250, description: 'An orange capybara, always warm to the touch.' },
-      { id: 'biscuit', name: 'Biscuit', member: true, frames: 26, duration: 250, description: 'A pale golden capybara that smells faintly of fresh bread.' },
-      { id: 'pebble', name: 'Pebble', member: true, frames: 26, duration: 250, description: 'A gray capybara that holds perfectly still and pretends to be a boulder.' },
-      { id: 'smudge', name: 'Smudge', member: true, frames: 26, duration: 250, description: 'A coal black capybara. Loves to nap by the forge.' },
-      { id: 'stitch', name: 'Stitch', member: true, frames: 26, duration: 250, description: 'A taupe capybara with an eye for good leather.' },
-      { id: 'merlin', name: 'Merlin', member: true, frames: 26, duration: 250, description: 'A silvery capybara with the barest blue cast, calm even around sparks.' },
-      { id: 'quill', name: 'Quill', member: true, frames: 26, duration: 250, description: 'A wheat gold capybara that dozes in the pile of arrow shavings.' },
-      { id: 'sage', name: 'Sage', member: true, frames: 26, duration: 250, description: 'A moss brown capybara, smells of every herb!' },
-      { id: 'bog', name: 'Bog', frames: 16, duration: 200, description: 'A loyal frog found in the swamps.' },
-      { id: 'golem-core', name: 'Golem Core', frames: 9, duration: 300, sequence: [1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8], description: 'A small golem fragment found deep within the mines.' },
-      { id: 'tinderling', name: 'Tinderling', frames: 9, duration: 200, sequence: [1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8], description: 'A small floating flame that drifts beside you.' },
-      { id: 'pickles', name: 'Pickles', frames: 4, duration: 200, sequence: [1,2,3,1,2,3], description: 'A scruffy cat that lingers near campfires, waiting for scraps.' },
-      { id: 'scoop', name: 'Scoop', frames: 4, duration: 200, sequence: [1,2,3,1,2,3], description: 'A curious platypus that waddles after you, bill first.' },
-      { id: 'riddle', name: 'Riddle', frames: 13, duration: 200, description: 'An old tome whose pages flutter with excitement.' },
-      { id: 'fibs', name: 'Fibs', frames: 17, duration: 150, description: 'A squirrel that chittered at you until you fed it.' },
-      { id: 'winkle', name: 'Winkle', frames: 8, duration: 200, sequence: [1,2,3,4,5,6,7,1,2,3,4,5,6,7], description: 'A shimmering blue butterfly.' },
-      { id: 'peace-moth', name: 'Peace Moth', frames: 8, duration: 250, sequence: [1,2,3,4,5,6,7,1,2,3,4,5,6,7], description: 'A pale moth that seems to glow faintly in the dark.' },
-      { id: 'hubble', name: 'Hubble', frames: 11, duration: 250, description: 'A bubbly slime that wobbles along beside you.' },
-      { id: 'hilda', name: 'Hilda', frames: 9, duration: 200, description: 'An enchanted hammer that drifts at your side.' },
-      { id: 'scales', name: 'Scales', frames: 7, duration: 200, description: 'A harmless dragon whelp—or so it appears.' },
-      { id: 'beatrix', name: 'Beatrix', frames: 8, duration: 200, description: 'A single loyal bee who hums along beside you.' }
+      { id: 'otter', name: 'Otter', member: true, beta: true, frames: 26, duration: 250, description: 'An unbothered capybara that likes to sit beside people who fish.' },
+      { id: 'clement', name: 'Clement', member: true, beta: true, frames: 26, duration: 250, description: 'An off-white capybara named by the monks.' },
+      { id: 'stump', name: 'Stump', member: true, beta: true, frames: 26, duration: 250, description: 'An olive brown capybara, easily mistaken for undergrowth until it moves.' },
+      { id: 'cinder', name: 'Cinder', member: true, beta: true, frames: 26, duration: 250, description: 'An orange capybara, always warm to the touch.' },
+      { id: 'biscuit', name: 'Biscuit', member: true, beta: true, frames: 26, duration: 250, description: 'A pale golden capybara that smells faintly of fresh bread.' },
+      { id: 'pebble', name: 'Pebble', member: true, beta: true, frames: 26, duration: 250, description: 'A gray capybara that holds perfectly still and pretends to be a boulder.' },
+      { id: 'smudge', name: 'Smudge', member: true, beta: true, frames: 26, duration: 250, description: 'A coal black capybara. Loves to nap by the forge.' },
+      { id: 'stitch', name: 'Stitch', member: true, beta: true, frames: 26, duration: 250, description: 'A taupe capybara with an eye for good leather.' },
+      { id: 'merlin', name: 'Merlin', member: true, beta: true, frames: 26, duration: 250, description: 'A silvery capybara with the barest blue cast, calm even around sparks.' },
+      { id: 'quill', name: 'Quill', member: true, beta: true, frames: 26, duration: 250, description: 'A wheat gold capybara that dozes in the pile of arrow shavings.' },
+      { id: 'sage', name: 'Sage', member: true, beta: true, frames: 26, duration: 250, description: 'A moss brown capybara, smells of every herb!' },
+      { id: 'bog', name: 'Bog', beta: true, frames: 16, duration: 200, description: 'A loyal frog found in the swamps.' },
+      { id: 'golem-core', name: 'Golem Core', beta: true, frames: 9, duration: 300, sequence: [1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8], description: 'A small golem fragment found deep within the mines. It seems to have taken a liking to you.' },
+      { id: 'tinderling', name: 'Tinderling', beta: true, frames: 9, duration: 200, sequence: [1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8], description: 'A small floating flame that drifts beside you. It gives off a gentle warmth.' },
+      { id: 'pickles', name: 'Pickles', beta: true, frames: 4, duration: 200, sequence: [1,2,3,1,2,3], description: 'A scruffy cat that lingers near campfires, waiting for scraps.' },
+      { id: 'scoop', name: 'Scoop', beta: true, frames: 4, duration: 200, sequence: [1,2,3,1,2,3], description: 'A curious platypus that waddles after you, bill first.' },
+      { id: 'riddle', name: 'Riddle', beta: true, frames: 13, duration: 200, description: 'An old tome that sprung to life as you were practicing how to be a good magic user, its pages flutter with excitement.' },
+      { id: 'fibs', name: 'Fibs', beta: true, frames: 17, duration: 150, description: 'A squirrel that chittered at you until you fed it. Now it won\'t leave.' },
+      { id: 'winkle', name: 'Winkle', beta: true, frames: 8, duration: 200, sequence: [1,2,3,4,5,6,7,1,2,3,4,5,6,7], description: 'A shimmering blue butterfly that seems to enjoy the sound of chopping wood.' },
+      { id: 'peace-moth', name: 'Peace Moth', beta: true, frames: 8, duration: 250, sequence: [1,2,3,4,5,6,7,1,2,3,4,5,6,7], description: 'A pale moth that flutters silently beside you. It seems to glow faintly in the dark.' },
+      { id: 'hubble', name: 'Hubble', beta: true, frames: 11, duration: 250, description: 'A bubbly slime that wobbles along beside you. It seems to have absorbed one too many potions.' },
+      { id: 'hilda', name: 'Hilda', beta: true, frames: 9, duration: 200, description: 'A hammer forged with one strike too many. Now it drifts at your side, dreaming of metal to shape.' },
+      { id: 'scales', name: 'Scales', beta: true, frames: 7, duration: 200, description: 'Harmless enough, if you ignore the way it eyes the mountain when the sky turns red.' },
+      { id: 'beatrix', name: 'Beatrix', beta: true, frames: 8, duration: 200, description: 'A single loyal bee. She hums along beside you, forever between flowers.' },
+      { id: 'murk', name: 'Murk', frames: 16, duration: 200, description: 'A brown toad that blends right into the riverbank mud.' },
+      { id: 'mossy', name: 'Mossy', frames: 9, duration: 300, sequence: [1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8], description: 'A golem fragment overgrown with moss. It hums quietly near fresh ore.' },
+      { id: 'ember', name: 'Ember', frames: 9, duration: 200, sequence: [1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8], description: 'A low smoldering flame that never quite goes out.' },
+      { id: 'crumpet', name: 'Crumpet', frames: 4, duration: 200, sequence: [1,2,3,1,2,3], description: 'A cream colored cat that waits by the stove for a taste.' },
+      { id: 'sandy', name: 'Sandy', frames: 4, duration: 200, sequence: [1,2,3,1,2,3], description: 'A sandy platypus that leaves little tracks across your workbench.' },
+      { id: 'scribble', name: 'Scribble', frames: 13, duration: 200, description: 'A navy bound book that doodles in its own margins when it thinks no one is reading.' },
+      { id: 'chia', name: 'Chia', frames: 17, duration: 150, description: 'A gray squirrel that hides seeds in every pocket you own.' },
+      { id: 'amber', name: 'Amber', frames: 8, duration: 200, sequence: [1,2,3,4,5,6,7,1,2,3,4,5,6,7], description: 'An orange butterfly that warms its wings on fresh cut logs.' },
+      { id: 'mercy', name: 'Mercy', frames: 8, duration: 250, sequence: [1,2,3,4,5,6,7,1,2,3,4,5,6,7], description: 'A pale white moth that settles softly on gravestones.' },
+      { id: 'gloop', name: 'Gloop', frames: 11, duration: 250, description: 'A mossy green slime that smells faintly of herbs.' },
+      { id: 'greta', name: 'Greta', frames: 9, duration: 200, description: 'A bronze enchanted hammer. She keeps time with every strike at the anvil.' }
     ];
 
     const timers = [];
@@ -93,7 +105,7 @@
           <div class="viewport"><img class="sheet" src="assets/world/${pet.id}.png" alt="${pet.name} animation sprite sheet"></div>
         </div>
         <div class="meta">
-          <div class="name"><img class="icon" src="assets/icons/${pet.id}.png" alt="">${pet.name}</div>
+          <div class="name"><img class="icon" src="assets/icons/${pet.id}.png" alt="">${pet.name}${pet.beta ? '<span class="beta-tag">Beta</span>' : ''}</div>
           <p class="description">${pet.description}</p>
         </div>`;
       const sheet = card.querySelector('.sheet');

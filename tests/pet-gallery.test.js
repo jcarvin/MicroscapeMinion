@@ -5,8 +5,8 @@ describe('pet sprite gallery', () => {
   const petIds = [...html.matchAll(/\{ id: '([^']+)'/g)].map((match) => match[1]);
 
   it('lists all pets and members-only variants', () => {
-    expect(petIds).toHaveLength(24);
-    expect(new Set(petIds).size).toBe(24);
+    expect(petIds).toHaveLength(35);
+    expect(new Set(petIds).size).toBe(35);
     expect(html.match(/member: true/g)).toHaveLength(11);
   });
 
