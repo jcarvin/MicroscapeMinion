@@ -1,16 +1,18 @@
 import { Fragment, useState } from 'react';
 import styled from 'styled-components';
-import { formatDuration } from '../../utils/format';
+import { formatDuration, formatItemId } from '../../utils/format';
 import { CardLabel, SectionWrapper } from '../Shared';
 import InsertDivider from './InsertDivider';
 import GoalRowItem from './GoalRowItem';
 import { GoalAddBtn, GoalHeading, GoalList, TotalEtaRow } from './GoalSection.styles';
 import useGoalRows from './useGoalRows';
-import { resolveGoalEta } from './goalUtils';
+import { displayItemName, resolveGoalEta } from './goalUtils';
 import SetQueueButton from '../setQueue/SetQueueButton';
 import QueuePreviewDialog from '../setQueue/QueuePreviewDialog';
+import BuildPlanDialog from './BuildPlanDialog';
 import useActivityQueuePreview from '../../hooks/useActivityQueuePreview';
 import useZonePreferenceWriter from '../../hooks/useZonePreferenceWriter';
+import { buildDependencyTree, flattenTree } from '../../../build-plan.js';
 
 const HeaderRight = styled.div`
   display: flex;
@@ -33,6 +35,7 @@ export default function GoalSection({
   combatSkillPreference,
   playerCombatLevel,
   playerSkillLevels,
+  ownedCounts,
 }) {
   const {
     rows,
@@ -46,9 +49,11 @@ export default function GoalSection({
     handleRemove,
     insertRowAt,
     addRow,
+    insertGoalsForPlan,
   } = useGoalRows(goalItems, goalStatuses);
 
   const [showDialog, setShowDialog] = useState(false);
+  const [buildPlanRow, setBuildPlanRow] = useState(null);
 
   const writeZonePreference = useZonePreferenceWriter();
 
@@ -80,6 +85,30 @@ export default function GoalSection({
   });
 
   function handleOpenDialog() {
+    resetOverrides();
+    setShowDialog(true);
+  }
+
+  function handleBuildPlan(row) {
+    if (!activityDefs || !row.itemId) return;
+    const targetCount = Number(row.targetValue) || 0;
+    if (targetCount <= 0) return;
+    setBuildPlanRow({ row, targetCount });
+  }
+
+  function handleSetPlanQueue(row, targetCount) {
+    if (!activityDefs || !row.itemId) return;
+    const tree = buildDependencyTree({
+      itemId: row.itemId,
+      quantity: targetCount,
+      activityDefs,
+      ownedCounts: ownedCounts ?? {},
+      playerSkillLevels: playerSkillLevels ?? {},
+      playerCombatLevel: playerCombatLevel ?? null,
+    });
+    const planRows = flattenTree(tree);
+    insertGoalsForPlan(row.id, planRows);
+    setBuildPlanRow(null);
     resetOverrides();
     setShowDialog(true);
   }
@@ -138,6 +167,7 @@ export default function GoalSection({
                 item={item}
                 planning={planning}
                 goalItems={goalItems}
+                activityDefs={activityDefs}
                 draggedId={drag.draggedId}
                 dragOverId={drag.dragOverId}
                 draggedIndex={draggedIndex}
@@ -151,6 +181,7 @@ export default function GoalSection({
                 onTargetChange={(value) => handleTargetChange(row.id, value)}
                 onTargetBlur={persistCurrentRows}
                 onRemove={() => handleRemove(row.id)}
+                onBuildPlan={handleBuildPlan}
               />
             </Fragment>
           );
@@ -165,6 +196,29 @@ export default function GoalSection({
           Total: {totalEtaMs > 0 ? `~${formatDuration(totalEtaMs)}${hasPartialEta ? '+' : ''}` : '—'}
         </TotalEtaRow>
       )}
+
+      {buildPlanRow && activityDefs && (() => {
+        const { row, targetCount } = buildPlanRow;
+        const tree = buildDependencyTree({
+          itemId: row.itemId,
+          quantity: targetCount,
+          activityDefs,
+          ownedCounts: ownedCounts ?? {},
+          playerSkillLevels: playerSkillLevels ?? {},
+          playerCombatLevel: playerCombatLevel ?? null,
+        });
+        const item = goalItems.find(({ id }) => id === row.itemId);
+        const itemName = displayItemName(item) || (row.itemId ? formatItemId(row.itemId) : '');
+        return (
+          <BuildPlanDialog
+            itemName={itemName}
+            tree={tree}
+            goalItems={goalItems}
+            onSetQueue={() => handleSetPlanQueue(row, targetCount)}
+            onClose={() => setBuildPlanRow(null)}
+          />
+        );
+      })()}
 
       {showDialog && (
         <QueuePreviewDialog

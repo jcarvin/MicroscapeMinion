@@ -10,6 +10,7 @@ import {
 } from './activity-utils.js';
 import { getMaterialCount, getGoalCount, findKey } from './inventory.js';
 import {
+  buildOwnedCounts,
   getChanceDropItemIds,
   getCraftableItemIds,
   getManualActivityItemIds,
@@ -302,5 +303,6 @@ export function buildStatus() {
     combatSkillPreference: me?.preferences?.combatSkill ?? null,
     playerCombatLevel,
     playerSkillLevels,
+    ownedCounts: buildOwnedCounts(me),
   };
 }

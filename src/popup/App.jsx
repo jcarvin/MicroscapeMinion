@@ -100,6 +100,7 @@ export default function App() {
           combatSkillPreference={status?.combatSkillPreference ?? null}
           playerCombatLevel={status?.playerCombatLevel ?? null}
           playerSkillLevels={status?.playerSkillLevels ?? {}}
+          ownedCounts={status?.ownedCounts ?? {}}
         />
         <MaterialSection
           runoutStatus={status?.runoutStatus ?? null}

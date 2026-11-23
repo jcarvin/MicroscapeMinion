@@ -188,6 +188,25 @@ export default function useGoalRows(goalItems, goalStatuses) {
     updateRows((current) => [createRow(), ...current]);
   }
 
+  function insertGoalsForPlan(targetRowId, planRows) {
+    updateRows((current) => {
+      const result = [...current];
+      for (const planRow of planRows) {
+        const existingIndex = result.findIndex((r) => r.itemId === planRow.itemId);
+        if (existingIndex >= 0) {
+          const existing = result[existingIndex];
+          const newTarget = Math.max(Number(existing.targetValue) || 0, planRow.targetCount);
+          result[existingIndex] = { ...existing, targetValue: String(newTarget) };
+        } else {
+          const targetIndex = result.findIndex((r) => r.id === targetRowId);
+          const insertAt = targetIndex >= 0 ? targetIndex : result.length;
+          result.splice(insertAt, 0, createRow(planRow));
+        }
+      }
+      return result;
+    }, true);
+  }
+
   const drag = useDragReorder((fromId, toId) => {
     updateRows((current) => {
       const from = current.findIndex(({ id }) => id === fromId);
@@ -212,5 +231,6 @@ export default function useGoalRows(goalItems, goalStatuses) {
     handleRemove,
     insertRowAt,
     addRow,
+    insertGoalsForPlan,
   };
 }

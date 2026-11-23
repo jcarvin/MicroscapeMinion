@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.35
+
+- New (members): **Build Plan.** When a goal is limited by missing materials, a "Build Plan" button now appears on the goal card. Clicking it resolves the full ingredient dependency tree and shows every item needed — craftable and gatherable items are listed normally, while purchase-only items are highlighted in amber. Combat-drop items are included as queueable steps if your combat level is sufficient, or flagged as purchase-only with the required combat level if not. Clicking "Set Queue" inserts all dependency goals into your Goal Tracker (merging quantities for existing goals) and opens the queue preview to put the whole chain in motion.
+
 ### v0.1.34
 
 - Fix: material limitations now show correctly for Manual goals whose crafting activity has no bundled equivalent (e.g. Dough).

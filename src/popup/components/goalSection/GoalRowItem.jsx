@@ -8,6 +8,20 @@ import {
   GoalPlanNote,
   GoalRow,
 } from './GoalSection.styles';
+import styled from 'styled-components';
+
+const BuildPlanBtn = styled.button`
+  margin: 3px 24px 0 22px;
+  padding: 2px 8px;
+  font-size: 10px;
+  background: ${({ theme }) => theme.parchment};
+  border: 1px solid ${({ theme }) => theme.brown700};
+  border-radius: ${({ theme }) => theme.radius};
+  color: ${({ theme }) => theme.brown700};
+  cursor: pointer;
+  &:hover { background: ${({ theme }) => theme.parchmentLight}; color: ${({ theme }) => theme.brown900}; }
+  &:active { transform: translateY(1px); box-shadow: none; }
+`;
 import {
   displayItemName,
   effectiveSourceMode,
@@ -23,6 +37,7 @@ export default function GoalRowItem({
   item,
   planning,
   goalItems,
+  activityDefs,
   draggedId,
   dragOverId,
   draggedIndex,
@@ -36,6 +51,7 @@ export default function GoalRowItem({
   onTargetChange,
   onTargetBlur,
   onRemove,
+  onBuildPlan,
 }) {
   const sourceMode = effectiveSourceMode(row, item);
   const sourceOptions = sourceOptionsFor(item, planning);
@@ -92,8 +108,13 @@ export default function GoalRowItem({
   const { etaMs, bankTrips } = resolveGoalEta(status);
   const isDraggedOver = dragOverId === row.id && draggedIndex !== rowIndex;
 
+  const showBuildPlan = Boolean(onBuildPlan)
+    && Boolean(activityDefs)
+    && planning?.pending !== true
+    && planning?.materialFeasible === false;
+
   const [collapsed, setCollapsed] = useState(false);
-  const hasCollapsibleContent = isValid || sourceOptions.length > 1 || Boolean(planningNote) || showXpProjection;
+  const hasCollapsibleContent = isValid || sourceOptions.length > 1 || Boolean(planningNote) || showXpProjection || showBuildPlan;
 
   const dropBefore = isDraggedOver && draggedIndex > rowIndex;
   const dropAfter = isDraggedOver && draggedIndex < rowIndex;
@@ -160,6 +181,12 @@ export default function GoalRowItem({
       )}
 
       {!collapsed && planningNote && <GoalPlanNote>{planningNote}</GoalPlanNote>}
+
+      {!collapsed && showBuildPlan && (
+        <BuildPlanBtn type="button" onClick={() => onBuildPlan(row)}>
+          Build Plan
+        </BuildPlanBtn>
+      )}
 
       {!collapsed && showXpProjection && (
         <GoalLevelProjection>
