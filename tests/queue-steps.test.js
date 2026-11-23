@@ -305,3 +305,53 @@ describe('activityQueueStepFromGoalPlan', () => {
     expect(step.stop.goal).toBe(12);
   });
 });
+
+describe('buildActivityQueueSteps — zone-agnostic activities (no entity)', () => {
+  const ENTITYLESS_DEFS = {
+    ...ACTIVITY_DEFS,
+    'make-dough': { level: 1, xpPerCycle: 10, durationMs: 5000, inventoryChanges: { flour: -1, water: -1, dough: 1 } },
+  };
+
+  it('resolves zone to currentZoneId for entity-null activities when player is in a zone', () => {
+    const goalStatuses = [makeGoalStatus({ itemId: 'dough', activityId: 'make-dough' })];
+    const { steps } = buildActivityQueueSteps({
+      goalStatuses,
+      activityDefs: ENTITYLESS_DEFS,
+      skillByActivity: {},
+      zoneDefinitions: ZONE_DEFINITIONS,
+      learnedZonePreferences: { byActivityId: {}, byEntityId: {} },
+      currentZoneId: 'kitchen',
+    });
+    expect(steps[0].zoneId).toBe('kitchen');
+    expect(steps[0].resolutionSource).toBe('currentZone');
+    expect(steps[0].zoneCandidates).toEqual([]);
+  });
+
+  it('resolves zone to null for entity-null activities when player has no current zone', () => {
+    const goalStatuses = [makeGoalStatus({ itemId: 'dough', activityId: 'make-dough' })];
+    const { steps } = buildActivityQueueSteps({
+      goalStatuses,
+      activityDefs: ENTITYLESS_DEFS,
+      skillByActivity: {},
+      zoneDefinitions: ZONE_DEFINITIONS,
+      learnedZonePreferences: { byActivityId: {}, byEntityId: {} },
+      currentZoneId: null,
+    });
+    expect(steps[0].zoneId).toBeNull();
+    expect(steps[0].zoneCandidates).toEqual([]);
+  });
+
+  it('uses activityId preference over currentZone for entity-null activities', () => {
+    const goalStatuses = [makeGoalStatus({ itemId: 'dough', activityId: 'make-dough' })];
+    const { steps } = buildActivityQueueSteps({
+      goalStatuses,
+      activityDefs: ENTITYLESS_DEFS,
+      skillByActivity: {},
+      zoneDefinitions: ZONE_DEFINITIONS,
+      learnedZonePreferences: { byActivityId: { 'make-dough': 'smithy' }, byEntityId: {} },
+      currentZoneId: 'kitchen',
+    });
+    // Saved preference wins over currentZoneId fallback
+    expect(steps[0].zoneId).toBe('smithy');
+  });
+});
