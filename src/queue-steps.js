@@ -63,6 +63,20 @@ export function buildActivityQueueSteps({
   const steps = [];
   const skippedGoals = [];
 
+  const zoneCount = zoneDefinitions ? Object.keys(zoneDefinitions).length : 0;
+  if (zoneCount === 0) {
+    console.debug('[QueueSteps] zoneDefinitions is empty — zone data not yet loaded');
+  } else {
+    const allEntities = new Set();
+    for (const def of Object.values(zoneDefinitions)) {
+      const ents = def.entities;
+      if (Array.isArray(ents)) ents.forEach(e => allEntities.add(e));
+      else if (ents) Object.keys(ents).forEach(e => allEntities.add(e));
+    }
+    console.debug('[QueueSteps] zoneDefinitions loaded:', zoneCount, 'zones, entities:', [...allEntities].sort());
+  }
+  console.debug('[QueueSteps] activityDefs keys:', Object.keys(activityDefs ?? {}).length, '| currentZoneId:', currentZoneId);
+
   for (const { goal, planning: goalPlan } of goalStatuses ?? []) {
     if (!goalPlan?.activityId) {
       skippedGoals.push({ goal, reason: 'no-activity' });
@@ -151,6 +165,8 @@ export function buildActivityQueueSteps({
       null;
 
     const entityId = activityDefinition?.entity ?? null;
+
+    console.debug('[QueueSteps] step', activityId, '| activityDef:', activityDefinition ? 'found' : 'MISSING', '| entity:', entityId);
 
     let zoneCandidates;
     if (!entityId) {
