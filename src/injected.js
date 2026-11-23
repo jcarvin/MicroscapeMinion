@@ -123,6 +123,7 @@
       // Structural zone/entity walk. Falls back gracefully if parsing fails
       // so the cached ZONE_DATA from a prior successful parse is preserved.
       const zoneDefinitionsResult = parseZoneDefinitions(bundle);
+      console.log('[MM injected] zone parse result:', zoneDefinitionsResult ? Object.keys(zoneDefinitionsResult).length + ' zones' : 'null/empty');
       const skillByActivityResult = parseSkillActivityIndex(bundle);
       const combatSkillsResult = parseCombatSkills(bundle);
 
@@ -737,10 +738,15 @@
   // or null if the map object cannot be located.
   function parseZoneDefinitions(bundle) {
     const mapSource = findMapDefinitionObject(bundle);
-    if (!mapSource) return null;
+    if (!mapSource) {
+      console.log('[MM injected] parseZoneDefinitions: findMapDefinitionObject returned null');
+      return null;
+    }
+    console.log('[MM injected] parseZoneDefinitions: map source found, length =', mapSource.length);
 
     const zones = {};
     const topLevelEntries = readTopLevelObjectKeys(mapSource);
+    console.log('[MM injected] parseZoneDefinitions: top-level entries =', topLevelEntries.length);
 
     for (const { key: zoneId, valueStartIndex } of topLevelEntries) {
       if (mapSource[valueStartIndex] !== '{') continue;
