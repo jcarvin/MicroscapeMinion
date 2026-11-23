@@ -1,6 +1,6 @@
 {
   "name": "microscape-minion",
-  "version": "0.1.35",
+  "version": "0.1.36",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,7 +16,8 @@
     "zip:chrome": "npm run build:chrome && (cd dist-chrome && mkdir -p ../artifacts && zip -r ../artifacts/microscape-minion-$npm_package_version-chrome.zip . -x '*.DS_Store')",
     "zip:firefox": "npm run build:firefox && web-ext build --source-dir dist-firefox --artifacts-dir artifacts --overwrite-dest --filename microscape-minion-{version}-firefox.zip",
     "firefox:lint": "npm run build:firefox && web-ext lint --source-dir dist-firefox",
-    "firefox:run": "npm run build:firefox && web-ext run --source-dir dist-firefox"
+    "firefox:run": "npm run build:firefox && web-ext run --source-dir dist-firefox",
+    "defs:fetch": "node scripts/fetch-activity-defs.mjs"
   },
   "dependencies": {
     "react": "^18",

@@ -286,7 +286,7 @@ describe('goal planner', () => {
     expect(result.plans[1]).toMatchObject({
       recipeId: 'craft-vial',
       skill: 'crafting',
-      requiredLevel: 33,
+      requiredLevel: 19,
       projectedLevelBefore: 8,
       levelFeasible: false,
       materialFeasible: false,

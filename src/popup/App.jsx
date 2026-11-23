@@ -92,6 +92,7 @@ export default function App() {
           connected={status?.connected ?? false}
           gameQueue={status?.gameQueue}
           activityDefs={status?.activityDefs}
+          liveActivityIds={status?.liveActivityIds ?? []}
           skillByActivity={status?.skillByActivity}
           zoneDefinitions={status?.zoneDefinitions}
           learnedZonePreferences={status?.learnedZonePreferences}

@@ -295,6 +295,7 @@ export function buildStatus() {
     etaDebugLogVersion: ETA_DEBUG_LOG_VERSION,
     etaDebugLog: state.etaDebugLog,
     activityDefs: state.ACTIVITY_DEFS,
+    liveActivityIds: [...state.LIVE_ACTIVITY_IDS],
     zoneDefinitions: state.ZONE_DEFINITIONS,
     skillByActivity: state.SKILL_BY_ACTIVITY,
     learnedZonePreferences: state.learnedZonePreferences,

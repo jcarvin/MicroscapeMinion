@@ -27,6 +27,7 @@ export default function GoalSection({
   connected,
   gameQueue,
   activityDefs,
+  liveActivityIds,
   skillByActivity,
   zoneDefinitions,
   learnedZonePreferences,
@@ -105,6 +106,7 @@ export default function GoalSection({
       ownedCounts: ownedCounts ?? {},
       playerSkillLevels: playerSkillLevels ?? {},
       playerCombatLevel: playerCombatLevel ?? null,
+      liveActivityIds: liveActivityIds ?? [],
     });
     const planRows = flattenTree(tree);
     insertGoalsForPlan(row.id, planRows);
@@ -206,6 +208,7 @@ export default function GoalSection({
           ownedCounts: ownedCounts ?? {},
           playerSkillLevels: playerSkillLevels ?? {},
           playerCombatLevel: playerCombatLevel ?? null,
+          liveActivityIds: liveActivityIds ?? [],
         });
         const item = goalItems.find(({ id }) => id === row.itemId);
         const itemName = displayItemName(item) || (row.itemId ? formatItemId(row.itemId) : '');

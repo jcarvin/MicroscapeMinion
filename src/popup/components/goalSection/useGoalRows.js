@@ -189,20 +189,27 @@ export default function useGoalRows(goalItems, goalStatuses) {
   }
 
   function insertGoalsForPlan(targetRowId, planRows) {
+    if (!planRows.length) return;
     updateRows((current) => {
       const result = [...current];
-      for (const planRow of planRows) {
-        const existingIndex = result.findIndex((r) => r.itemId === planRow.itemId);
-        if (existingIndex >= 0) {
-          const existing = result[existingIndex];
-          const newTarget = Math.max(Number(existing.targetValue) || 0, planRow.targetCount);
-          result[existingIndex] = { ...existing, targetValue: String(newTarget) };
-        } else {
-          const targetIndex = result.findIndex((r) => r.id === targetRowId);
-          const insertAt = targetIndex >= 0 ? targetIndex : result.length;
-          result.splice(insertAt, 0, createRow(planRow));
-        }
+      const targetIndex = result.findIndex((r) => r.id === targetRowId);
+      if (targetIndex < 0) return result;
+
+      // The last planRow is the root goal — map it onto the existing target row.
+      const rootStep = planRows[planRows.length - 1];
+      const newTarget = Number(rootStep.targetCount);
+      if (Number.isSafeInteger(newTarget) && newTarget > 0) {
+        result[targetIndex] = { ...result[targetIndex], targetValue: String(newTarget) };
       }
+
+      // Splice dependency steps in plan order immediately before the target row.
+      // Inserting in reverse at the same index shifts earlier entries right,
+      // preserving their relative order.
+      const depSteps = planRows.slice(0, planRows.length - 1);
+      for (let i = depSteps.length - 1; i >= 0; i--) {
+        result.splice(targetIndex, 0, createRow(depSteps[i]));
+      }
+
       return result;
     }, true);
   }

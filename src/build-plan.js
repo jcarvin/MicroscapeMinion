@@ -6,6 +6,10 @@ import {
 } from './goal-planner.js';
 import bundledActivityDefs from './activity-defs.json';
 
+// Safety limits to prevent runaway recursion on pathological inputs.
+const NODE_BUDGET = 2000;
+const DEPTH_CAP = 16;
+
 function outputCount(activity, itemId) {
   return activity.outputs.find((o) => o.itemId === itemId)?.count ?? 1;
 }
@@ -15,20 +19,25 @@ function isLevelAccessible(activity, playerSkillLevels) {
   return (playerSkillLevels?.[activity.skill] ?? 1) >= activity.requiredLevel;
 }
 
-function pickBestRecipe(recipes, itemId, playerSkillLevels) {
-  const withAccess = recipes.map((recipe) => ({
+// Returns all candidates sorted by: accessible first, then perCycle desc,
+// requiredLevel asc, activityId asc.  Used for backtracking — the caller
+// iterates the full list rather than stopping at the first pick.
+function sortCandidates(candidates, itemId, playerSkillLevels) {
+  const withAccess = candidates.map((recipe) => ({
     recipe,
     accessible: isLevelAccessible(recipe, playerSkillLevels),
     perCycle: outputCount(recipe, itemId),
   }));
-  const candidates = withAccess.some((r) => r.accessible)
+  const prioritized = withAccess.some((r) => r.accessible)
     ? withAccess.filter((r) => r.accessible)
     : withAccess;
-  return candidates.sort((a, b) =>
-    b.perCycle - a.perCycle
-      || (a.recipe.requiredLevel ?? 0) - (b.recipe.requiredLevel ?? 0)
-      || a.recipe.activityId.localeCompare(b.recipe.activityId)
-  )[0]?.recipe ?? null;
+  return prioritized
+    .sort((a, b) =>
+      b.perCycle - a.perCycle ||
+      (a.recipe.requiredLevel ?? 0) - (b.recipe.requiredLevel ?? 0) ||
+      a.recipe.activityId.localeCompare(b.recipe.activityId)
+    )
+    .map((w) => w.recipe);
 }
 
 function getDropCandidates(itemId, activityDefs) {
@@ -57,11 +66,32 @@ function pickBestDrop(accessible, playerCombatLevel) {
   })[0] ?? null;
 }
 
-function resolveNode(itemId, quantity, { recipesByOutput, inputActivitiesByOutput, activitiesByOutput, activityDefs, ledger, playerSkillLevels, playerCombatLevel, visited }) {
+function resolveNode(itemId, quantity, ctx) {
+  const {
+    recipesByOutput,
+    inputActivitiesByOutput,
+    activitiesByOutput,
+    activityDefs,
+    ledger,
+    playerSkillLevels,
+    playerCombatLevel,
+    visited,
+    liveActivityIds,
+    budget,
+  } = ctx;
+
+  if (budget.remaining <= 0) {
+    const owned = ledger.get(itemId) ?? 0;
+    const needed = Math.max(0, quantity - owned);
+    return { itemId, quantity, owned, needed, activityId: null, skill: null, requiredLevel: null, levelBlocked: false, status: 'purchase-only', children: [] };
+  }
+  budget.remaining--;
+
   const owned = ledger.get(itemId) ?? 0;
   const needed = Math.max(0, quantity - owned);
 
   if (needed === 0) {
+    ledger.set(itemId, owned - quantity);
     return { itemId, quantity, owned, needed: 0, status: 'sufficient', children: [] };
   }
 
@@ -69,33 +99,81 @@ function resolveNode(itemId, quantity, { recipesByOutput, inputActivitiesByOutpu
     return { itemId, quantity, owned, needed, status: 'circular', activityId: null, skill: null, requiredLevel: null, levelBlocked: false, children: [] };
   }
 
-  const nextVisited = new Set([...visited, itemId]);
-  const ctx = { recipesByOutput, inputActivitiesByOutput, activitiesByOutput, activityDefs, ledger, playerSkillLevels, playerCombatLevel, visited: nextVisited };
+  if (visited.size >= DEPTH_CAP) {
+    return { itemId, quantity, owned, needed, activityId: null, skill: null, requiredLevel: null, levelBlocked: false, status: 'purchase-only', children: [] };
+  }
 
-  // maxCraftable recipes first (cook-, craft-, make-, smelt-, forge-, etc.)
+  const nextVisited = new Set([...visited, itemId]);
+  const ctx2 = { ...ctx, visited: nextVisited };
+
+  // Gatherable (input-free) wins outright — a real gathering activity must not be
+  // displaced by a container-return activity that also happens to output the item.
+  const gatherableProducers = (activitiesByOutput.get(itemId) ?? []).filter(
+    (a) => a.inputs.length === 0 && !a.chanceBased
+  );
+  if (gatherableProducers.length > 0) {
+    const producer = gatherableProducers
+      .slice()
+      .sort((a, b) =>
+        Number(isLevelAccessible(b, playerSkillLevels)) -
+          Number(isLevelAccessible(a, playerSkillLevels)) ||
+        (a.requiredLevel ?? 0) - (b.requiredLevel ?? 0) ||
+        a.activityId.localeCompare(b.activityId)
+      )[0];
+    ledger.set(itemId, 0);
+    return {
+      itemId,
+      quantity,
+      owned,
+      needed,
+      activityId: producer.activityId,
+      skill: producer.skill,
+      requiredLevel: producer.requiredLevel,
+      levelBlocked: !isLevelAccessible(producer, playerSkillLevels),
+      status: 'gatherable',
+      children: [],
+    };
+  }
+
+  // Merge maxCraftable recipes and non-maxCraftable input activities into one pool.
+  // maxCraftable is a queue-batching signal, not a routing preference; keeping them
+  // separate let the phantom seed recipe craft-pot-unfired beat the live shape-pot.
   const recipes = recipesByOutput.get(itemId) ?? [];
-  // Fall back to any input activity (live-game activities with inputs that don't match the
-  // maxCraftable prefix pattern — e.g. a dough-making activity named outside the convention)
-  const inputFallbacks = (inputActivitiesByOutput.get(itemId) ?? []).filter((a) => !a.maxCraftable);
-  const candidateRecipes = recipes.length > 0 ? recipes : inputFallbacks;
-  if (candidateRecipes.length > 0) {
-    const recipe = pickBestRecipe(candidateRecipes, itemId, playerSkillLevels);
-    if (recipe) {
+  const inputFallbacks = (inputActivitiesByOutput.get(itemId) ?? []).filter(
+    (a) => !a.maxCraftable
+  );
+  let candidates = [...recipes, ...inputFallbacks];
+
+  // If any candidate comes from the live-parsed activity set, discard seed-only ones.
+  // This prevents stale bundled recipes (e.g. craft-pot-unfired) from shadowing
+  // the live equivalent (shape-pot).
+  if (liveActivityIds?.size > 0) {
+    const liveCandidates = candidates.filter((c) => liveActivityIds.has(c.activityId));
+    if (liveCandidates.length > 0) candidates = liveCandidates;
+  }
+
+  if (candidates.length > 0) {
+    const sorted = sortCandidates(candidates, itemId, playerSkillLevels);
+
+    for (const recipe of sorted) {
       const perCycle = outputCount(recipe, itemId);
       const cycles = Math.ceil(needed / perCycle);
       const levelBlocked = !isLevelAccessible(recipe, playerSkillLevels);
 
-      // Update ledger: commit to crafting the needed quantity, credit byproducts
+      // Snapshot the ledger before attempting this candidate so we can backtrack
+      // if any direct child resolves circular (the entire attempt is invalid).
+      const snapshot = new Map(ledger);
       ledger.set(itemId, 0);
-      for (const { itemId: byId, count } of recipe.outputs) {
-        if (byId !== itemId) {
-          ledger.set(byId, Math.max(0, (ledger.get(byId) ?? 0)) + count * cycles);
-        }
-      }
 
       const children = recipe.inputs.map(({ itemId: inputId, count }) =>
-        resolveNode(inputId, count * cycles, ctx)
+        resolveNode(inputId, count * cycles, ctx2)
       );
+
+      if (children.some((c) => c.status === 'circular')) {
+        ledger.clear();
+        for (const [k, v] of snapshot) ledger.set(k, v);
+        continue;
+      }
 
       return {
         itemId,
@@ -112,32 +190,6 @@ function resolveNode(itemId, quantity, { recipesByOutput, inputActivitiesByOutpu
     }
   }
 
-  // Gatherable: activity with no inputs
-  const producers = (activitiesByOutput.get(itemId) ?? []).filter(
-    (a) => a.inputs.length === 0 && !a.chanceBased
-  );
-  if (producers.length > 0) {
-    const producer = producers
-      .slice()
-      .sort((a, b) =>
-        Number(isLevelAccessible(a, playerSkillLevels)) - Number(isLevelAccessible(b, playerSkillLevels)) === 0
-          ? (a.requiredLevel ?? 0) - (b.requiredLevel ?? 0) || a.activityId.localeCompare(b.activityId)
-          : Number(isLevelAccessible(b, playerSkillLevels)) - Number(isLevelAccessible(a, playerSkillLevels))
-      )[0];
-    return {
-      itemId,
-      quantity,
-      owned,
-      needed,
-      activityId: producer.activityId,
-      skill: producer.skill,
-      requiredLevel: producer.requiredLevel,
-      levelBlocked: !isLevelAccessible(producer, playerSkillLevels),
-      status: 'gatherable',
-      children: [],
-    };
-  }
-
   // Combat drops
   const dropCandidates = getDropCandidates(itemId, activityDefs);
   if (dropCandidates.length > 0) {
@@ -146,6 +198,7 @@ function resolveNode(itemId, quantity, { recipesByOutput, inputActivitiesByOutpu
     );
     if (accessible.length > 0) {
       const best = pickBestDrop(accessible, playerCombatLevel);
+      ledger.set(itemId, 0);
       return {
         itemId,
         quantity,
@@ -177,18 +230,6 @@ function resolveNode(itemId, quantity, { recipesByOutput, inputActivitiesByOutpu
     };
   }
 
-  // Debug: log why this item has no production route
-  const allProducers = activitiesByOutput.get(itemId) ?? [];
-  const allInputActivities = inputActivitiesByOutput.get(itemId) ?? [];
-  console.debug('[BuildPlan] purchase-only fallthrough for', itemId, {
-    recipesFound: (recipesByOutput.get(itemId) ?? []).map((a) => a.activityId),
-    inputActivitiesFound: allInputActivities.map((a) => `${a.activityId}(maxCraftable=${a.maxCraftable})`),
-    gatherersFound: allProducers.filter((a) => a.inputs.length === 0).map((a) => a.activityId),
-    defsWithOutput: Object.entries(activityDefs)
-      .filter(([, def]) => def?.inventoryChanges?.[itemId] > 0)
-      .map(([id]) => id),
-  });
-
   return {
     itemId,
     quantity,
@@ -203,14 +244,30 @@ function resolveNode(itemId, quantity, { recipesByOutput, inputActivitiesByOutpu
   };
 }
 
-export function buildDependencyTree({ itemId, quantity, activityDefs, ownedCounts = {}, playerSkillLevels = {}, playerCombatLevel = null }) {
+export function buildDependencyTree({
+  itemId,
+  quantity,
+  activityDefs,
+  ownedCounts = {},
+  playerSkillLevels = {},
+  playerCombatLevel = null,
+  liveActivityIds = null,
+}) {
   // Merge bundled canonical defs (as fallbacks) with live game defs.
   // Live defs take precedence; bundled fills in activities the live game omits.
   const mergedDefs = { ...bundledActivityDefs, ...(activityDefs ?? {}) };
   const recipesByOutput = buildRecipeIndex(mergedDefs);
   const inputActivitiesByOutput = buildInputActivityIndex(mergedDefs);
   const activitiesByOutput = buildActivityIndex(mergedDefs);
-  const ledger = new Map(Object.entries(ownedCounts).map(([id, v]) => [id, Math.max(0, Number(v) || 0)]));
+  const ledger = new Map(
+    Object.entries(ownedCounts).map(([id, v]) => [id, Math.max(0, Number(v) || 0)])
+  );
+  const liveSet =
+    liveActivityIds instanceof Set
+      ? liveActivityIds
+      : Array.isArray(liveActivityIds) && liveActivityIds.length > 0
+        ? new Set(liveActivityIds)
+        : null;
 
   return resolveNode(itemId, quantity, {
     recipesByOutput,
@@ -221,27 +278,33 @@ export function buildDependencyTree({ itemId, quantity, activityDefs, ownedCount
     playerSkillLevels,
     playerCombatLevel,
     visited: new Set(),
+    liveActivityIds: liveSet,
+    budget: { remaining: NODE_BUDGET },
   });
 }
 
 export function flattenTree(node) {
-  const seen = new Map();
+  const steps = [];
 
   function traverse(n) {
     for (const child of n.children) traverse(child);
     if (n.status === 'sufficient' || n.status === 'circular' || n.status === 'purchase-only') return;
     if (n.quantity <= 0) return;
 
-    const existing = seen.get(n.itemId);
-    if (!existing || n.quantity > existing.targetCount) {
-      seen.set(n.itemId, {
-        itemId: n.itemId,
-        targetCount: n.quantity,
-        sourceMode: n.status === 'gatherable' ? 'manual' : n.status === 'drops' ? 'drops' : 'craft',
-      });
+    const sourceMode =
+      n.status === 'gatherable' ? 'manual' : n.status === 'drops' ? 'drops' : 'craft';
+
+    // Merge only immediately adjacent entries for the same item (take the max quantity).
+    // Non-adjacent repeats are separated by a consuming step and must stay separate
+    // so the queue stop-condition fires at the right threshold each time.
+    const last = steps.length > 0 ? steps[steps.length - 1] : null;
+    if (last && last.itemId === n.itemId) {
+      steps[steps.length - 1] = { ...last, targetCount: Math.max(last.targetCount, n.quantity) };
+    } else {
+      steps.push({ itemId: n.itemId, targetCount: n.quantity, sourceMode });
     }
   }
 
   traverse(node);
-  return [...seen.values()];
+  return steps;
 }

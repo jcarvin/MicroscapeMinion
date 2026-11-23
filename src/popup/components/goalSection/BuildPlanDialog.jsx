@@ -84,6 +84,18 @@ const WarningBadge = styled.span`
   flex-shrink: 0;
 `;
 
+const IncompleteWarning = styled.div`
+  font-size: 11px;
+  color: ${({ theme }) => theme.amber};
+  border: 1px solid ${({ theme }) => theme.amber};
+  border-radius: ${({ theme }) => theme.radius};
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+`;
+
 const Footer = styled.div`
   display: flex;
   align-items: center;
@@ -197,12 +209,34 @@ function hasDropNodes(node) {
   return node.children.some(hasDropNodes);
 }
 
+function collectPurchaseOnlyLeaves(node, goalItems) {
+  if (node.status === 'purchase-only' && node.needed > 0) {
+    return [`${formatNumber(node.needed)}× ${getItemDisplayName(node.itemId, goalItems)}`];
+  }
+  return node.children.flatMap((child) => collectPurchaseOnlyLeaves(child, goalItems));
+}
+
+function collectLevelBlockedLeaves(node, goalItems) {
+  if (node.levelBlocked && node.status !== 'purchase-only' && node.needed > 0) {
+    const name = getItemDisplayName(node.itemId, goalItems);
+    const levelNote = node.skill
+      ? `${formatSkillName(node.skill)} Lv ${node.requiredLevel}`
+      : node.requiredLevel
+        ? `Lv ${node.requiredLevel}`
+        : 'level req';
+    return [`${formatNumber(node.needed)}× ${name} (${levelNote})`];
+  }
+  return node.children.flatMap((child) => collectLevelBlockedLeaves(child, goalItems));
+}
+
 export default function BuildPlanDialog({ itemName, tree, goalItems, onSetQueue, onClose }) {
   useModalDismiss(onClose);
 
   const canQueue = tree && hasActionableNodes(tree);
   const showPurchaseLegend = tree && hasPurchaseOnly(tree);
   const showDropLegend = tree && hasDropNodes(tree);
+  const purchaseOnlyLeaves = tree ? collectPurchaseOnlyLeaves(tree, goalItems) : [];
+  const levelBlockedLeaves = tree ? collectLevelBlockedLeaves(tree, goalItems) : [];
 
   return createPortal(
     <Overlay onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -222,6 +256,17 @@ export default function BuildPlanDialog({ itemName, tree, goalItems, onSetQueue,
             {showPurchaseLegend && <LegendItem $color="amber">[buy] = purchase from bazaar</LegendItem>}
             {showDropLegend && <LegendItem $color="muted">[combat drop] = queued as combat</LegendItem>}
           </Legend>
+        )}
+
+        {(purchaseOnlyLeaves.length > 0 || levelBlockedLeaves.length > 0) && (
+          <IncompleteWarning>
+            {purchaseOnlyLeaves.length > 0 && (
+              <div>⚠ Plan is incomplete — buy these first: <strong>{purchaseOnlyLeaves.join(', ')}</strong></div>
+            )}
+            {levelBlockedLeaves.length > 0 && (
+              <div>⚠ Level-blocked: <strong>{levelBlockedLeaves.join(', ')}</strong></div>
+            )}
+          </IncompleteWarning>
         )}
 
         <Footer>
