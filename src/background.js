@@ -218,7 +218,6 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         state.ZONE_DATA = msg.zones;
         toCache.zoneData = msg.zones;
       }
-      console.log('[Background] game bundle received: zoneDefinitions count =', Object.keys(msg.zoneDefinitions ?? {}).length, '| zones count =', Object.keys(msg.zones ?? {}).length);
       if (msg.zoneDefinitions && Object.keys(msg.zoneDefinitions).length > 0) {
         state.ZONE_DEFINITIONS = msg.zoneDefinitions;
         toCache.zoneDefinitions = msg.zoneDefinitions;
