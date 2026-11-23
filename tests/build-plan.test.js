@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildDependencyTree, flattenTree } from '../src/build-plan.js';
+import {
+  buildDependencyTree,
+  flattenTree,
+  detectReceptacles,
+  collectReceptacleWarnings,
+  batchPlanForReceptacles,
+  MIN_RECEPTACLE_COUNT,
+  MAX_RECEPTACLE_COUNT,
+} from '../src/build-plan.js';
 
 // Simple defs: mine iron (gather), smelt iron bar (craft), forge armor (craft)
 const defs = {
@@ -443,5 +451,151 @@ describe('flattenTree', () => {
     expect(idx('dough')).toBeLessThan(idx('bread'));
     // Both waterBucket entries come before bread
     expect(ids.lastIndexOf('waterBucket')).toBeLessThan(idx('bread'));
+  });
+});
+
+describe('detectReceptacles', () => {
+  it('detects bucket/waterBucket as a receptacle pair', () => {
+    const result = detectReceptacles(breadDefs);
+    expect(result.has('bucket')).toBe(true);
+    const info = result.get('bucket');
+    expect(info.filledId).toBe('waterBucket');
+    expect(info.fillActivityId).toBe('gather-water-10');
+    expect(info.cycleConsumed).toBe(10);
+    expect(info.cycleProduced).toBe(10);
+  });
+
+  it('does not detect items whose fill activity has multiple inputs or outputs', () => {
+    // process-flour has two inputs (grain + pot) — not a fill pair
+    const result = detectReceptacles(breadDefs);
+    expect(result.has('grain')).toBe(false);
+    expect(result.has('pot')).toBe(false);
+  });
+
+  it('requires the filled item to be returned by some activity that consumes it', () => {
+    // oneWayDefs: bottle → filledBottle but nothing returns bottle from filledBottle
+    const oneWayDefs = {
+      'fill-bottle': { inventoryChanges: { bottle: -1, filledBottle: 1 } },
+      'drink':       { inventoryChanges: { filledBottle: -1, health: 1 } }, // no bottle return
+    };
+    const result = detectReceptacles(oneWayDefs);
+    expect(result.has('bottle')).toBe(false);
+  });
+
+  it('returns empty map for empty activity defs', () => {
+    expect(detectReceptacles({}).size).toBe(0);
+    expect(detectReceptacles(null).size).toBe(0);
+  });
+});
+
+describe('collectReceptacleWarnings', () => {
+  function planStepsFor(itemId, qty, ownedCounts = {}) {
+    const tree = buildDependencyTree({ itemId, quantity: qty, activityDefs: breadDefs, ownedCounts });
+    return flattenTree(tree);
+  }
+
+  it('returns blocking warning when total receptacle count < MIN_RECEPTACLE_COUNT', () => {
+    const steps = planStepsFor('bread', 10, { grain: 0, pot: 0 });
+    const warnings = collectReceptacleWarnings(breadDefs, { bucket: 0, waterBucket: 0 }, steps);
+    const blocking = warnings.filter((w) => w.level === 'blocking');
+    expect(blocking.length).toBeGreaterThan(0);
+    expect(blocking[0].emptyId).toBe('bucket');
+    expect(blocking[0].total).toBe(0);
+    expect(blocking[0].total).toBeLessThan(MIN_RECEPTACLE_COUNT);
+  });
+
+  it('returns efficiency warning when total < MAX_RECEPTACLE_COUNT but >= MIN', () => {
+    const steps = planStepsFor('bread', 454, { grain: 109, pot: 155, waterBucket: 84 });
+    const warnings = collectReceptacleWarnings(breadDefs, { bucket: 50, waterBucket: 0 }, steps);
+    const eff = warnings.filter((w) => w.level === 'efficiency');
+    expect(eff.length).toBeGreaterThan(0);
+    expect(eff[0].emptyId).toBe('bucket');
+    expect(eff[0].total).toBe(50);
+  });
+
+  it('returns no warnings when total >= MAX_RECEPTACLE_COUNT', () => {
+    const steps = planStepsFor('bread', 454, { grain: 109, pot: 155, waterBucket: 84 });
+    const warnings = collectReceptacleWarnings(breadDefs, { bucket: 416, waterBucket: 84 }, steps);
+    expect(warnings).toHaveLength(0);
+  });
+
+  it('returns no warnings when the plan does not use any receptacle', () => {
+    // ironArmor plan uses no buckets
+    const ironDefs = {
+      'mine-iron':        { inventoryChanges: { ironOre: 1 } },
+      'smelt-iron':       { inventoryChanges: { ironOre: -2, ironBar: 1 } },
+      'forge-iron-armor': { inventoryChanges: { ironBar: -5, ironArmor: 1 } },
+    };
+    const tree = buildDependencyTree({ itemId: 'ironArmor', quantity: 2, activityDefs: ironDefs, ownedCounts: {} });
+    const steps = flattenTree(tree);
+    expect(collectReceptacleWarnings(ironDefs, {}, steps)).toHaveLength(0);
+  });
+});
+
+describe('batchPlanForReceptacles', () => {
+  it('no-ops when player has enough containers for a single-shot plan', () => {
+    // 500 total containers ≥ 299 needed for shape-pot → no batching
+    const tree = buildDependencyTree({
+      itemId: 'bread', quantity: 454, activityDefs: breadDefs,
+      ownedCounts: { grain: 109, pot: 155, bucket: 416, waterBucket: 84 },
+    });
+    const steps = flattenTree(tree);
+    const batched = batchPlanForReceptacles(steps, breadDefs, { bucket: 416, waterBucket: 84 });
+    expect(batched).toEqual(steps);
+  });
+
+  it('splits (fill, consume) pair into interleaved batches when containers are limited', () => {
+    // 20 buckets → batchSize = floor(20/10)*10 = 20; need 299 wB → ceil(299/20)=15 batches
+    const tree = buildDependencyTree({
+      itemId: 'unfiredPot', quantity: 299, activityDefs: breadDefs,
+      ownedCounts: { bucket: 20 },
+    });
+    const steps = flattenTree(tree);
+    const batched = batchPlanForReceptacles(steps, breadDefs, { bucket: 20, waterBucket: 0 });
+
+    const wbSteps = batched.filter((s) => s.itemId === 'waterBucket');
+    const potSteps = batched.filter((s) => s.itemId === 'unfiredPot');
+    expect(wbSteps.length).toBe(15);
+    expect(potSteps.length).toBe(15);
+
+    // Fill goals are all fixed at batchSize (20)
+    expect(wbSteps.every((s) => s.targetCount === 20)).toBe(true);
+
+    // Use goals are cumulative: 20, 40, ..., 299
+    expect(potSteps[0].targetCount).toBe(20);
+    expect(potSteps[1].targetCount).toBe(40);
+    expect(potSteps[potSteps.length - 1].targetCount).toBe(299);
+  });
+
+  it('fill and consume steps strictly alternate in batched output', () => {
+    const tree = buildDependencyTree({
+      itemId: 'unfiredPot', quantity: 50, activityDefs: breadDefs,
+      ownedCounts: { bucket: 10 },
+    });
+    const steps = flattenTree(tree);
+    const batched = batchPlanForReceptacles(steps, breadDefs, { bucket: 10, waterBucket: 0 });
+
+    // Find the batched waterBucket/unfiredPot section
+    for (let i = 0; i < batched.length - 1; i++) {
+      if (batched[i].itemId === 'waterBucket' && batched[i + 1].itemId === 'unfiredPot') {
+        // Every waterBucket should be immediately followed by unfiredPot
+        let j = i;
+        while (j < batched.length && batched[j].itemId === 'waterBucket') {
+          expect(batched[j + 1]?.itemId).toBe('unfiredPot');
+          j += 2;
+        }
+        break;
+      }
+    }
+  });
+
+  it('no-ops when plan has no fill/consume adjacent pair', () => {
+    const defs = {
+      'mine-iron':  { inventoryChanges: { ironOre: 1 } },
+      'smelt-iron': { inventoryChanges: { ironOre: -2, ironBar: 1 } },
+    };
+    const tree = buildDependencyTree({ itemId: 'ironBar', quantity: 10, activityDefs: defs, ownedCounts: {} });
+    const steps = flattenTree(tree);
+    expect(batchPlanForReceptacles(steps, defs, {})).toEqual(steps);
   });
 });

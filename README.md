@@ -101,6 +101,11 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.37
+
+- Fix: **Build Plan container reuse now works correctly.** Returned containers (e.g. the bucket returned by `shape-pot`) are credited to the ledger after a recipe's inputs are fully resolved, so sibling steps that run later in the queue can reuse them without stalling. Users with enough total containers (bucket + waterBucket ≥ need) see no change; users with limited containers get the plan split into interleaved batches (fill N → craft N → fill N → craft N …) sized to what they can hold.
+- New: **Receptacle warnings in the Build Plan dialog.** The planner detects refillable containers automatically (any activity that converts one item type to another 1:1, confirmed when the filled version is returned from a downstream activity). If you have fewer than 10 total containers, the dialog warns the plan cannot proceed; if you have fewer than 500, it suggests buying more for efficiency.
+
 ### v0.1.36
 
 - Fix: **Build Plan now resolves the full ingredient tree.** Four root-cause bugs were causing the plan to stop early or mis-route: (1) byproduct container returns (pot, bucket) were being credited to the ledger before their own upstream inputs were resolved, so the planner incorrectly treated them as already available; (2) container-return activities (e.g. `process-bread-dough → bucket`) were selected as production routes for the item they return, looping back to an ancestor; (3) stale seed recipes (e.g. `craft-pot-unfired` for a `softClay` input that no longer exists) were shadowing live recipes (e.g. `shape-pot`); (4) shared ingredients were not debited from the ledger so a single owned stack could satisfy multiple sibling branches. All four are fixed: byproduct crediting is removed, backtracking discards circular routes, live-parsed activities take precedence over seed-only ones, and the ledger is properly debited at each step. The flattened queue now emits every occurrence of a repeated ingredient in dependency order rather than collapsing them to a single max-quantity entry.

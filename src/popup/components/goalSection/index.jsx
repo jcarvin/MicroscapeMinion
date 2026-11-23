@@ -12,7 +12,12 @@ import QueuePreviewDialog from '../setQueue/QueuePreviewDialog';
 import BuildPlanDialog from './BuildPlanDialog';
 import useActivityQueuePreview from '../../hooks/useActivityQueuePreview';
 import useZonePreferenceWriter from '../../hooks/useZonePreferenceWriter';
-import { buildDependencyTree, flattenTree } from '../../../build-plan.js';
+import {
+  buildDependencyTree,
+  flattenTree,
+  batchPlanForReceptacles,
+  collectReceptacleWarnings,
+} from '../../../build-plan.js';
 
 const HeaderRight = styled.div`
   display: flex;
@@ -108,8 +113,9 @@ export default function GoalSection({
       playerCombatLevel: playerCombatLevel ?? null,
       liveActivityIds: liveActivityIds ?? [],
     });
-    const planRows = flattenTree(tree);
-    insertGoalsForPlan(row.id, planRows);
+    const planSteps = flattenTree(tree);
+    const batchedSteps = batchPlanForReceptacles(planSteps, activityDefs, ownedCounts ?? {});
+    insertGoalsForPlan(row.id, batchedSteps);
     setBuildPlanRow(null);
     resetOverrides();
     setShowDialog(true);
@@ -210,6 +216,8 @@ export default function GoalSection({
           playerCombatLevel: playerCombatLevel ?? null,
           liveActivityIds: liveActivityIds ?? [],
         });
+        const planSteps = flattenTree(tree);
+        const receptacleWarnings = collectReceptacleWarnings(activityDefs, ownedCounts ?? {}, planSteps);
         const item = goalItems.find(({ id }) => id === row.itemId);
         const itemName = displayItemName(item) || (row.itemId ? formatItemId(row.itemId) : '');
         return (
@@ -217,6 +225,7 @@ export default function GoalSection({
             itemName={itemName}
             tree={tree}
             goalItems={goalItems}
+            receptacleWarnings={receptacleWarnings}
             onSetQueue={() => handleSetPlanQueue(row, targetCount)}
             onClose={() => setBuildPlanRow(null)}
           />

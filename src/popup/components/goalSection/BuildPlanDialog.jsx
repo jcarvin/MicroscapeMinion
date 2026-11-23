@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom';
 import styled from 'styled-components';
 import useModalDismiss from '../../hooks/useModalDismiss';
 import { formatItemId, formatNumber, formatSkillName } from '../../utils/format';
+import { MIN_RECEPTACLE_COUNT, MAX_RECEPTACLE_COUNT } from '../../../build-plan.js';
 import { displayItemName } from './goalUtils';
 
 const Overlay = styled.div`
@@ -229,7 +230,7 @@ function collectLevelBlockedLeaves(node, goalItems) {
   return node.children.flatMap((child) => collectLevelBlockedLeaves(child, goalItems));
 }
 
-export default function BuildPlanDialog({ itemName, tree, goalItems, onSetQueue, onClose }) {
+export default function BuildPlanDialog({ itemName, tree, goalItems, receptacleWarnings, onSetQueue, onClose }) {
   useModalDismiss(onClose);
 
   const canQueue = tree && hasActionableNodes(tree);
@@ -237,6 +238,9 @@ export default function BuildPlanDialog({ itemName, tree, goalItems, onSetQueue,
   const showDropLegend = tree && hasDropNodes(tree);
   const purchaseOnlyLeaves = tree ? collectPurchaseOnlyLeaves(tree, goalItems) : [];
   const levelBlockedLeaves = tree ? collectLevelBlockedLeaves(tree, goalItems) : [];
+
+  const blockingReceptacles = (receptacleWarnings ?? []).filter((w) => w.level === 'blocking');
+  const efficiencyReceptacles = (receptacleWarnings ?? []).filter((w) => w.level === 'efficiency');
 
   return createPortal(
     <Overlay onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -258,7 +262,8 @@ export default function BuildPlanDialog({ itemName, tree, goalItems, onSetQueue,
           </Legend>
         )}
 
-        {(purchaseOnlyLeaves.length > 0 || levelBlockedLeaves.length > 0) && (
+        {(purchaseOnlyLeaves.length > 0 || levelBlockedLeaves.length > 0 ||
+          blockingReceptacles.length > 0 || efficiencyReceptacles.length > 0) && (
           <IncompleteWarning>
             {purchaseOnlyLeaves.length > 0 && (
               <div>⚠ Plan is incomplete — buy these first: <strong>{purchaseOnlyLeaves.join(', ')}</strong></div>
@@ -266,6 +271,18 @@ export default function BuildPlanDialog({ itemName, tree, goalItems, onSetQueue,
             {levelBlockedLeaves.length > 0 && (
               <div>⚠ Level-blocked: <strong>{levelBlockedLeaves.join(', ')}</strong></div>
             )}
+            {blockingReceptacles.map((w) => (
+              <div key={w.emptyId}>
+                ⚠ Buy more <strong>{formatItemId(w.emptyId)}</strong> to build this plan
+                {' '}(have {w.total}, need {MIN_RECEPTACLE_COUNT}+)
+              </div>
+            ))}
+            {efficiencyReceptacles.map((w) => (
+              <div key={w.emptyId}>
+                Buy more <strong>{formatItemId(w.emptyId)}</strong> for a more efficient build plan
+                {' '}(have {w.total}, max {MAX_RECEPTACLE_COUNT})
+              </div>
+            ))}
           </IncompleteWarning>
         )}
 

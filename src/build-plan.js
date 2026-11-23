@@ -310,10 +310,148 @@ export function flattenTree(node) {
     if (last && last.itemId === n.itemId) {
       steps[steps.length - 1] = { ...last, targetCount: Math.max(last.targetCount, n.quantity) };
     } else {
-      steps.push({ itemId: n.itemId, targetCount: n.quantity, sourceMode });
+      steps.push({ itemId: n.itemId, targetCount: n.quantity, sourceMode, activityId: n.activityId ?? null });
     }
   }
 
   traverse(node);
   return steps;
+}
+
+// ── Receptacle detection ────────────────────────────────────────────────────
+
+// Detects "refillable container" pairs: items that cycle empty → filled → empty
+// across activities (e.g. bucket → waterBucket → bucket).
+// A fill pair is any activity with exactly one input item and one output item
+// at the same count (the fill operation), confirmed when the output item is
+// returned as a byproduct by some other activity that consumes it.
+//
+// Returns Map<emptyId, { filledId, fillActivityId, cycleConsumed, cycleProduced }>
+export function detectReceptacles(activityDefs) {
+  const fillPairs = new Map();
+
+  for (const [activityId, def] of Object.entries(activityDefs ?? {})) {
+    const changes = def.inventoryChanges ?? {};
+    const entries = Object.entries(changes);
+    const inputs = entries.filter(([, v]) => v < 0);
+    const outputs = entries.filter(([, v]) => v > 0);
+    if (inputs.length !== 1 || outputs.length !== 1) continue;
+    const [emptyId, emptyChange] = inputs[0];
+    const [filledId, filledChange] = outputs[0];
+    if (emptyId === filledId) continue;
+    fillPairs.set(emptyId, {
+      filledId,
+      fillActivityId: activityId,
+      cycleConsumed: -emptyChange,
+      cycleProduced: filledChange,
+    });
+  }
+
+  const confirmed = new Map();
+  for (const [emptyId, info] of fillPairs) {
+    const { filledId } = info;
+    for (const def of Object.values(activityDefs ?? {})) {
+      const changes = def.inventoryChanges ?? {};
+      if ((changes[filledId] ?? 0) < 0 && (changes[emptyId] ?? 0) > 0) {
+        confirmed.set(emptyId, info);
+        break;
+      }
+    }
+  }
+
+  return confirmed;
+}
+
+// ── Receptacle warnings ─────────────────────────────────────────────────────
+
+export const MIN_RECEPTACLE_COUNT = 10;
+export const MAX_RECEPTACLE_COUNT = 500;
+
+// Returns an array of { level: 'blocking'|'efficiency', emptyId, filledId, total }
+// for each receptacle used in planSteps that falls below a threshold.
+export function collectReceptacleWarnings(activityDefs, ownedCounts, planSteps) {
+  const receptacles = detectReceptacles(activityDefs ?? {});
+  if (receptacles.size === 0) return [];
+
+  const usedEmptyIds = new Set();
+  for (const step of planSteps) {
+    if (!step.activityId) continue;
+    for (const [emptyId, { fillActivityId }] of receptacles) {
+      if (step.activityId === fillActivityId) usedEmptyIds.add(emptyId);
+    }
+  }
+
+  const warnings = [];
+  for (const emptyId of usedEmptyIds) {
+    const { filledId } = receptacles.get(emptyId);
+    const total = (ownedCounts?.[emptyId] ?? 0) + (ownedCounts?.[filledId] ?? 0);
+    if (total < MIN_RECEPTACLE_COUNT) {
+      warnings.push({ level: 'blocking', emptyId, filledId, total });
+    } else if (total < MAX_RECEPTACLE_COUNT) {
+      warnings.push({ level: 'efficiency', emptyId, filledId, total });
+    }
+  }
+
+  return warnings;
+}
+
+// ── Receptacle batching ─────────────────────────────────────────────────────
+
+// When the user has fewer receptacles than a plan step needs to run in one shot,
+// split adjacent (fill, consume) pairs into interleaved batches so the queue
+// never stalls waiting for containers that are still filled from an earlier step.
+//
+// Fill step goal is FIXED (non-cumulative): gather until `batchSize` filled.
+// Consuming step goal is CUMULATIVE: produce until `k × batchSize` items total.
+export function batchPlanForReceptacles(steps, activityDefs, ownedCounts) {
+  const receptacles = detectReceptacles(activityDefs ?? {});
+  if (receptacles.size === 0) return steps;
+
+  const filledToReceptacle = new Map();
+  for (const [emptyId, info] of receptacles) {
+    filledToReceptacle.set(info.filledId, { emptyId, ...info });
+  }
+
+  const result = [];
+  let i = 0;
+
+  while (i < steps.length) {
+    const step = steps[i];
+    const rec = step.activityId ? filledToReceptacle.get(step.itemId) : null;
+    const isFillStep = rec && step.activityId === rec.fillActivityId && step.sourceMode === 'craft';
+
+    if (isFillStep && i + 1 < steps.length) {
+      const nextStep = steps[i + 1];
+      const { emptyId, filledId, cycleConsumed, cycleProduced } = rec;
+      const nextDef = (activityDefs ?? {})[nextStep.activityId];
+      const isConsumer = nextDef &&
+        (nextDef.inventoryChanges?.[filledId] ?? 0) < 0 &&
+        (nextDef.inventoryChanges?.[emptyId] ?? 0) > 0;
+
+      if (isConsumer) {
+        const emptyPool = Math.max(0, ownedCounts?.[emptyId] ?? 0);
+        const filledPool = Math.max(0, ownedCounts?.[filledId] ?? 0);
+        const batchSize = Math.max(cycleProduced, Math.floor(emptyPool / cycleConsumed) * cycleProduced);
+        const totalNeeded = step.targetCount;
+
+        // If total container pool covers the step in one shot, no batching needed.
+        // After previous steps return containers, the player may have even more
+        // available, but we conservatively check the initial pool here.
+        if (emptyPool + filledPool < totalNeeded) {
+          const numBatches = Math.ceil(totalNeeded / batchSize);
+          for (let b = 0; b < numBatches; b++) {
+            result.push({ ...step, targetCount: batchSize });
+            result.push({ ...nextStep, targetCount: Math.min((b + 1) * batchSize, totalNeeded) });
+          }
+          i += 2;
+          continue;
+        }
+      }
+    }
+
+    result.push(step);
+    i++;
+  }
+
+  return result;
 }
