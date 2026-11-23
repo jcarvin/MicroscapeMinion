@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.34
+
+- Fix: material limitations now show correctly for Manual goals whose crafting activity has no bundled equivalent (e.g. Dough).
+
 ### v0.1.33
 
 - New: **Post-launch pet gallery update.** Scraped the official-release game bundle to add 11 new pets (Murk, Mossy, Ember, Crumpet, Sandy, Scribble, Chia, Amber, Mercy, Gloop, Greta) to the animated sprite gallery. Beta-era pets are now labelled with a "Beta" tag to distinguish them from release additions.
