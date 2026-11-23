@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.33
+
+- Fix: material limitations now show correctly for Manual goals whose crafting activity has no bundled equivalent (e.g. Dough).
+
 ### v0.1.32
 
 - New (members): **Fallback activity notification.** When your activity queue finishes and the game switches to your configured fallback activity (instead of going idle), you now receive a one-time OS notification — "Microscape: Fallback active!" — so you know the queue has run out of steps.

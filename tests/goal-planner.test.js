@@ -464,6 +464,37 @@ describe('goal planner', () => {
     expect(result.ledger).toMatchObject({ sigilDi: 351, ironOre: 3000 });
   });
 
+  it('shows material limitations for a Manual item with no bundled producer', () => {
+    const result = planGoals({
+      goals: [{ ...goal('dough', 'dough', 500), sourceMode: 'manual' }],
+      activityDefs: {
+        'cook-dough': {
+          skill: 'cooking',
+          level: 1,
+          xpPerCycle: 10,
+          inventoryChanges: { flour: -1, water: -1, dough: 1 },
+        },
+      },
+      manualInputActivityDefs: {
+        'cook-bread': {
+          skill: 'cooking',
+          level: 5,
+          xpPerCycle: 40,
+          inventoryChanges: { dough: -1, bread: 1 },
+        },
+      },
+      ownedCounts: { flour: 0, water: 0, dough: 0 },
+    });
+
+    expect(result.plans[0]).toMatchObject({
+      sourceMode: 'manual',
+      materialFeasible: false,
+      achievableTarget: 0,
+      limitingItemIds: expect.arrayContaining(['flour', 'water']),
+      activityId: 'cook-dough',
+    });
+  });
+
   it('uses a canonical bundled producer when a live variant cannot provide XP metadata', () => {
     const result = planGoals({
       goals: [{ ...goal('ore', 'ironOre', 10), sourceMode: 'manual' }],

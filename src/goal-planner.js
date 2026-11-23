@@ -482,6 +482,7 @@ export function planGoals({
   const recipesByOutput = buildRecipeIndex(plannerActivityDefs);
   const chanceDropsByOutput = buildChanceDropIndex(plannerActivityDefs);
   const manualInputActivityIds = getManualInputActivityIds(manualInputActivityDefs);
+  const bundledOutputItemIds = new Set(buildActivityIndex(manualInputActivityDefs).keys());
   const knownOutputs = new Map([...activitiesByOutput, ...chanceDropsByOutput]);
   const ledger = new Map(Object.entries(ownedCounts ?? {}).map(([itemId, count]) => [
     itemId,
@@ -500,14 +501,16 @@ export function planGoals({
     const recipes = itemId ? (recipesByOutput.get(itemId) ?? []) : [];
     const inputActivities = recipes.length > 0
       ? allInputActivities
-      : allInputActivities.filter(({ activityId }) => {
-          const fallbackActivityId = resolveFallbackActivity(
-            activityId,
-            plannerActivityDefs[activityId],
-            manualInputActivityDefs
-          )?.activityId;
-          return manualInputActivityIds.has(fallbackActivityId ?? activityId);
-        });
+      : !bundledOutputItemIds.has(itemId)
+        ? allInputActivities
+        : allInputActivities.filter(({ activityId }) => {
+            const fallbackActivityId = resolveFallbackActivity(
+              activityId,
+              plannerActivityDefs[activityId],
+              manualInputActivityDefs
+            )?.activityId;
+            return manualInputActivityIds.has(fallbackActivityId ?? activityId);
+          });
     const maxCraftable = goal.maxCraftable === true;
     const sourceMode = resolveSourceMode(goal, {
       recipes,
