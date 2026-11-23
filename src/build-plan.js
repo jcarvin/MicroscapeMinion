@@ -1,5 +1,6 @@
 import {
   buildActivityIndex,
+  buildInputActivityIndex,
   buildRecipeIndex,
   inferActivitySkill,
 } from './goal-planner.js';
@@ -56,7 +57,7 @@ function pickBestDrop(accessible, playerCombatLevel) {
   })[0] ?? null;
 }
 
-function resolveNode(itemId, quantity, { recipesByOutput, activitiesByOutput, activityDefs, ledger, playerSkillLevels, playerCombatLevel, visited }) {
+function resolveNode(itemId, quantity, { recipesByOutput, inputActivitiesByOutput, activitiesByOutput, activityDefs, ledger, playerSkillLevels, playerCombatLevel, visited }) {
   const owned = ledger.get(itemId) ?? 0;
   const needed = Math.max(0, quantity - owned);
 
@@ -69,11 +70,16 @@ function resolveNode(itemId, quantity, { recipesByOutput, activitiesByOutput, ac
   }
 
   const nextVisited = new Set([...visited, itemId]);
-  const ctx = { recipesByOutput, activitiesByOutput, activityDefs, ledger, playerSkillLevels, playerCombatLevel, visited: nextVisited };
+  const ctx = { recipesByOutput, inputActivitiesByOutput, activitiesByOutput, activityDefs, ledger, playerSkillLevels, playerCombatLevel, visited: nextVisited };
 
+  // maxCraftable recipes first (cook-, craft-, make-, smelt-, forge-, etc.)
   const recipes = recipesByOutput.get(itemId) ?? [];
-  if (recipes.length > 0) {
-    const recipe = pickBestRecipe(recipes, itemId, playerSkillLevels);
+  // Fall back to any input activity (live-game activities with inputs that don't match the
+  // maxCraftable prefix pattern — e.g. a dough-making activity named outside the convention)
+  const inputFallbacks = (inputActivitiesByOutput.get(itemId) ?? []).filter((a) => !a.maxCraftable);
+  const candidateRecipes = recipes.length > 0 ? recipes : inputFallbacks;
+  if (candidateRecipes.length > 0) {
+    const recipe = pickBestRecipe(candidateRecipes, itemId, playerSkillLevels);
     if (recipe) {
       const perCycle = outputCount(recipe, itemId);
       const cycles = Math.ceil(needed / perCycle);
@@ -171,6 +177,18 @@ function resolveNode(itemId, quantity, { recipesByOutput, activitiesByOutput, ac
     };
   }
 
+  // Debug: log why this item has no production route
+  const allProducers = activitiesByOutput.get(itemId) ?? [];
+  const allInputActivities = inputActivitiesByOutput.get(itemId) ?? [];
+  console.debug('[BuildPlan] purchase-only fallthrough for', itemId, {
+    recipesFound: (recipesByOutput.get(itemId) ?? []).map((a) => a.activityId),
+    inputActivitiesFound: allInputActivities.map((a) => `${a.activityId}(maxCraftable=${a.maxCraftable})`),
+    gatherersFound: allProducers.filter((a) => a.inputs.length === 0).map((a) => a.activityId),
+    defsWithOutput: Object.entries(activityDefs)
+      .filter(([, def]) => def?.inventoryChanges?.[itemId] > 0)
+      .map(([id]) => id),
+  });
+
   return {
     itemId,
     quantity,
@@ -190,11 +208,13 @@ export function buildDependencyTree({ itemId, quantity, activityDefs, ownedCount
   // Live defs take precedence; bundled fills in activities the live game omits.
   const mergedDefs = { ...bundledActivityDefs, ...(activityDefs ?? {}) };
   const recipesByOutput = buildRecipeIndex(mergedDefs);
+  const inputActivitiesByOutput = buildInputActivityIndex(mergedDefs);
   const activitiesByOutput = buildActivityIndex(mergedDefs);
   const ledger = new Map(Object.entries(ownedCounts).map(([id, v]) => [id, Math.max(0, Number(v) || 0)]));
 
   return resolveNode(itemId, quantity, {
     recipesByOutput,
+    inputActivitiesByOutput,
     activitiesByOutput,
     activityDefs: mergedDefs,
     ledger,
