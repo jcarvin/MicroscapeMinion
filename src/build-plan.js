@@ -3,6 +3,7 @@ import {
   buildRecipeIndex,
   inferActivitySkill,
 } from './goal-planner.js';
+import bundledActivityDefs from './activity-defs.json';
 
 function outputCount(activity, itemId) {
   return activity.outputs.find((o) => o.itemId === itemId)?.count ?? 1;
@@ -185,14 +186,17 @@ function resolveNode(itemId, quantity, { recipesByOutput, activitiesByOutput, ac
 }
 
 export function buildDependencyTree({ itemId, quantity, activityDefs, ownedCounts = {}, playerSkillLevels = {}, playerCombatLevel = null }) {
-  const recipesByOutput = buildRecipeIndex(activityDefs);
-  const activitiesByOutput = buildActivityIndex(activityDefs);
+  // Merge bundled canonical defs (as fallbacks) with live game defs.
+  // Live defs take precedence; bundled fills in activities the live game omits.
+  const mergedDefs = { ...bundledActivityDefs, ...(activityDefs ?? {}) };
+  const recipesByOutput = buildRecipeIndex(mergedDefs);
+  const activitiesByOutput = buildActivityIndex(mergedDefs);
   const ledger = new Map(Object.entries(ownedCounts).map(([id, v]) => [id, Math.max(0, Number(v) || 0)]));
 
   return resolveNode(itemId, quantity, {
     recipesByOutput,
     activitiesByOutput,
-    activityDefs,
+    activityDefs: mergedDefs,
     ledger,
     playerSkillLevels,
     playerCombatLevel,
