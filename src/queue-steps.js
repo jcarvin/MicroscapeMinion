@@ -64,7 +64,7 @@ export function buildActivityQueueSteps({
   const skippedGoals = [];
 
   for (const { goal, planning: goalPlan } of goalStatuses ?? []) {
-    if (!goalPlan?.activityId) {
+    if (!goal.activityId && !goalPlan?.activityId) {
       skippedGoals.push({ goal, reason: 'no-activity' });
       continue;
     }
@@ -134,7 +134,7 @@ export function buildActivityQueueSteps({
       continue;
     }
 
-    const activityId = goalPlan.activityId;
+    const activityId = goal.activityId ?? goalPlan.activityId;
     const activityDefinition = activityDefs?.[activityId] ?? null;
 
     if (activityDefinition?.singleExecution) {

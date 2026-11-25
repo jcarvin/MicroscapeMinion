@@ -18,6 +18,7 @@ export function createRow(goal = null) {
     maxCraftable: goal?.maxCraftable === true,
     sourceMode: ['any', 'manual', 'craft', 'drops'].includes(goal?.sourceMode) ? goal.sourceMode : null,
     completed: goal?.completed === true,
+    activityId: goal?.activityId ?? null,
   };
 }
 
@@ -104,6 +105,7 @@ export function completeGoals(rows, items, persistedGoals = []) {
       ...(maxCraftable ? { maxCraftable: true } : {}),
       ...(maxCraftable || hasKnownSource ? { sourceMode } : {}),
       ...(row.completed ? { completed: true } : {}),
+      ...(row.activityId ? { activityId: row.activityId } : {}),
     }];
   });
 }

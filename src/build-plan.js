@@ -395,6 +395,73 @@ export function collectReceptacleWarnings(activityDefs, ownedCounts, planSteps) 
   return warnings;
 }
 
+// ── Fill step bulk/remainder splitting ─────────────────────────────────────
+
+// Groups fill activities by filledId, finding unit (cycleSize=1) and bulk
+// (cycleSize>1) variants that share the same empty→filled pair.
+function findFillVariantsByFilledId(activityDefs) {
+  const byEmptyId = new Map();
+  for (const [activityId, def] of Object.entries(activityDefs ?? {})) {
+    const changes = def.inventoryChanges ?? {};
+    const entries = Object.entries(changes);
+    const inputs = entries.filter(([, v]) => v < 0);
+    const outputs = entries.filter(([, v]) => v > 0);
+    if (inputs.length !== 1 || outputs.length !== 1) continue;
+    const [emptyId, emptyChange] = inputs[0];
+    const [filledId, filledChange] = outputs[0];
+    if (emptyId === filledId) continue;
+    if (!byEmptyId.has(emptyId)) byEmptyId.set(emptyId, { filledId, variants: [] });
+    byEmptyId.get(emptyId).variants.push({ activityId, cycleSize: -emptyChange, cycleProduced: filledChange });
+  }
+
+  const result = new Map();
+  for (const [, { filledId, variants }] of byEmptyId) {
+    const unit = variants.find((v) => v.cycleProduced === 1) ?? null;
+    const bulkCandidates = variants.filter((v) => v.cycleProduced > 1);
+    if (!unit || bulkCandidates.length === 0) continue;
+    const bulk = bulkCandidates.reduce((a, b) => (b.cycleProduced > a.cycleProduced ? b : a));
+    result.set(filledId, { unit, bulk });
+  }
+  return result;
+}
+
+// When a fill step uses a bulk activity but the target is not evenly divisible
+// by the bulk cycle size, split it into a bulk step (stops at the rounded-down
+// multiple) followed by a unit step (stops at the exact target).
+//
+// Example: 502 waterBuckets → gather-water-10 stops at 500, gather-water stops at 502.
+// Also upgrades exact-multiple unit fill steps to their bulk counterpart.
+export function splitFillStepsForRemainder(steps, activityDefs) {
+  const variantsByFilledId = findFillVariantsByFilledId(activityDefs ?? {});
+  if (variantsByFilledId.size === 0) return steps;
+
+  const result = [];
+  for (const step of steps) {
+    if (!step.activityId) { result.push(step); continue; }
+    const info = variantsByFilledId.get(step.itemId);
+    if (!info) { result.push(step); continue; }
+
+    const { unit, bulk } = info;
+    const isFillStep = step.activityId === unit.activityId || step.activityId === bulk.activityId;
+    if (!isFillStep) { result.push(step); continue; }
+
+    const { targetCount } = step;
+    if (targetCount < bulk.cycleProduced) {
+      result.push({ ...step, activityId: unit.activityId });
+      continue;
+    }
+
+    const remainder = targetCount % bulk.cycleProduced;
+    if (remainder === 0) {
+      result.push({ ...step, activityId: bulk.activityId });
+    } else {
+      result.push({ ...step, activityId: bulk.activityId, targetCount: targetCount - remainder });
+      result.push({ ...step, activityId: unit.activityId });
+    }
+  }
+  return result;
+}
+
 // ── Receptacle batching ─────────────────────────────────────────────────────
 
 // When the user has fewer receptacles than a plan step needs to run in one shot,

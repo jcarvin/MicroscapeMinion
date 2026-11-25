@@ -101,6 +101,10 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.38
+
+- Fix: **Build Plan queue now uses bulk fill activities efficiently.** When setting a queue from Build Plan, fill steps (e.g. "fill bucket") are split into a bulk step (`gather-water-10`, stops at the nearest multiple of 10) followed by a single-unit remainder step (`gather-water`, stops at the exact target). For example, 502 water buckets now queues 50 × fill-10 then 2 × fill-1 instead of 502 × fill-1. The stored activity preference is threaded through goal rows so `planGoals`' alphabetic tiebreaker no longer overrides the dependency tree's higher-efficiency selection.
+
 ### v0.1.37
 
 - Fix: **Build Plan container reuse now works correctly.** Returned containers (e.g. the bucket returned by `shape-pot`) are credited to the ledger after a recipe's inputs are fully resolved, so sibling steps that run later in the queue can reuse them without stalling. Users with enough total containers (bucket + waterBucket ≥ need) see no change; users with limited containers get the plan split into interleaved batches (fill N → craft N → fill N → craft N …) sized to what they can hold.

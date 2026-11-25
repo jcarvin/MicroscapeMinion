@@ -16,6 +16,7 @@ import {
   buildDependencyTree,
   flattenTree,
   batchPlanForReceptacles,
+  splitFillStepsForRemainder,
   collectReceptacleWarnings,
 } from '../../../build-plan.js';
 
@@ -115,7 +116,8 @@ export default function GoalSection({
     });
     const planSteps = flattenTree(tree);
     const batchedSteps = batchPlanForReceptacles(planSteps, activityDefs, ownedCounts ?? {});
-    insertGoalsForPlan(row.id, batchedSteps);
+    const splitSteps = splitFillStepsForRemainder(batchedSteps, activityDefs);
+    insertGoalsForPlan(row.id, splitSteps);
     setBuildPlanRow(null);
     resetOverrides();
     setShowDialog(true);

@@ -5,6 +5,7 @@ import {
   detectReceptacles,
   collectReceptacleWarnings,
   batchPlanForReceptacles,
+  splitFillStepsForRemainder,
   MIN_RECEPTACLE_COUNT,
   MAX_RECEPTACLE_COUNT,
 } from '../src/build-plan.js';
@@ -597,5 +598,65 @@ describe('batchPlanForReceptacles', () => {
     const tree = buildDependencyTree({ itemId: 'ironBar', quantity: 10, activityDefs: defs, ownedCounts: {} });
     const steps = flattenTree(tree);
     expect(batchPlanForReceptacles(steps, defs, {})).toEqual(steps);
+  });
+});
+
+// Fixture with both single and bulk fill variants for the same container pair.
+const dualFillDefs = {
+  'gather-water':    { inventoryChanges: { bucket: -1,  waterBucket: 1  } },
+  'gather-water-10': { inventoryChanges: { bucket: -10, waterBucket: 10 } },
+  'use-water':       { inventoryChanges: { waterBucket: -1, bucket: 1 } },
+};
+
+describe('splitFillStepsForRemainder', () => {
+  function fillStep(targetCount, activityId = 'gather-water-10') {
+    return { itemId: 'waterBucket', targetCount, activityId, sourceMode: 'craft' };
+  }
+
+  it('splits a non-divisible bulk fill into bulk + unit remainder', () => {
+    const result = splitFillStepsForRemainder([fillStep(502)], dualFillDefs);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ activityId: 'gather-water-10', targetCount: 500 });
+    expect(result[1]).toMatchObject({ activityId: 'gather-water', targetCount: 502 });
+  });
+
+  it('no-ops when target is an exact multiple of the bulk cycle size', () => {
+    const result = splitFillStepsForRemainder([fillStep(500)], dualFillDefs);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ activityId: 'gather-water-10', targetCount: 500 });
+  });
+
+  it('replaces unit fill step with bulk when target is an exact multiple', () => {
+    const result = splitFillStepsForRemainder([fillStep(500, 'gather-water')], dualFillDefs);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ activityId: 'gather-water-10', targetCount: 500 });
+  });
+
+  it('uses only the unit activity when target is less than the bulk cycle size', () => {
+    const result = splitFillStepsForRemainder([fillStep(7)], dualFillDefs);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ activityId: 'gather-water', targetCount: 7 });
+  });
+
+  it('passes through non-fill steps unchanged', () => {
+    const nonFill = { itemId: 'bread', targetCount: 50, activityId: 'cook-bread', sourceMode: 'craft' };
+    const result = splitFillStepsForRemainder([nonFill], dualFillDefs);
+    expect(result).toEqual([nonFill]);
+  });
+
+  it('no-ops when no bulk variant exists for the fill activity', () => {
+    const unitOnlyDefs = {
+      'gather-water': { inventoryChanges: { bucket: -1, waterBucket: 1 } },
+      'use-water':    { inventoryChanges: { waterBucket: -1, bucket: 1 } },
+    };
+    const step = fillStep(502, 'gather-water');
+    const result = splitFillStepsForRemainder([step], unitOnlyDefs);
+    expect(result).toEqual([step]);
+  });
+
+  it('no-ops when activity defs are empty', () => {
+    const step = fillStep(502);
+    expect(splitFillStepsForRemainder([step], {})).toEqual([step]);
+    expect(splitFillStepsForRemainder([step], null)).toEqual([step]);
   });
 });
