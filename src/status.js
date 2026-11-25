@@ -10,6 +10,7 @@ import {
 } from './activity-utils.js';
 import { getMaterialCount, getGoalCount, findKey } from './inventory.js';
 import {
+  buildOwnedCounts,
   getChanceDropItemIds,
   getCraftableItemIds,
   getManualActivityItemIds,
@@ -294,6 +295,7 @@ export function buildStatus() {
     etaDebugLogVersion: ETA_DEBUG_LOG_VERSION,
     etaDebugLog: state.etaDebugLog,
     activityDefs: state.ACTIVITY_DEFS,
+    liveActivityIds: [...state.LIVE_ACTIVITY_IDS],
     zoneDefinitions: state.ZONE_DEFINITIONS,
     skillByActivity: state.SKILL_BY_ACTIVITY,
     learnedZonePreferences: state.learnedZonePreferences,
@@ -302,5 +304,6 @@ export function buildStatus() {
     combatSkillPreference: me?.preferences?.combatSkill ?? null,
     playerCombatLevel,
     playerSkillLevels,
+    ownedCounts: buildOwnedCounts(me),
   };
 }

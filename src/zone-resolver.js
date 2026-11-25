@@ -49,7 +49,9 @@ export function resolveZoneForActivity({
   const prefs = learnedZonePreferences ?? { byActivityId: {}, byEntityId: {} };
 
   const byActivity = activityId ? prefs.byActivityId?.[activityId] : null;
-  if (byActivity && zoneCandidates.some(c => c.zoneId === byActivity)) {
+  // For entity-less activities zoneCandidates is always empty, so skip the
+  // candidates check — the saved zone is the only signal we have.
+  if (byActivity && (!entityId || zoneCandidates.some(c => c.zoneId === byActivity))) {
     return { zoneId: byActivity, resolutionSource: 'activity', zoneCandidates };
   }
 

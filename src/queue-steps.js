@@ -64,7 +64,7 @@ export function buildActivityQueueSteps({
   const skippedGoals = [];
 
   for (const { goal, planning: goalPlan } of goalStatuses ?? []) {
-    if (!goalPlan?.activityId) {
+    if (!goal.activityId && !goalPlan?.activityId) {
       skippedGoals.push({ goal, reason: 'no-activity' });
       continue;
     }
@@ -134,7 +134,7 @@ export function buildActivityQueueSteps({
       continue;
     }
 
-    const activityId = goalPlan.activityId;
+    const activityId = goal.activityId ?? goalPlan.activityId;
     const activityDefinition = activityDefs?.[activityId] ?? null;
 
     if (activityDefinition?.singleExecution) {
@@ -154,7 +154,7 @@ export function buildActivityQueueSteps({
 
     let zoneCandidates;
     if (!entityId) {
-      // No entity means no zone data for this activity.
+      // Zone-agnostic: activity has no entity requirement and can run anywhere.
       zoneCandidates = [];
     } else {
       zoneCandidates = findZoneCandidatesForEntity({
@@ -184,13 +184,21 @@ export function buildActivityQueueSteps({
       // Zone data not loaded yet — fall through as unresolved with empty candidates.
     }
 
-    const { zoneId, resolutionSource } = resolveZoneForActivity({
+    let { zoneId, resolutionSource } = resolveZoneForActivity({
       entityId,
       activityId,
       currentZoneId,
       learnedZonePreferences,
       zoneCandidates,
     });
+
+    // Zone-agnostic activities (no entity) default to the player's current zone
+    // when no learned preference resolves them. This avoids blocking the queue
+    // modal for activities that the game can run at any location.
+    if (!entityId && zoneId === null && currentZoneId) {
+      zoneId = currentZoneId;
+      resolutionSource = 'currentZone';
+    }
 
     steps.push({
       goal,

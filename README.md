@@ -101,6 +101,25 @@ Microscape Minion will appear in your extensions list and remain installed perma
 <details>
 <summary>Release notes</summary>
 
+### v0.1.38
+
+- Fix: **Build Plan queue now uses bulk fill activities efficiently.** When setting a queue from Build Plan, fill steps (e.g. "fill bucket") are split into a bulk step (`gather-water-10`, stops at the nearest multiple of 10) followed by a single-unit remainder step (`gather-water`, stops at the exact target). For example, 502 water buckets now queues 50 × fill-10 then 2 × fill-1 instead of 502 × fill-1. The stored activity preference is threaded through goal rows so `planGoals`' alphabetic tiebreaker no longer overrides the dependency tree's higher-efficiency selection.
+
+### v0.1.37
+
+- Fix: **Build Plan container reuse now works correctly.** Returned containers (e.g. the bucket returned by `shape-pot`) are credited to the ledger after a recipe's inputs are fully resolved, so sibling steps that run later in the queue can reuse them without stalling. Users with enough total containers (bucket + waterBucket ≥ need) see no change; users with limited containers get the plan split into interleaved batches (fill N → craft N → fill N → craft N …) sized to what they can hold.
+- New: **Receptacle warnings in the Build Plan dialog.** The planner detects refillable containers automatically (any activity that converts one item type to another 1:1, confirmed when the filled version is returned from a downstream activity). If you have fewer than 10 total containers, the dialog warns the plan cannot proceed; if you have fewer than 500, it suggests buying more for efficiency.
+
+### v0.1.36
+
+- Fix: **Build Plan now resolves the full ingredient tree.** Four root-cause bugs were causing the plan to stop early or mis-route: (1) byproduct container returns (pot, bucket) were being credited to the ledger before their own upstream inputs were resolved, so the planner incorrectly treated them as already available; (2) container-return activities (e.g. `process-bread-dough → bucket`) were selected as production routes for the item they return, looping back to an ancestor; (3) stale seed recipes (e.g. `craft-pot-unfired` for a `softClay` input that no longer exists) were shadowing live recipes (e.g. `shape-pot`); (4) shared ingredients were not debited from the ledger so a single owned stack could satisfy multiple sibling branches. All four are fixed: byproduct crediting is removed, backtracking discards circular routes, live-parsed activities take precedence over seed-only ones, and the ledger is properly debited at each step. The flattened queue now emits every occurrence of a repeated ingredient in dependency order rather than collapsing them to a single max-quantity entry.
+- Fix: **Build Plan dialog shows an incomplete-plan warning** when any leaf requires purchasing from the bazaar or is blocked by a missing level requirement, with item names and quantities listed.
+- New: `npm run defs:fetch` regenerates `src/activity-defs.json` from the live game bundle.
+
+### v0.1.35
+
+- New (members): **Build Plan.** When a goal is limited by missing materials, a "Build Plan" button now appears on the goal card. Clicking it resolves the full ingredient dependency tree and shows every item needed — craftable and gatherable items are listed normally, while purchase-only items are highlighted in amber. Combat-drop items are included as queueable steps if your combat level is sufficient, or flagged as purchase-only with the required combat level if not. Clicking "Set Queue" inserts all dependency goals into your Goal Tracker (merging quantities for existing goals) and opens the queue preview to put the whole chain in motion.
+
 ### v0.1.34
 
 - Fix: material limitations now show correctly for Manual goals whose crafting activity has no bundled equivalent (e.g. Dough).

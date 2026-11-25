@@ -188,6 +188,32 @@ export default function useGoalRows(goalItems, goalStatuses) {
     updateRows((current) => [createRow(), ...current]);
   }
 
+  function insertGoalsForPlan(targetRowId, planRows) {
+    if (!planRows.length) return;
+    updateRows((current) => {
+      const result = [...current];
+      const targetIndex = result.findIndex((r) => r.id === targetRowId);
+      if (targetIndex < 0) return result;
+
+      // The last planRow is the root goal — map it onto the existing target row.
+      const rootStep = planRows[planRows.length - 1];
+      const newTarget = Number(rootStep.targetCount);
+      if (Number.isSafeInteger(newTarget) && newTarget > 0) {
+        result[targetIndex] = { ...result[targetIndex], targetValue: String(newTarget) };
+      }
+
+      // Splice dependency steps in plan order immediately before the target row.
+      // Inserting in reverse at the same index shifts earlier entries right,
+      // preserving their relative order.
+      const depSteps = planRows.slice(0, planRows.length - 1);
+      for (let i = depSteps.length - 1; i >= 0; i--) {
+        result.splice(targetIndex, 0, createRow(depSteps[i]));
+      }
+
+      return result;
+    }, true);
+  }
+
   const drag = useDragReorder((fromId, toId) => {
     updateRows((current) => {
       const from = current.findIndex(({ id }) => id === fromId);
@@ -212,5 +238,6 @@ export default function useGoalRows(goalItems, goalStatuses) {
     handleRemove,
     insertRowAt,
     addRow,
+    insertGoalsForPlan,
   };
 }

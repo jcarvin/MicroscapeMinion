@@ -690,45 +690,46 @@
   // scanning forward to the first `entities:[` occurrence, then reading the
   // brace stack at that position to identify the enclosing map object's {.
   function findMapDefinitionObject(bundle) {
-    // `mapPos:[` is unique to zone definitions — unlike `entities:[` which also
-    // appears in monster/NPC definitions elsewhere in the bundle. We iterate
-    // every occurrence of mapPos (in case earlier ones are in a different context)
-    // and return the first enclosing object that contains at least 3 mapPos
-    // entries (i.e. looks like the full zone map, not a single embedded zone).
+    // `mapPos:[` is unique to zone definitions. Collect all positions first,
+    // then work backward from the first occurrence to find the enclosing object.
+    //
+    // We use a backward scan rather than a forward scan from position 0 because
+    // the game's minified bundle contains regex literals whose `{` / `}` chars
+    // confuse a forward brace-stack counter. The short backward path (from the
+    // first mapPos to the zone map object's opening `{`) crosses only zone entry
+    // header fields — which never contain braces — making it reliable.
     const markerRe = /\bmapPos:\s*\[/g;
-    let markerMatch;
-    while ((markerMatch = markerRe.exec(bundle)) !== null) {
-      const markerIdx = markerMatch.index;
+    let m;
+    const positions = [];
+    while ((m = markerRe.exec(bundle)) !== null) positions.push(m.index);
 
-      // Build the brace stack by scanning forward to markerIdx, tracking strings.
-      // braceStack[i] = position of the i-th unclosed { that encloses markerIdx.
-      const braceStack = [];
-      let quote = null;
-      let escaped = false;
+    if (positions.length < 3) return null;
 
-      for (let i = 0; i < markerIdx; i++) {
-        const ch = bundle[i];
-        if (quote) {
-          if (escaped) { escaped = false; continue; }
-          if (ch === '\\') { escaped = true; continue; }
-          if (ch === quote) { quote = null; }
-          continue;
-        }
-        if (ch === '`' || ch === '"' || ch === "'") { quote = ch; continue; }
-        if (ch === '{') braceStack.push(i);
-        else if (ch === '}') braceStack.pop();
+    // Scan backward from first mapPos, collecting up to 3 enclosing `{` levels.
+    // - opens[0] = innermost (the zone object: { name:..., mapPos:[...] })
+    // - opens[1] = zone map object (what we want to return)
+    // - opens[2] = outer wrapper, if present
+    const first = positions[0];
+    let depth = 0;
+    const opens = [];
+    for (let i = first - 1; i >= 0 && opens.length < 3; i--) {
+      const ch = bundle[i];
+      if (ch === '}') depth++;
+      else if (ch === '{') {
+        if (depth === 0) opens.push(i);
+        else depth--;
       }
+    }
 
-      // At markerIdx we're inside: mapObject{ → zoneObject{ → mapPos:[
-      // braceStack[-1] = zone object start, braceStack[-2] = map object start
-      if (braceStack.length < 2) continue;
-      const mapStart = braceStack[braceStack.length - 2];
+    // Try from innermost to outermost; return first candidate with >= 3 mapPos.
+    for (let level = 0; level < opens.length; level++) {
+      const mapStart = opens[level];
       const end = findMatchingBrace(bundle, mapStart);
       if (end < 0) continue;
       const candidate = bundle.slice(mapStart, end + 1);
-      // Confirm it's the zone map: must contain multiple mapPos entries.
       if ((candidate.match(/\bmapPos:/g) ?? []).length >= 3) return candidate;
     }
+
     return null;
   }
 

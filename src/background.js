@@ -210,6 +210,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         }
       }
       state.ACTIVITY_DEFS = liveDefs;
+      state.LIVE_ACTIVITY_IDS = new Set(Object.keys(msg.defs));
       if (msg.itemTradeability && typeof msg.itemTradeability === 'object') {
         state.ITEM_TRADEABILITY = msg.itemTradeability;
       }
@@ -959,6 +960,7 @@ function refreshGoalPlanning() {
 function resetTestState() {
   state.ACTIVITY_DEFS = {};
   state.BUNDLED_ACTIVITY_DEFS = {};
+  state.LIVE_ACTIVITY_IDS = new Set();
   state.ITEM_TRADEABILITY = {};
   state.ZONE_DATA = {};
   state.ZONE_DEFINITIONS = {};
